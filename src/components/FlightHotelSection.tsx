@@ -15,17 +15,18 @@ import {
 
 export const FlightHotelSection: React.FC = () => {
   return (
-    <section id="flights-hotel" className="py-16 sm:py-20 bg-slate-50 border-b border-slate-200">
+    <section id="flight-hotel" className="py-16 sm:py-20 bg-[#f7f6f2] border-b border-stone-200/80">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Section Header */}
         <div className="mb-10">
-          <div className="text-xs font-semibold uppercase tracking-wider text-amber-700">
-            Logistics & Accommodation
+          <div className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-amber-800 bg-amber-50 px-2.5 py-1 rounded-md border border-amber-200/60 mb-2">
+            <Plane className="w-3.5 h-3.5 text-amber-700" />
+            <span>Flights & Accommodation</span>
           </div>
-          <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight mt-1">
+          <h2 className="text-2xl sm:text-3xl font-extrabold text-stone-900 tracking-tight">
             航班及住宿資訊
           </h2>
-          <p className="text-sm text-slate-600 mt-2 max-w-xl">
+          <p className="text-sm text-stone-600 mt-2 max-w-xl leading-relaxed">
             酷航早去晚回班次安排、淺草線 Access 特急免換乘直達秘訣，與日本橋人形町大浴場飯店規格。
           </p>
         </div>

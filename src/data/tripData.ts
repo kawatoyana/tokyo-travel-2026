@@ -71,6 +71,7 @@ export interface Attraction {
   address: string;
   tips: string[];
   imageSrc: string;
+  unsplashUrl?: string;
   googleMapsUrl: string;
 }
 
@@ -577,7 +578,8 @@ export const ATTRACTIONS: Attraction[] = [
       "商場設有豐富自動寄物櫃與休息沙發，跑者與看劇者極佳會合據點",
       "5F 泉天空之湯溫泉提供跑後洗浴放鬆",
     ],
-    imageSrc: "/src/assets/images/attraction_ariake_theater_1792391624390.jpg",
+    imageSrc: "./images/attraction_ariake_theater.jpg",
+    unsplashUrl: "https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?auto=format&fit=crop&w=1200&q=80",
     googleMapsUrl: "https://www.google.com/maps/search/?api=1&query=Tokyo+Garden+Theater",
   },
   {
@@ -596,7 +598,8 @@ export const ATTRACTIONS: Attraction[] = [
       "16:20 前來可完全避開週末晚間排隊人潮",
       "備有日英對照菜單，出餐迅速",
     ],
-    imageSrc: "/src/assets/images/attraction_rikyu_gyutan_1792391625850.jpg",
+    imageSrc: "./images/attraction_rikyu_gyutan.jpg",
+    unsplashUrl: "https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=1200&q=80",
     googleMapsUrl: "https://www.google.com/maps/search/?api=1&query=牛たん炭焼+利久+有明ガーデン店",
   },
   {
@@ -615,7 +618,8 @@ export const ATTRACTIONS: Attraction[] = [
       "沿途公廁、長椅與飲料販賣機密集，補給方便",
       "傍晚 16:30 日落，18:00 起跑正好處於華燈初上的絕美夜景",
     ],
-    imageSrc: "/src/assets/images/attraction_tokyo_bay_run_1792382036853.jpg",
+    imageSrc: "./images/attraction_tokyo_bay_run.jpg",
+    unsplashUrl: "https://images.unsplash.com/photo-1536098561742-ca998e48cbcc?auto=format&fit=crop&w=1200&q=80",
     googleMapsUrl: "https://www.google.com/maps/search/?api=1&query=Odaiba+Marine+Park",
   },
   {
@@ -634,7 +638,8 @@ export const ATTRACTIONS: Attraction[] = [
       "將 5 円或 500 円硬幣放在竹簍中浸潤神泉洗滌，擦乾後放入皮夾作為「錢母」",
       "代表性的「強運厄除龍御守」雕工精緻，極具紀念價值",
     ],
-    imageSrc: "/src/assets/images/attraction_koami_shrine_1792382037606.jpg",
+    imageSrc: "./images/attraction_koami_shrine.jpg",
+    unsplashUrl: "https://images.unsplash.com/photo-1578637387939-43c525550085?auto=format&fit=crop&w=1200&q=80",
     googleMapsUrl: "https://www.google.com/maps/search/?api=1&query=Koami+Shrine",
   },
   {
@@ -653,7 +658,8 @@ export const ATTRACTIONS: Attraction[] = [
       "除厚吐司外，店內特製栗子蒙布朗與布丁亦很受歡迎",
       "二樓提供寬敞座位區與溫暖木質採光，環境舒適安靜",
     ],
-    imageSrc: "/src/assets/images/attraction_dixans_toast_1792391626596.jpg",
+    imageSrc: "./images/attraction_dixans_toast.jpg",
+    unsplashUrl: "https://images.unsplash.com/photo-1509722747041-616f39b57569?auto=format&fit=crop&w=1200&q=80",
     googleMapsUrl: "https://www.google.com/maps/search/?api=1&query=DIXANS+Ningyocho",
   },
   {
@@ -672,7 +678,8 @@ export const ATTRACTIONS: Attraction[] = [
       "亦販售季節限定之生菓子與銅鑼燒",
       "人形町站出站十字路口即可見醒目招牌",
     ],
-    imageSrc: "/src/assets/images/attraction_miharado_senbei_1792391645961.jpg",
+    imageSrc: "./images/attraction_miharado_senbei.jpg",
+    unsplashUrl: "https://images.unsplash.com/photo-1528164344705-475426879c0d?auto=format&fit=crop&w=1200&q=80",
     googleMapsUrl: "https://www.google.com/maps/search/?api=1&query=三原堂本店+人形町",
   },
   {
@@ -691,7 +698,8 @@ export const ATTRACTIONS: Attraction[] = [
       "推薦「鬼御膳（花山寬麵 + 天婦羅小天丼）」雙重享受",
       "店內可購買生麵條伴手禮盒回家烹煮",
     ],
-    imageSrc: "/src/assets/images/attraction_hanayama_udon_1792391626784.jpg",
+    imageSrc: "./images/attraction_hanayama_udon.jpg",
+    unsplashUrl: "https://images.unsplash.com/photo-1618841557871-b4664fbf0cb3?auto=format&fit=crop&w=1200&q=80",
     googleMapsUrl: "https://www.google.com/maps/search/?api=1&query=五代目+花山うどん+日本橋店",
   },
   {
@@ -710,7 +718,8 @@ export const ATTRACTIONS: Attraction[] = [
       "推薦由「新宿門」進入，先拍中之池與銀杏林，再前往日本庭園觀賞水面倒影",
       "園區全域禁止飲酒、全面禁菸，環境維持極為清幽雅緻",
     ],
-    imageSrc: "/src/assets/images/attraction_shinjuku_gyoen_1792382036412.jpg",
+    imageSrc: "./images/attraction_shinjuku_gyoen.jpg",
+    unsplashUrl: "https://images.unsplash.com/photo-1508873696983-2df5293cb32f?auto=format&fit=crop&w=1200&q=80",
     googleMapsUrl: "https://www.google.com/maps/search/?api=1&query=Shinjuku+Gyoen+National+Garden",
   },
 ];

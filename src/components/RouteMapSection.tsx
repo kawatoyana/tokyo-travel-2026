@@ -1,21 +1,44 @@
 import React, { useState } from "react";
 import { RUNNING_SEGMENTS } from "../data/tripData";
+import { downloadRoutePdf } from "../utils/generateRoutePdf";
 import {
   MapPin,
   Navigation,
-  Compass,
   Footprints,
   ExternalLink,
   Info,
   CheckCircle2,
   Route,
+  Download,
+  FileText,
+  Clock,
+  Sparkles,
+  ShieldAlert,
+  Loader2,
 } from "lucide-react";
 
 export const RouteMapSection: React.FC = () => {
   const [activeTab, setActiveTab] = useState<"day1_run" | "day2_walk">("day1_run");
   const [selectedSegmentIdx, setSelectedSegmentIdx] = useState<number>(0);
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState<boolean>(false);
+  const [pdfSuccessMessage, setPdfSuccessMessage] = useState<string | null>(null);
 
   const selectedSegment = RUNNING_SEGMENTS[selectedSegmentIdx];
+
+  const handleDownloadPdf = async () => {
+    try {
+      setIsDownloadingPdf(true);
+      setPdfSuccessMessage(null);
+      await downloadRoutePdf();
+      setPdfSuccessMessage("已成功下載「tokyo_bay_10k_running_guide.pdf」！可供跑步時離線查閱。");
+      setTimeout(() => setPdfSuccessMessage(null), 6000);
+    } catch (err) {
+      console.error("PDF download failed", err);
+      setPdfSuccessMessage("PDF 生成中，請稍候重試或直接使用瀏覽器列印。");
+    } finally {
+      setIsDownloadingPdf(false);
+    }
+  };
 
   const routeWaypoints = [
     { id: 0, name: "起點：東京花園劇場", km: "0.0K", x: 740, y: 190, stage: 0 },
@@ -34,55 +57,98 @@ export const RouteMapSection: React.FC = () => {
   ];
 
   return (
-    <section id="routes" className="py-16 sm:py-20 bg-white border-b border-slate-200">
+    <section id="routes" className="py-16 sm:py-20 bg-white border-b border-stone-200/80">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Section Header */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
           <div>
-            <div className="text-xs font-semibold uppercase tracking-wider text-amber-700">
-              Interactive Route & Navigation
+            <div className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-200/60 mb-2">
+              <Route className="w-3.5 h-3.5 text-emerald-700" />
+              <span>Interactive Navigation & Maps</span>
             </div>
-            <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight mt-1">
+            <h2 className="text-2xl sm:text-3xl font-extrabold text-stone-900 tracking-tight">
               每日路線導航圖 ＆ 10K 跑步解析
             </h2>
-            <p className="text-sm text-slate-600 mt-2 max-w-xl">
-              Day 1 東京灣岸 10 公里零折返環狀路線五階段拆解，以及 Day 2 人形町散步與新宿御苑賞楓導覽。
+            <p className="text-sm text-stone-600 mt-2 max-w-xl leading-relaxed">
+              Day 1 東京灣岸 10 公里零折返環狀路線五階段拆解，提供即時互動航跡圖與離線 PDF 指南；以及 Day 2 人形町散步與新宿御苑賞楓導覽。
             </p>
           </div>
 
-          {/* Mode Switcher */}
-          <div className="inline-flex p-1 bg-slate-100 rounded-xl shrink-0 self-start md:self-auto">
+          {/* Action Row: Mode Switcher & OFFLINE PDF BUTTON */}
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Download PDF Button */}
             <button
-              onClick={() => setActiveTab("day1_run")}
-              className={`px-4 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all flex items-center gap-2 ${
-                activeTab === "day1_run"
-                  ? "bg-white text-slate-900 shadow-sm"
-                  : "text-slate-600 hover:text-slate-900"
-              }`}
+              onClick={handleDownloadPdf}
+              disabled={isDownloadingPdf}
+              className="inline-flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-semibold text-white bg-emerald-700 hover:bg-emerald-800 disabled:bg-emerald-400 rounded-xl transition-all duration-300 shadow-sm hover:shadow-md hover:-translate-y-0.5"
             >
-              <Footprints className="w-4 h-4 text-emerald-600" />
-              <span>Day 1｜東京灣岸 10K 夜跑環線</span>
+              {isDownloadingPdf ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin text-white" />
+                  <span>正在生成離線 PDF...</span>
+                </>
+              ) : (
+                <>
+                  <Download className="w-4 h-4 text-emerald-200" />
+                  <span>下載 10K 路線離線 PDF</span>
+                </>
+              )}
             </button>
-            <button
-              onClick={() => setActiveTab("day2_walk")}
-              className={`px-4 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all flex items-center gap-2 ${
-                activeTab === "day2_walk"
-                  ? "bg-white text-slate-900 shadow-sm"
-                  : "text-slate-600 hover:text-slate-900"
-              }`}
-            >
-              <Navigation className="w-4 h-4 text-amber-600" />
-              <span>Day 2｜日本橋老街 ＆ 新宿御苑</span>
-            </button>
+
+            {/* Mode Switcher */}
+            <div className="inline-flex p-1 bg-stone-100 rounded-2xl shrink-0">
+              <button
+                onClick={() => setActiveTab("day1_run")}
+                className={`px-3.5 py-2 text-xs sm:text-sm font-semibold rounded-xl transition-all ${
+                  activeTab === "day1_run"
+                    ? "bg-white text-stone-900 shadow-xs"
+                    : "text-stone-600 hover:text-stone-900"
+                }`}
+              >
+                <span className="flex items-center gap-1.5">
+                  <Footprints className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Day 1｜10K 夜跑環線</span>
+                </span>
+              </button>
+              <button
+                onClick={() => setActiveTab("day2_walk")}
+                className={`px-3.5 py-2 text-xs sm:text-sm font-semibold rounded-xl transition-all ${
+                  activeTab === "day2_walk"
+                    ? "bg-white text-stone-900 shadow-xs"
+                    : "text-stone-600 hover:text-stone-900"
+                }`}
+              >
+                <span className="flex items-center gap-1.5">
+                  <Navigation className="w-3.5 h-3.5 text-amber-600" />
+                  <span>Day 2｜日本橋與新宿</span>
+                </span>
+              </button>
+            </div>
           </div>
         </div>
+
+        {/* PDF Download Toast Notification */}
+        {pdfSuccessMessage && (
+          <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-center justify-between text-xs sm:text-sm text-emerald-900 animate-fadeIn">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>{pdfSuccessMessage}</span>
+            </div>
+            <button
+              onClick={() => setPdfSuccessMessage(null)}
+              className="text-xs text-emerald-700 hover:underline font-semibold ml-4"
+            >
+              關閉
+            </button>
+          </div>
+        )}
 
         {activeTab === "day1_run" ? (
           <div className="space-y-8">
             {/* 10K Running Route Interactive SVG & Overview */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
               {/* Left Column: Interactive Visual Map (7 cols) */}
-              <div className="lg:col-span-7 bg-slate-900 text-white rounded-2xl p-4 sm:p-6 border border-slate-800 shadow-sm">
+              <div className="lg:col-span-7 bg-stone-900 text-white rounded-3xl p-5 sm:p-6 border border-stone-800 shadow-sm">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
                     <Route className="w-5 h-5 text-emerald-400" />
@@ -90,13 +156,13 @@ export const RouteMapSection: React.FC = () => {
                       東京灣 10K 環狀航跡示意圖
                     </span>
                   </div>
-                  <span className="text-xs text-slate-300 font-mono">
+                  <span className="text-xs text-stone-300 font-mono">
                     有明 → 台場 → 潮風 → 青海 → 有明
                   </span>
                 </div>
 
                 {/* SVG Visual Route Map */}
-                <div className="relative w-full aspect-[16/10] bg-slate-950 rounded-xl overflow-hidden border border-slate-800 flex items-center justify-center">
+                <div className="relative w-full aspect-[16/10] bg-stone-950 rounded-2xl overflow-hidden border border-stone-800 flex items-center justify-center">
                   <svg
                     viewBox="0 0 900 520"
                     className="w-full h-full select-none"
@@ -218,10 +284,9 @@ export const RouteMapSection: React.FC = () => {
                               x={wp.x}
                               y={wp.y - 12}
                               textAnchor="middle"
-                              fill="#f8fafc"
+                              fill={isStartEnd ? "#fca5a5" : isCurrentStage ? "#6ee7b7" : "#e2e8f0"}
                               fontSize="11"
-                              fontWeight="600"
-                              className="pointer-events-none drop-shadow"
+                              fontWeight={isCurrentStage ? "700" : "500"}
                             >
                               {wp.name} ({wp.km})
                             </text>
@@ -232,294 +297,231 @@ export const RouteMapSection: React.FC = () => {
                   </svg>
                 </div>
 
-                {/* Map Control Help & Google Map Link */}
-                <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-300">
-                  <div className="flex items-center gap-1.5">
-                    <Info className="w-4 h-4 text-slate-400" />
-                    <span>點擊右側分段切換高亮路線。全段皆為平坦專用人行步道。</span>
-                  </div>
-                  <a
-                    href="https://www.google.com/maps/dir/Tokyo+Garden+Theater/DiverCity+Tokyo+Plaza/Odaiba+Marine+Park/Shiokaze+Park/Telecom+Center+Station/Tokyo+Big+Sight/Tokyo+Garden+Theater"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 text-emerald-400 hover:text-emerald-300 font-semibold"
-                  >
-                    <span>在 Google 地圖開啟 10K 路線</span>
-                    <ExternalLink className="w-3.5 h-3.5" />
-                  </a>
+                <div className="mt-3 flex items-center justify-between text-xs text-stone-400">
+                  <span>點選航跡分段或地標圓點可切換右側解析</span>
+                  <span className="text-emerald-400 font-medium">綠色粗線代表當前檢視區段</span>
                 </div>
               </div>
 
-              {/* Right Column: 5 Stage Selectors & Selected Stage Details (5 cols) */}
+              {/* Right Column: Stage Details Card (5 cols) */}
               <div className="lg:col-span-5 space-y-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                    分段解析（五階段零折返）
-                  </span>
-                  <span className="text-xs font-semibold text-emerald-700">
-                    總長度 10.0 KM
-                  </span>
+                {/* Stage Selector Buttons */}
+                <div className="grid grid-cols-5 gap-1.5 bg-stone-100 p-1 rounded-2xl border border-stone-200">
+                  {RUNNING_SEGMENTS.map((seg, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => setSelectedSegmentIdx(idx)}
+                      className={`py-2 px-1 text-center rounded-xl transition-all ${
+                        selectedSegmentIdx === idx
+                          ? "bg-white text-stone-900 font-bold shadow-xs border border-stone-200/80"
+                          : "text-stone-600 hover:text-stone-900"
+                      }`}
+                    >
+                      <div className="text-[10px] text-stone-400 font-mono">段 0{idx + 1}</div>
+                      <div className="text-xs font-semibold">{seg.distance.split(" ")[2]}</div>
+                    </button>
+                  ))}
                 </div>
 
-                {/* Stage Buttons */}
-                <div className="grid grid-cols-1 gap-2">
-                  {RUNNING_SEGMENTS.map((seg, idx) => {
-                    const isSelected = selectedSegmentIdx === idx;
-                    return (
-                      <button
-                        key={idx}
-                        onClick={() => setSelectedSegmentIdx(idx)}
-                        className={`text-left p-3.5 rounded-xl border transition-all ${
-                          isSelected
-                            ? "bg-emerald-50/80 border-emerald-400 shadow-xs"
-                            : "bg-white border-slate-200 hover:border-slate-300"
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <span
-                            className={`text-xs font-bold font-mono px-2 py-0.5 rounded ${
-                              isSelected
-                                ? "bg-emerald-600 text-white"
-                                : "bg-slate-100 text-slate-700"
-                            }`}
-                          >
-                            {seg.distance}
-                          </span>
-                          <span className="text-xs text-slate-400 font-medium">
-                            階段 0{idx + 1}
-                          </span>
-                        </div>
-                        <div className="text-sm font-bold text-slate-900 mt-2">
-                          {seg.title}
-                        </div>
-                        <div className="text-xs text-slate-500 mt-1 flex items-center gap-1">
-                          <span>{seg.from}</span>
-                          <span className="text-slate-300">→</span>
-                          <span>{seg.to}</span>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {/* Detailed Spec of Selected Segment */}
-                <div className="p-5 bg-slate-50 rounded-xl border border-slate-200">
-                  <div className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                    目前選取路段詳情
+                {/* Detailed Stage Card */}
+                <div className="bg-white rounded-3xl p-6 border border-stone-200/80 shadow-[0_4px_16px_rgba(0,0,0,0.04)]">
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <span className="px-2.5 py-1 rounded-full text-xs font-mono font-bold bg-emerald-50 text-emerald-800 border border-emerald-200/60">
+                      {selectedSegment.distance}
+                    </span>
+                    <span className="text-xs text-stone-400">
+                      階段 0{selectedSegmentIdx + 1} / 05
+                    </span>
                   </div>
-                  <h4 className="text-base font-bold text-slate-900 mt-1">
-                    {selectedSegment.distance}：{selectedSegment.title}
-                  </h4>
-                  <p className="text-xs sm:text-sm text-slate-700 mt-2 leading-relaxed">
+
+                  <h3 className="text-lg font-bold text-stone-900 mt-2">
+                    {selectedSegment.title}
+                  </h3>
+
+                  <div className="mt-3 flex items-center gap-2 text-xs text-stone-500 font-medium">
+                    <span className="px-2 py-0.5 rounded bg-stone-100 text-stone-700">起點</span>
+                    <span className="truncate">{selectedSegment.from}</span>
+                    <span>→</span>
+                    <span className="px-2 py-0.5 rounded bg-stone-100 text-stone-700">終點</span>
+                    <span className="truncate">{selectedSegment.to}</span>
+                  </div>
+
+                  {/* Route prose */}
+                  <p className="mt-4 text-xs sm:text-sm text-stone-600 leading-relaxed bg-stone-50/70 p-3.5 rounded-2xl border border-stone-200/60">
                     {selectedSegment.routeDescription}
                   </p>
 
-                  <div className="mt-4 pt-3 border-t border-slate-200 grid grid-cols-2 gap-3 text-xs">
-                    <div>
-                      <span className="text-slate-400 block">坡度與海拔</span>
-                      <span className="font-semibold text-slate-800">
-                        {selectedSegment.elevation}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-slate-400 block">路面狀況</span>
-                      <span className="font-semibold text-slate-800">
-                        {selectedSegment.surface}
-                      </span>
-                    </div>
+                  {/* Highlights list */}
+                  <div className="mt-4 space-y-2">
+                    <div className="text-xs font-bold text-stone-800">沿途景觀亮點：</div>
+                    {selectedSegment.sceneryHighlights.map((hl, i) => (
+                      <div key={i} className="flex items-center gap-2 text-xs text-stone-700">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                        <span>{hl}</span>
+                      </div>
+                    ))}
                   </div>
 
-                  <div className="mt-3">
-                    <span className="text-xs text-slate-400 block mb-1">沿途景致看點</span>
-                    <ul className="space-y-1">
-                      {selectedSegment.sceneryHighlights.map((hl, i) => (
-                        <li key={i} className="text-xs text-slate-700 flex items-center gap-1.5">
-                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                          <span>{hl}</span>
-                        </li>
-                      ))}
-                    </ul>
+                  {/* Specs */}
+                  <div className="mt-5 pt-4 border-t border-stone-100 grid grid-cols-2 gap-3 text-xs">
+                    <div>
+                      <span className="text-stone-400 block">坡度起伏</span>
+                      <span className="font-semibold text-stone-800">{selectedSegment.elevation}</span>
+                    </div>
+                    <div>
+                      <span className="text-stone-400 block">地面材質</span>
+                      <span className="font-semibold text-stone-800">{selectedSegment.surface}</span>
+                    </div>
                   </div>
                 </div>
+
+                {/* Quick Action: Open in Google Maps */}
+                <a
+                  href="https://www.google.com/maps/dir/Tokyo+Garden+Theater/Odaiba+Marine+Park/Shiokaze+Park/Telecom+Center+Building/Tokyo+Big+Sight/Tokyo+Garden+Theater"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full inline-flex items-center justify-center gap-2 py-3 px-4 text-xs font-semibold text-stone-800 bg-stone-100 hover:bg-stone-200/80 rounded-2xl transition-all duration-200 hover:-translate-y-0.5"
+                >
+                  <Navigation className="w-4 h-4 text-emerald-700" />
+                  <span>在 Google 地圖中開啟 10K 路線導航</span>
+                  <ExternalLink className="w-3.5 h-3.5 text-stone-400" />
+                </a>
               </div>
             </div>
 
-            {/* Runner Logistics Strip */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4">
-              <div className="p-4 bg-white rounded-xl border border-slate-200">
-                <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5 mb-1">
-                  <MapPin className="w-4 h-4 text-emerald-600" />
-                  <span>起終點置物與更衣</span>
+            {/* Offline Running Sheet Quick Card */}
+            <div className="bg-gradient-to-r from-emerald-950 via-stone-900 to-stone-950 text-white rounded-3xl p-6 sm:p-8 shadow-sm">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-start gap-4">
+                  <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center shrink-0 text-emerald-300">
+                    <FileText className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-white">
+                      10K 跑步路線圖離線 PDF 文件
+                    </h3>
+                    <p className="text-xs sm:text-sm text-stone-300 mt-1 max-w-xl leading-relaxed">
+                      包含全平坦無折返 5 大航段路面指引、公廁與補給水龍頭位置、彩虹大橋觀景點標記，以及日本當地緊急救護聯絡專線。下載後存於手機相簿或檔案庫，無需網路隨時開啟查閱。
+                    </p>
+                  </div>
                 </div>
-                <p className="text-xs text-slate-600 leading-relaxed">
-                  有明花園商場 2F 與 5F 均設有自動投幣寄物櫃；商場洗手間乾淨寬敞可供跑前更衣；完跑後亦可至 5F「泉天空之湯」自費沐浴泡湯。
-                </p>
-              </div>
 
-              <div className="p-4 bg-white rounded-xl border border-slate-200">
-                <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5 mb-1">
-                  <Compass className="w-4 h-4 text-emerald-600" />
-                  <span>補給與洗手間配置</span>
-                </div>
-                <p className="text-xs text-slate-600 leading-relaxed">
-                  台場海濱公園（約 3K）、潮風公園（約 5.5K）、青海南埠頭（約 7K）皆設有免費乾淨公廁與自動販賣機，無需攜帶過多補給品。
-                </p>
-              </div>
-
-              <div className="p-4 bg-white rounded-xl border border-slate-200">
-                <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5 mb-1">
-                  <Navigation className="w-4 h-4 text-emerald-600" />
-                  <span>會合時間估算</span>
-                </div>
-                <p className="text-xs text-slate-600 leading-relaxed">
-                  18:00 起跑，以平均 5:45/km 配速估算約 58 分鐘完賽；預留 20 分鐘擦乾更衣，約 19:20 回到有明花園逛街休息，21:00 準時於劇場外會合。
-                </p>
+                <button
+                  onClick={handleDownloadPdf}
+                  disabled={isDownloadingPdf}
+                  className="inline-flex items-center justify-center gap-2 px-5 py-3 text-xs sm:text-sm font-bold text-stone-950 bg-emerald-400 hover:bg-emerald-300 disabled:bg-emerald-600 rounded-xl transition-all duration-200 shadow-md hover:shadow-lg whitespace-nowrap shrink-0"
+                >
+                  {isDownloadingPdf ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin text-stone-950" />
+                      <span>匯出中...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Download className="w-4 h-4 text-stone-950" />
+                      <span>立即下載離線 PDF</span>
+                    </>
+                  )}
+                </button>
               </div>
             </div>
           </div>
         ) : (
-          /* Day 2 Walking Route & Navigation */
-          <div className="space-y-6">
-            <div className="p-5 bg-amber-50/70 border border-amber-200 rounded-xl">
-              <div className="text-sm font-bold text-amber-950 flex items-center gap-2">
-                <span>Day 2 動線：日本橋人形町晨間漫步圈 ＋ 新宿御苑賞楓線</span>
+          /* Day 2 Walking Route Guide */
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="bg-white rounded-3xl p-6 sm:p-7 border border-stone-200/80 shadow-[0_4px_16px_rgba(0,0,0,0.04)]">
+              <div className="flex items-center gap-2 text-xs font-bold text-amber-800 uppercase tracking-wider mb-2">
+                <MapPin className="w-4 h-4 text-amber-700" />
+                <span>上午散策路線 ｜ 人形町・日本橋</span>
               </div>
-              <p className="text-xs sm:text-sm text-amber-900 mt-1 leading-relaxed">
-                全日在市中心移動，利用都營淺草線、日比谷線與丸之內線進行接駁。清晨徒步人形町下町安靜舒適，午後沉浸在新宿御苑廣達 58 公頃的秋色庭園中。
+              <h3 className="text-lg font-bold text-stone-900">
+                下町神社參拜、咖啡與百年排隊烏龍麵
+              </h3>
+              <p className="text-xs sm:text-sm text-stone-600 mt-2 leading-relaxed">
+                由 VIA INN 人形町輕裝出發，全路段以步行串聯，步調愜意：
               </p>
+
+              <div className="mt-5 space-y-3">
+                <div className="flex items-start gap-3 p-3 bg-stone-50 rounded-2xl border border-stone-200/60">
+                  <span className="w-6 h-6 rounded-full bg-amber-600 text-white text-xs font-bold flex items-center justify-center shrink-0">
+                    1
+                  </span>
+                  <div className="text-xs">
+                    <span className="font-bold text-stone-900">飯店 → 小網神社 (400m)</span>
+                    <p className="text-stone-500 mt-0.5">清晨漫步寧靜巷弄，08:30 參拜洗錢求強運。</p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3 p-3 bg-stone-50 rounded-2xl border border-stone-200/60">
+                  <span className="w-6 h-6 rounded-full bg-amber-600 text-white text-xs font-bold flex items-center justify-center shrink-0">
+                    2
+                  </span>
+                  <div className="text-xs">
+                    <span className="font-bold text-stone-900">小網神社 → DIXANS 人形町 (300m)</span>
+                    <p className="text-stone-500 mt-0.5">享用黑糖厚片吐司早餐與精緻拉花咖啡。</p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3 p-3 bg-stone-50 rounded-2xl border border-stone-200/60">
+                  <span className="w-6 h-6 rounded-full bg-amber-600 text-white text-xs font-bold flex items-center justify-center shrink-0">
+                    3
+                  </span>
+                  <div className="text-xs">
+                    <span className="font-bold text-stone-900">甘酒橫丁 ＆ 三原堂本店 (200m)</span>
+                    <p className="text-stone-500 mt-0.5">漫步傳統老街，採買招牌鹽煎餅伴手禮。</p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3 p-3 bg-stone-50 rounded-2xl border border-stone-200/60">
+                  <span className="w-6 h-6 rounded-full bg-amber-600 text-white text-xs font-bold flex items-center justify-center shrink-0">
+                    4
+                  </span>
+                  <div className="text-xs">
+                    <span className="font-bold text-stone-900">步行至五代目花山烏龍麵 (700m)</span>
+                    <p className="text-stone-500 mt-0.5">10:30 前往提早排隊候位，享用 5 公分鬼ひも川寬烏龍麵。</p>
+                  </div>
+                </div>
+              </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Card 1: Ningyocho Walking Loop */}
-              <div className="bg-white rounded-xl border border-slate-200 p-5 sm:p-6 shadow-xs">
-                <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-                  <span className="text-xs font-bold uppercase tracking-wider text-amber-700">
-                    晨間徒步迴圈（約 1.8 公里）
-                  </span>
-                  <a
-                    href="https://www.google.com/maps/dir/VIA+INN+PRIME+Nihonbashi+Ningyocho/Koami+Shrine/DIXANS+Ningyocho/Amazake+Yokocho/Hanayama+Udon+Nihonbashi"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs text-amber-700 hover:underline font-semibold flex items-center gap-1"
-                  >
-                    <span>Google 步行導航</span>
-                    <ExternalLink className="w-3 h-3" />
-                  </a>
-                </div>
-
-                <div className="mt-4 space-y-3.5">
-                  <div className="flex items-start gap-3">
-                    <span className="w-6 h-6 rounded-full bg-slate-900 text-white text-xs font-mono font-bold flex items-center justify-center shrink-0">
-                      1
-                    </span>
-                    <div>
-                      <div className="text-sm font-bold text-slate-900">
-                        VIA INN PRIME 人形町飯店（起點）
-                      </div>
-                      <div className="text-xs text-slate-500">08:15 出發，步行約 400 公尺</div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-start gap-3">
-                    <span className="w-6 h-6 rounded-full bg-amber-600 text-white text-xs font-mono font-bold flex items-center justify-center shrink-0">
-                      2
-                    </span>
-                    <div>
-                      <div className="text-sm font-bold text-slate-900">
-                        小網神社（08:30–09:15 參拜、洗錢）
-                      </div>
-                      <div className="text-xs text-slate-500">日本橋強運厄除、洗錢弁天神泉，祈求好運</div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-start gap-3">
-                    <span className="w-6 h-6 rounded-full bg-amber-600 text-white text-xs font-mono font-bold flex items-center justify-center shrink-0">
-                      3
-                    </span>
-                    <div>
-                      <div className="text-sm font-bold text-slate-900">
-                        DIXANS 人形町店（09:30–10:00 早餐）
-                      </div>
-                      <div className="text-xs text-slate-500">步行 300 公尺，享用招牌黑糖厚片吐司佐職人拿鐵</div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-start gap-3">
-                    <span className="w-6 h-6 rounded-full bg-amber-600 text-white text-xs font-mono font-bold flex items-center justify-center shrink-0">
-                      4
-                    </span>
-                    <div>
-                      <div className="text-sm font-bold text-slate-900">
-                        甘酒橫丁 ＆ 三原堂本店（10:00–10:30）
-                      </div>
-                      <div className="text-xs text-slate-500">老街散步、採購百年名物「鹽煎餅」</div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-start gap-3">
-                    <span className="w-6 h-6 rounded-full bg-slate-900 text-white text-xs font-mono font-bold flex items-center justify-center shrink-0">
-                      5
-                    </span>
-                    <div>
-                      <div className="text-sm font-bold text-slate-900">
-                        五代目花山烏龍麵 日本橋店（10:30 排隊、11:00 用餐）
-                      </div>
-                      <div className="text-xs text-slate-500">步行約 700 公尺抵達，品嚐群馬 5 公分「鬼ひも川」寬麵</div>
-                    </div>
-                  </div>
-                </div>
+            <div className="bg-white rounded-3xl p-6 sm:p-7 border border-stone-200/80 shadow-[0_4px_16px_rgba(0,0,0,0.04)]">
+              <div className="flex items-center gap-2 text-xs font-bold text-rose-800 uppercase tracking-wider mb-2">
+                <Sparkles className="w-4 h-4 text-rose-700" />
+                <span>午後秋景動線 ｜ 新宿御苑</span>
               </div>
+              <h3 className="text-lg font-bold text-stone-900">
+                金黃銀杏林地毯 ＆ 日式池泉楓紅散策
+              </h3>
+              <p className="text-xs sm:text-sm text-stone-600 mt-2 leading-relaxed">
+                自花山烏龍麵搭地鐵約 30 分鐘抵達新宿御苑前站，建議拍照路線：
+              </p>
 
-              {/* Card 2: Transit to Shinjuku Gyoen & Airport return */}
-              <div className="bg-white rounded-xl border border-slate-200 p-5 sm:p-6 shadow-xs flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-                    <span className="text-xs font-bold uppercase tracking-wider text-amber-700">
-                      新宿御苑賞楓 ＆ 機場接駁線
-                    </span>
-                    <a
-                      href="https://www.google.com/maps/search/?api=1&query=Shinjuku+Gyoen+National+Garden"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs text-amber-700 hover:underline font-semibold flex items-center gap-1"
-                    >
-                      <span>新宿御苑地圖</span>
-                      <ExternalLink className="w-3 h-3" />
-                    </a>
+              <div className="mt-5 space-y-3">
+                <div className="p-3.5 bg-rose-50/70 rounded-2xl border border-rose-200/60 text-xs">
+                  <div className="font-bold text-rose-950 flex items-center gap-1.5">
+                    <span>入口：新宿門進入（自動售票機 500 日圓）</span>
                   </div>
-
-                  <div className="mt-4 space-y-3">
-                    <div className="p-3 bg-slate-50 rounded-lg text-xs">
-                      <div className="font-bold text-slate-900 mb-1">
-                        午間地鐵轉乘（約 30 分鐘）：
-                      </div>
-                      <p className="text-slate-600">
-                        於人形町站搭乘都營淺草線至東銀座轉日比谷線，或日本橋銀座線轉丸之內線抵達「新宿御苑前站」，由新宿門入園。
-                      </p>
-                    </div>
-
-                    <div className="p-3 bg-slate-50 rounded-lg text-xs">
-                      <div className="font-bold text-slate-900 mb-1">
-                        新宿御苑秋日精華散步動線（約 2 小時）：
-                      </div>
-                      <p className="text-slate-600">
-                        新宿門入園 → 巨木銀杏林（金色大道）→ 舊御休所 → 中之池 → 日本傳統庭園（池泉楓紅倒影）→ 大木戶門或新宿門離開。
-                      </p>
-                    </div>
-
-                    <div className="p-3 bg-slate-50 rounded-lg text-xs">
-                      <div className="font-bold text-slate-900 mb-1">
-                        回飯店取行李 ＆ 直通機場（約 70 分鐘）：
-                      </div>
-                      <p className="text-slate-600">
-                        15:10 回到 VIA INN PRIME 人形町提領寄存行李，15:30 於人形町站搭乘「都營淺草線直通京成 Access 特急」，一車直達無換車抵達成田機場 T1。
-                      </p>
-                    </div>
-                  </div>
+                  <p className="text-rose-900/80 mt-1 leading-relaxed">
+                    入園後直行前往大坪草坪西側的百年銀杏巨木群，11 月底金黃落葉鋪滿草地，陽光灑落如金黃地毯。
+                  </p>
                 </div>
 
-                <div className="mt-5 pt-3 border-t border-slate-100 text-xs text-slate-500">
-                  回程建議於 17:30 前抵達成田第一航廈酷航櫃檯完成報到手續。
+                <div className="p-3.5 bg-amber-50/70 rounded-2xl border border-amber-200/60 text-xs">
+                  <div className="font-bold text-amber-950">
+                    景點：中之池 ＆ 舊御涼亭（台灣閣）
+                  </div>
+                  <p className="text-amber-900/80 mt-1 leading-relaxed">
+                    池畔雞爪槭與水杉呈現紅、橙、黃漸層倒影，閩南風格的傳統木造涼亭倒映在水面，是經典攝影點。
+                  </p>
+                </div>
+
+                <div className="p-3.5 bg-stone-50 rounded-2xl border border-stone-200/60 text-xs">
+                  <div className="font-bold text-stone-900">
+                    出口：大木戶門出園 → 新宿御苑前站搭車
+                  </div>
+                  <p className="text-stone-600 mt-1 leading-relaxed">
+                    14:20 前準備出園，搭乘丸之內線經赤坂見附轉淺草線返回人形町，15:10 抵達飯店取行李時間充裕。
+                  </p>
                 </div>
               </div>
             </div>
