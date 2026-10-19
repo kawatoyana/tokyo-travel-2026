@@ -29,7 +29,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-neutral-100 text-neutral-900 font-sans selection:bg-amber-100 selection:text-amber-900">
+    <div className="min-h-screen bg-[#0a070e] text-neutral-100 font-sans selection:bg-rose-900 selection:text-amber-200">
       {/* Top Bar Navigation */}
       <Header onPrint={handlePrint} />
 
@@ -38,23 +38,23 @@ export default function App() {
 
       {/* Main Content Sections */}
       <main>
-        {/* Daily Detailed Schedule */}
+        {/* Daily Detailed Schedule (Major Event Cards & Compact Transit Connectors) */}
         <ItinerarySection />
 
-        {/* 10K Running Route & Walking Navigation */}
-        <RouteMapSection />
-
-        {/* Attractions & Dining Guide */}
+        {/* Chronological Attractions & Dining Guide (Strictly Sorted 1 to 8) */}
         <AttractionsSection />
 
         {/* Flight & Hotel Logistics */}
         <FlightHotelSection />
 
-        {/* Packing Checklist & Weather */}
+        {/* 10K Running Route & Walking Navigation */}
+        <RouteMapSection />
+
+        {/* Meteorological Forecast & Packing Checklist */}
         <PackingWeatherSection />
       </main>
 
-      {/* Footer */}
+      {/* Theatrical Footer */}
       <Footer />
 
       {/* Scroll to Top Floating Button */}
@@ -62,7 +62,7 @@ export default function App() {
         <button
           onClick={scrollToTop}
           aria-label="回到頂部"
-          className="fixed bottom-6 right-6 z-40 p-3 bg-neutral-900/90 text-white rounded-full shadow-lg hover:bg-neutral-800 transition-all focus:outline-none focus:ring-2 focus:ring-amber-500"
+          className="fixed bottom-6 right-6 z-40 p-3 bg-gradient-to-r from-rose-900 to-rose-800 text-amber-200 border border-amber-500/50 rounded-full shadow-lg shadow-rose-950/80 hover:from-rose-800 hover:to-rose-700 transition-all focus:outline-none focus:ring-2 focus:ring-amber-400"
         >
           <ArrowUp className="w-5 h-5" />
         </button>

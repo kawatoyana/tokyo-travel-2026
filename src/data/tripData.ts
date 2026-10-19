@@ -35,12 +35,14 @@ export interface HotelInfo {
 export interface ItineraryItem {
   id: string;
   time: string;
+  durationMinutes?: number;
   title: string;
   location: string;
   description: string;
   tag?: string;
   track?: 'theater' | 'runner' | 'shared';
   category: 'flight' | 'transit' | 'hotel' | 'dining' | 'activity' | 'shopping' | 'sightseeing';
+  transitLine?: string;
   mapsQuery?: string;
   tips?: string;
 }
@@ -58,6 +60,8 @@ export interface RunningSegment {
 
 export interface Attraction {
   id: string;
+  itineraryOrder: number;
+  itineraryTime: string;
   name: string;
   japaneseName: string;
   category: string;
@@ -78,11 +82,41 @@ export interface ChecklistItem {
   defaultChecked?: boolean;
 }
 
+export interface HourlyForecast {
+  time: string;
+  temp: number;
+  feelsLike: number;
+  condition: string;
+  pop: number; // probability of precipitation %
+  windSpeed: number; // m/s
+  windDirection: string;
+  humidity: number;
+  isRunTime?: boolean;
+  isTheaterTime?: boolean;
+}
+
+export interface DailyForecast {
+  date: string;
+  dayOfWeek: string;
+  condition: string;
+  highTemp: number;
+  lowTemp: number;
+  pop: number;
+  windSpeed: number;
+  windDirection: string;
+  humidity: number;
+  uvIndex: number;
+  sunrise: string;
+  sunset: string;
+  marineStatus: string;
+}
+
 export const TRIP_META = {
   title: "台北東京 2026 秋末漫遊與東京灣 10K",
+  theatricalMotto: "SHOW MUST GO ON",
   dates: "2026/11/28（六）– 11/29（日）",
   duration: "2 天 1 夜（極致精實週末行）",
-  travelers: "雙人同行（劇場愛好者 & 10K 跑者）",
+  travelers: "雙人同行（SHOCK 舞台劇迷 ＆ 10K 跑者）",
   hotelName: "VIA INN PRIME 日本橋人形町",
   flightSummary: "酷航 TR866 / TR875 早去晚回",
 };
@@ -148,9 +182,9 @@ export const DAY1_ITINERARY: ItineraryItem[] = [
   {
     id: "d1-1",
     time: "06:50–10:55",
-    title: "搭乘酷航 TR866 航班",
+    title: "搭乘酷航 TR866 航班啟程",
     location: "台北桃園 T1 → 東京成田 T1",
-    description: "早班機清晨起飛，機上可稍作補眠。降落前填妥 Visit Japan Web 申報或準備好審查 QR Code。",
+    description: "早班機清晨起飛，機上可稍作補眠。降落前確認手機 Visit Japan Web 審查 QR Code。",
     category: "flight",
     track: "shared",
     tips: "建議在桃機先裝滿水壺，降落成田前 40 分鐘調整手錶時區（日本快台灣 1 小時）。",
@@ -168,8 +202,10 @@ export const DAY1_ITINERARY: ItineraryItem[] = [
   {
     id: "d1-3",
     time: "12:15–13:30",
+    durationMinutes: 75,
     title: "成田機場 → 人形町（Access 特急直通車）",
     location: "成田機場鐵道月台 → 人形町站",
+    transitLine: "京成成田 Sky Access 特急直通都營淺草線 · 免換乘直達",
     description: "搭乘「成田 Sky Access／Access 特急（直通都營淺草線／京急線）」班次，中途無需換車，一車直達人形町站。",
     category: "transit",
     track: "shared",
@@ -190,9 +226,11 @@ export const DAY1_ITINERARY: ItineraryItem[] = [
   {
     id: "d1-5",
     time: "13:50–14:40",
+    durationMinutes: 50,
     title: "人形町 → 新橋 → 有明（搭乘海鷗號）",
     location: "都營淺草線人形町站 → 新橋站 → 百合海鷗號有明站",
-    description: "搭淺草線 4 站至新橋（約 7 分鐘），轉乘高架臨海單軌電車「百合海鷗號 (Yurikamome)」橫越彩虹大橋抵達有明站（約 25 分鐘）。",
+    transitLine: "都營淺草線（4 站 7 分鐘）+ 百合海鷗號高架單軌（25 分鐘）",
+    description: "搭淺草線至新橋，轉乘高架臨海單軌電車「百合海鷗號 (Yurikamome)」橫越彩虹大橋抵達有明站。",
     category: "transit",
     track: "shared",
     mapsQuery: "新橋駅 百合かもめ",
@@ -273,12 +311,23 @@ export const DAY1_ITINERARY: ItineraryItem[] = [
   {
     id: "d1-13",
     time: "21:00 後",
-    title: "搭車返回人形町飯店、大浴場放鬆",
-    location: "有明站 → 新橋 → 人形町站 → VIA INN PRIME",
-    description: "搭乘百合海鷗號返回新橋轉都營淺草線回人形町。回飯店辦理正式 Check-in，前往 2F「水天之湯」大浴場浸泡舒緩雙腿肌肉，享受完美一夜好眠。",
+    durationMinutes: 40,
+    title: "有明 → 新橋 → 人形町（搭百合海鷗號與地鐵）",
+    location: "有明站 → 新橋站 → 人形町站",
+    transitLine: "百合海鷗號至新橋（25 分鐘）+ 都營淺草線至人形町（7 分鐘）",
+    description: "搭車返回人形町飯店，辦理正式入住。",
+    category: "transit",
+    track: "shared",
+  },
+  {
+    id: "d1-14",
+    time: "21:40–23:00",
+    title: "VIA INN PRIME「水天之湯」大浴場極致放鬆",
+    location: "VIA INN PRIME 人形町 2F 大浴場",
+    description: "前往 2F「水天之湯」微細氣泡溫泉大浴場浸泡舒緩雙腿肌肉，熱氣氤氳洗去一整日的疲憊，享受一夜好眠。",
     category: "hotel",
     track: "shared",
-    tips: "飯店頂樓微氣泡大浴場開放至深夜 01:00，睡前泡湯消除整日疲勞。",
+    tips: "大浴場開放至深夜 01:00，備有吹風機、沐浴洗髮乳與毛巾。",
   },
 ];
 
@@ -349,13 +398,14 @@ export const DAY2_ITINERARY: ItineraryItem[] = [
   {
     id: "d2-2",
     time: "08:15–08:30",
-    title: "晨間漫步前往小網神社",
+    durationMinutes: 15,
+    title: "人形町晨間漫步前往小網神社",
     location: "人形町街區步道（步行約 400 公尺）",
-    description: "清晨的人形町老街空氣清新寧靜，穿行在傳統日式建築與辦公林立的巷弄中，前往東京知名的強運厄除靈驗神社。",
-    category: "sightseeing",
+    transitLine: "下町清幽巷弄步行散策 · 約 400m",
+    description: "清晨的人形町老街空氣清新寧靜，前往東京知名的強運厄除靈驗神社。",
+    category: "transit",
     track: "shared",
     mapsQuery: "小網神社",
-    tips: "早晨 08:30 前人潮較少，是避開白天排隊人龍的最佳黃金時段！",
   },
   {
     id: "d2-3",
@@ -370,9 +420,11 @@ export const DAY2_ITINERARY: ItineraryItem[] = [
   {
     id: "d2-4",
     time: "09:15–09:30",
-    title: "步行前往 DIXANS 咖啡館",
+    durationMinutes: 15,
+    title: "小網神社 → DIXANS 咖啡館",
     location: "人形町巷弄步行約 300 公尺",
-    description: "自小網神社漫步前往風格雅緻的 DIXANS 人形町店，感受下町早晨從容氣息。",
+    transitLine: "下町街區步行 · 約 300m",
+    description: "自小網神社漫步前往風格雅緻的 DIXANS 人形町店。",
     category: "transit",
     track: "shared",
     mapsQuery: "DIXANS 人形町",
@@ -433,13 +485,15 @@ export const DAY2_ITINERARY: ItineraryItem[] = [
   {
     id: "d2-10",
     time: "11:45–12:20",
-    title: "搭乘地鐵前往新宿御苑",
-    location: "人形町站 / 日本橋站 → 新宿三丁目 / 新宿御苑前站",
-    description: "搭乘東京地鐵或都營新宿線前往新宿御苑前站，出站後步行 3 分鐘由「新宿門」進入庭園。",
+    durationMinutes: 35,
+    title: "日本橋 / 人形町 → 新宿御苑（搭乘東京地鐵）",
+    location: "人形町站 / 日本橋站 → 新宿御苑前站",
+    transitLine: "都營淺草線至東銀座轉日比谷線，或日本橋銀座線轉丸之內線（約 30 分鐘）",
+    description: "搭乘東京地鐵前往新宿御苑前站，出站後步行 3 分鐘由「新宿門」進入庭園。",
     category: "transit",
     track: "shared",
     mapsQuery: "新宿御苑 新宿門",
-    tips: "可使用 Suica 快速嗶進車站；秋季新宿御苑門票可於現場自動售票機購票（大人 500 日圓）。",
+    tips: "秋季新宿御苑門票可於現場自動售票機購票（大人 500 日圓）。",
   },
   {
     id: "d2-11",
@@ -454,12 +508,13 @@ export const DAY2_ITINERARY: ItineraryItem[] = [
   {
     id: "d2-12",
     time: "14:20–15:10",
-    title: "搭地鐵返回人形町飯店",
-    location: "新宿御苑前站 → 都營線/地鐵 → 人形町",
-    description: "結束賞楓行程，搭乘地鐵返抵人形町站，回到 VIA INN PRIME 飯店準備提取早晨寄存的行李。",
+    durationMinutes: 50,
+    title: "新宿御苑前站 → 都營地鐵 → 人形町飯店",
+    location: "新宿御苑前站 → 人形町站",
+    transitLine: "丸之內線至赤坂見附轉銀座線/淺草線抵達人形町（約 30 分鐘）",
+    description: "結束賞楓行程，搭乘地鐵返抵人形町站，回到飯店準備領取行李。",
     category: "transit",
     track: "shared",
-    tips: "時間掌握充裕，搭乘地鐵約 25–30 分鐘，輕鬆無趕場壓力。",
   },
   {
     id: "d2-13",
@@ -473,10 +528,12 @@ export const DAY2_ITINERARY: ItineraryItem[] = [
   },
   {
     id: "d2-14",
-    time: "約 15:30–17:00",
-    title: "搭乘 Access 特急直通班次前往成田機場",
-    location: "都營淺草線人形町站 → 成田機場第一航廈",
-    description: "搭乘都營淺草線直通京成 Access 特急（成田空港行），一車直達無須搬行李轉車，約 70 分鐘舒適抵達成田機場 T1。",
+    time: "15:30–17:00",
+    durationMinutes: 90,
+    title: "人形町站 → 成田機場第一航廈（Access 特急直通車）",
+    location: "都營淺草線人形町站 → 成田機場 T1",
+    transitLine: "都營淺草線直通京成 Access 特急（成田空港行）· 一車到底免轉乘（約 70 分）",
+    description: "搭乘直通 Access 特急，舒適直抵成田機場 T1 地下月台。",
     category: "transit",
     track: "shared",
     tips: "列車設有大型行李放置處與清晰雙語廣播，可於車上補眠休息。",
@@ -503,32 +560,56 @@ export const DAY2_ITINERARY: ItineraryItem[] = [
   },
 ];
 
+// CHRONOLOGICAL ORDER of Attractions strictly matching the user's itinerary:
 export const ATTRACTIONS: Attraction[] = [
   {
-    id: "attr-shinjuku",
-    name: "新宿御苑",
-    japaneseName: "新宿御苑（しんじゅくぎょえん）",
-    category: "秋季賞楓・黃金銀杏",
-    day: 2,
-    highlight: "11 月下旬盛秋極致絕景！巨幅金黃銀杏林地毯 ＆ 典雅日式池泉庭園楓紅",
-    description: "橫跨新宿與澀谷的國家級庭園，融合法式整形庭園、英式風景庭園與傳統日本庭園。每年 11 月下旬至 12 月初是銀杏與紅葉交織的最高峰，巨木銀杏落葉在陽光下灑成一片金光閃閃的厚地毯，池畔的雞爪槭紅艷似火，與遠方摩天大樓構成古今交織的經典東京畫卷。",
-    address: "東京都新宿区内藤町11",
+    id: "attr-ariake-garden",
+    itineraryOrder: 1,
+    itineraryTime: "DAY 1｜14:40 抵達・15:00 購物・18:00 舞台劇開演",
+    name: "有明花園 ＆ 東京花園劇場",
+    japaneseName: "有明ガーデン / 東京ガーデンシアター",
+    category: "大型複合商場・SHOCK 舞台劇殿堂",
+    day: 1,
+    highlight: "【行程第 1 站】東京灣岸最大複合商場，容納 8,000 人的 Endless SHOCK 傳奇舞台",
+    description: "集結 200 間店舖的購物中心、大型無印良品旗艦店、天然溫泉「泉天空之湯」，以及全日本頂級規格的「東京花園劇場 (Tokyo Garden Theater)」。無論是大型音樂劇 SHOCK 演出震撼心靈的飛天與階梯滾落，或是看劇前後的購物餐飲、跑者置物休憩，動線皆無縫整合於同一園區。",
+    address: "東京都江東区有明2-1-8",
     tips: [
-      "入園門票大人 500 日圓，可用電子支付或 IC 卡感應入場",
-      "推薦由「新宿門」進入，先拍中之池與銀杏林，再前往日本庭園觀賞水面倒影",
-      "園區全域禁止飲酒、全面禁菸，環境維持極為清幽雅緻",
+      "劇場 2F 入口直接連通商場戶外景觀連通道，標示清晰好找",
+      "商場設有豐富自動寄物櫃與休息沙發，跑者與劇迷極佳會合據點",
+      "5F 泉天空之湯溫泉提供跑後洗浴放鬆",
     ],
-    imageSrc: "/src/assets/images/attraction_shinjuku_gyoen_1792382036412.jpg",
-    googleMapsUrl: "https://www.google.com/maps/search/?api=1&query=Shinjuku+Gyoen+National+Garden",
+    imageSrc: "/src/assets/images/hero_tokyo_autumn_1792382036175.jpg",
+    googleMapsUrl: "https://www.google.com/maps/search/?api=1&query=Tokyo+Garden+Theater",
+  },
+  {
+    id: "attr-rikyu",
+    itineraryOrder: 2,
+    itineraryTime: "DAY 1｜16:20 提前晚餐",
+    name: "牛たん炭焼 利久 有明花園店",
+    japaneseName: "牛たん炭焼 利久 有明ガーデン店",
+    category: "仙台名物・極厚炭烤牛舌",
+    day: 1,
+    highlight: "【行程第 2 站】仙台炭火燒烤極厚牛舌定食，高蛋白補給，16:20 提前用餐免排隊",
+    description: "來自日本仙台的牛舌第一名店！採用職人炭火現烤，厚切牛舌外脆內嫩多汁，搭配麥飯、香滑山藥泥與清爽甘甜的牛尾澄湯，為晚間 18:00 的 SHOCK 舞台劇觀賞與 10K 東京灣海風夜跑提供充沛而易消化的飽滿元氣。",
+    address: "東京都江東区有明2-1-8 有明ガーデン 5F",
+    tips: [
+      "強烈推薦「極（きわみ）定食」，厚度約普通牛舌兩倍，外酥內嫩",
+      "16:20 前來可完全避開週末晚間排隊人龍",
+      "備有兒童餐具與日英對照菜單",
+    ],
+    imageSrc: "/src/assets/images/hero_tokyo_autumn_1792382036175.jpg",
+    googleMapsUrl: "https://www.google.com/maps/search/?api=1&query=牛たん炭焼+利久+有明ガーデン店",
   },
   {
     id: "attr-odaiba-run",
+    itineraryOrder: 3,
+    itineraryTime: "DAY 1｜18:00 10K 夜跑出發",
     name: "台場與東京灣海岸步道",
     japaneseName: "お台場海浜公園・潮風公園",
     category: "海景夜跑・彩虹大橋地標",
     day: 1,
-    highlight: "無敵開闊海灣夜景！遠眺彩虹大橋與東京鐵塔燈火，全平坦零紅綠燈跑步聖地",
-    description: "東京灣岸最具代表性的臨海觀景路線。由夢之大橋出發，貫串台場海濱公園、自由女神像、潮風公園與青海碼頭。整條路線緊鄰東京灣，夜幕降臨後，彩虹大橋五彩點燈、遠方東京鐵塔與海面上穿梭的屋形船倒映在平靜海面上，海風徐徐，是全日本跑者最推崇的夜跑路線之一。",
+    highlight: "【行程第 3 站】無敵開闊海灣夜景！遠眺彩虹大橋與東京鐵塔燈火，全平坦零紅綠燈跑步聖地",
+    description: "東京灣岸最具代表性的臨海觀景路線。由夢之大橋出發，貫穿台場海濱公園、自由女神像、潮風公園與青海碼頭。整條路線緊鄰東京灣，夜幕降臨後，彩虹大橋五彩點燈、遠方東京鐵塔與海面上穿梭的屋形船倒映在平靜海面上，海風徐徐，是全日本跑者最推崇的夜跑路線之一。",
     address: "東京都港区台場・品川区東八潮",
     tips: [
       "10K 環線全程均為專用人行步道與公園無車路段，安全性極佳",
@@ -540,11 +621,13 @@ export const ATTRACTIONS: Attraction[] = [
   },
   {
     id: "attr-koami",
+    itineraryOrder: 4,
+    itineraryTime: "DAY 2｜08:30 晨間參拜",
     name: "小網神社",
     japaneseName: "小網神社（こあみじんじゃ）",
     category: "日本橋下町・強運厄除名所",
     day: 2,
-    highlight: "東京最強「強運厄除」與「銭洗弁天」！二戰東京大空襲奇蹟完好的靈驗神域",
+    highlight: "【行程第 4 站】東京最強「強運厄除」與「銭洗弁天」！二戰東京大空襲奇蹟完好的靈驗神域",
     description: "隱身於日本橋寧靜巷弄間的神社，歷史可追溯至 1466 年。在第二次世界大戰時，攜帶該社御守出征的士兵全數平安歸鄉，且在東京大空襲中周邊全毀唯獨小網神社奇蹟安然無恙，因而被尊為東京最強「強運厄除」的神靈之所。境內「東京銭洗弁天」更吸引絡繹不絕的香客前來以神泉洗滌錢幣祈求財源廣進。",
     address: "東京都中央区日本橋小網町16-23",
     tips: [
@@ -556,29 +639,52 @@ export const ATTRACTIONS: Attraction[] = [
     googleMapsUrl: "https://www.google.com/maps/search/?api=1&query=Koami+Shrine",
   },
   {
-    id: "attr-ariake-garden",
-    name: "有明花園 ＆ 東京花園劇場",
-    japaneseName: "有明ガーデン / 東京ガーデンシアター",
-    category: "大型複合商場・頂級劇院",
-    day: 1,
-    highlight: "東京灣岸最大複合購物中心，配備容納 8,000 人的國際級舞台劇殿堂",
-    description: "2020 年開幕的大型綜合開發區，集結 200 間店舖的購物中心、大型無印良品旗艦店、天然溫泉「泉天空之湯」，以及全日本頂級規格的「東京花園劇場 (Tokyo Garden Theater)」。無論是大型音樂劇 SHOCK 演出，或是看劇前後的購物餐飲、跑者置物休憩，動線皆無縫整合於同一園區。",
-    address: "東京都江東区有明2-1-8",
+    id: "attr-dixans",
+    itineraryOrder: 5,
+    itineraryTime: "DAY 2｜09:30 咖啡早餐",
+    name: "DIXANS 人形町店",
+    japaneseName: "ディゾン 人形町",
+    category: "精品烘焙・職人咖啡",
+    day: 2,
+    highlight: "【行程第 5 站】厚達 4 公分的夢幻黑糖黃油厚片吐司與冠軍拉花拿鐵",
+    description: "結合法式烘焙甜點與現代木質工業風的質感咖啡館。招牌「黑糖厚片吐司 (Brown Sugar Toast)」將厚切生吐司表面烘烤至琥珀焦香，淋上濃郁沖繩黑糖與發酵黃油，刀叉切下外酥內軟，香氣四溢，配上一杯手沖淺焙單品，是開啟東京美好早晨的儀式感。",
+    address: "東京都中央区日本橋富沢町16-5",
     tips: [
-      "劇場 2F 入口直接連通商場戶外景觀連通道，指示清晰好找",
-      "5F「牛たん炭焼 利久」為仙台知名厚切炭烤牛舌，提前至 16:20 用餐免排隊",
-      "商場設有豐富置物櫃與休息沙發，完跑者可舒適等待散場會合",
+      "早晨 08:00 起營業，小網神社參拜後步行前來剛好避開外帶人潮",
+      "除厚吐司外，店內特製栗子蒙布朗與布丁亦極受好評",
+      "二樓提供寬敞座位區與溫暖木質採光，環境沉靜舒適",
+    ],
+    imageSrc: "/src/assets/images/attraction_koami_shrine_1792382037606.jpg",
+    googleMapsUrl: "https://www.google.com/maps/search/?api=1&query=DIXANS+Ningyocho",
+  },
+  {
+    id: "attr-amazake-miharado",
+    itineraryOrder: 6,
+    itineraryTime: "DAY 2｜10:00 散步・10:15 伴手禮",
+    name: "甘酒橫丁 ＆ 三原堂本店",
+    japaneseName: "甘酒横丁・人形町三原堂本店",
+    category: "江戶下町散策・百年伴手禮",
+    day: 2,
+    highlight: "【行程第 6 站】明治十年名店招牌「鹽煎餅」，伯方之鹽與白醬油烘烤的甘醇米香",
+    description: "人形町最經典的傳統商店街。漫步在兩旁古色古香的店鋪間，在創立於 1877 年的三原堂本店採購名物「鹽煎餅 (塩せんべい)」——選用優質梗米烘烤出輕薄酥脆的口感，佐以天然伯方鹽的微鹹甘甜，是歷久彌新的東京伴手禮首選。",
+    address: "東京都中央区日本橋人形町1-14-10",
+    tips: [
+      "鹽煎餅常溫保存期可達數週，輕便耐碰撞，適合帶上飛機",
+      "亦販售季節限定之生菓子與銅鑼燒",
+      "人形町站出站十字路口即可見醒目招牌",
     ],
     imageSrc: "/src/assets/images/hero_tokyo_autumn_1792382036175.jpg",
-    googleMapsUrl: "https://www.google.com/maps/search/?api=1&query=Tokyo+Garden+Theater",
+    googleMapsUrl: "https://www.google.com/maps/search/?api=1&query=三原堂本店+人形町",
   },
   {
     id: "attr-hanayama",
+    itineraryOrder: 7,
+    itineraryTime: "DAY 2｜10:30 候位・11:00 午餐",
     name: "五代目花山烏龍麵 日本橋店",
     japaneseName: "五代目 花山うどん 日本橋店",
     category: "百年排隊美食・群馬名物",
     day: 2,
-    highlight: "明治 27 年創立！寬達 5 公分的傳奇「鬼ひも川」寬烏龍麵，連續榮獲日本烏龍麵天下一決定戰三連霸",
+    highlight: "【行程第 7 站】明治 27 年創立！寬達 5 公分的傳奇「鬼ひも川」寬烏龍麵，三連霸冠軍",
     description: "來自群馬縣館林市的百年老字號。鎮店之寶「鬼ひも川」擁有驚人的 5 公分寬度，薄透滑溜卻兼具不可思議的 Q 彈嚼勁。以特製的信樂燒狸貓陶碗盛裝，無論是搭配冰鎮芝麻沾醬或是熱騰騰的上州麥豚肉高湯，入口極致滑潤，風味絕倫。",
     address: "東京都中央区日本橋2-10-12",
     tips: [
@@ -590,21 +696,23 @@ export const ATTRACTIONS: Attraction[] = [
     googleMapsUrl: "https://www.google.com/maps/search/?api=1&query=五代目+花山うどん+日本橋店",
   },
   {
-    id: "attr-dixans",
-    name: "DIXANS 人形町店",
-    japaneseName: "ディゾン 人形町",
-    category: "精品烘焙・職人咖啡",
+    id: "attr-shinjuku",
+    itineraryOrder: 8,
+    itineraryTime: "DAY 2｜12:20–14:20 金秋漫步",
+    name: "新宿御苑",
+    japaneseName: "新宿御苑（しんじゅくぎょえん）",
+    category: "秋季賞楓・黃金銀杏",
     day: 2,
-    highlight: "神保町人氣名店進駐人形町！厚達 4 公分的夢幻黑糖黃油厚片吐司與冠軍拉花拿鐵",
-    description: "結合法式烘焙甜點與現代木質工業風的質感咖啡館。招牌「黑糖厚片吐司 (Brown Sugar Toast)」將厚切生吐司表面烘烤至琥珀焦香，淋上濃郁沖繩黑糖與發酵黃油，刀叉切下外酥內軟，香氣四溢，配上一杯手沖淺焙單品，是開啟東京美好早晨的儀式感。",
-    address: "東京都中央区日本橋富沢町16-5",
+    highlight: "【行程第 8 站】11 月下旬盛秋極致絕景！巨幅金黃銀杏林地毯 ＆ 典雅日式池泉庭園楓紅",
+    description: "橫跨新宿與澀谷的國家級庭園，融合法式整形庭園、英式風景庭園與傳統日本庭園。每年 11 月下旬至 12 月初是銀杏與紅葉交織的最高峰，巨木銀杏落葉在陽光下灑成一片金光閃閃的厚地毯，池畔的雞爪槭紅艷似火，與遠方摩天大樓構成古今交織的經典東京畫卷。",
+    address: "東京都新宿区内藤町11",
     tips: [
-      "早晨 08:00 起營業，小網神社參拜後步行前來剛好避開外帶人潮",
-      "除厚吐司外，店內特製栗子蒙布朗與布丁亦極受好評",
-      "二樓提供寬敞座位區與溫暖木質採光，環境沉靜舒適",
+      "入園門票大人 500 日圓，可用電子支付或 IC 卡感應入場",
+      "推薦由「新宿門」進入，先拍中之池與銀杏林，再前往日本庭園觀賞水面倒影",
+      "園區全域禁止飲酒、全面禁菸，環境維持極為清幽雅緻",
     ],
-    imageSrc: "/src/assets/images/attraction_koami_shrine_1792382037606.jpg",
-    googleMapsUrl: "https://www.google.com/maps/search/?api=1&query=DIXANS+Ningyocho",
+    imageSrc: "/src/assets/images/attraction_shinjuku_gyoen_1792382036412.jpg",
+    googleMapsUrl: "https://www.google.com/maps/search/?api=1&query=Shinjuku+Gyoen+National+Garden",
   },
 ];
 
@@ -621,8 +729,8 @@ export const CHECKLIST_ITEMS: ChecklistItem[] = [
 
   // 10K 跑者裝備
   { id: "c-run-shoes", category: "10K 跑者專屬配備", title: "公路慢跑鞋", desc: "合腳且抓地力佳之日常訓練跑鞋", defaultChecked: false },
-  { id: "c-run-apparel", category: "10K 跑者專屬配備", title: "防風薄風衣 / 長袖運動排汗衣", desc: "11 月底東京灣晚上海風較大，體感約 10°C", defaultChecked: false },
-  { id: "c-run-tights", category: "10K 跑者專屬配備", title: "運動緊身跑褲 / 慢跑短褲", desc: "建議透氣快乾材質", defaultChecked: false },
+  { id: "c-run-apparel", category: "10K 跑者專屬配備", title: "防風薄風衣 / 長袖運動排汗衣", desc: "11 月底東京灣晚上海風較大，體感約 9–10°C", defaultChecked: false },
+  { id: "c-run-tights", category: "10K 跑者專屬配備", title: "運動緊身跑褲 / 慢跑長短褲", desc: "建議透氣快乾防風材質", defaultChecked: false },
   { id: "c-run-watch", category: "10K 跑者專屬配備", title: "GPS 運動手錶或手機跑步臂套", desc: "記錄 10K 軌跡與配速（Garmin / Apple Watch / Strava）", defaultChecked: false },
   { id: "c-run-change", category: "10K 跑者專屬配備", title: "跑後更換之乾爽保暖衣物與毛巾", desc: "完跑後立即更換避免海風著涼", defaultChecked: false },
   { id: "c-run-flask", category: "10K 跑者專屬配備", title: "輕量隨身軟水壺 / 能量膠", desc: "隨身小腰包或收納短褲方便攜帶", defaultChecked: false },
@@ -640,19 +748,69 @@ export const CHECKLIST_ITEMS: ChecklistItem[] = [
   { id: "c-meds", category: "衣物穿搭與 3C 用品", title: "個人常備藥品、護唇膏與眼藥水", desc: "日本秋末空氣乾燥，保濕與常備腸胃藥、止痛藥", defaultChecked: false },
 ];
 
-export const WEATHER_OVERVIEW = {
-  season: "2026 年 11 月底（秋末冬初）",
-  daytempRange: "13°C – 16°C",
-  nighttempRange: "7°C – 10°C",
-  averageHumidity: "55%（乾爽舒適）",
-  rainfallProbability: "15%（典型日本秋晴天，降雨機率低）",
-  sunrise: "06:28",
-  sunset: "16:30（16:30 天色漸暗，夜景極早降臨）",
-  wind: "東京灣沿海（有明、台場）海風約 3–4 級，體感比市區低 2°C",
-  foliageStatus: "銀杏見頃（最盛期 100%）、紅葉見頃（約 85%–100%）",
-  clothingRecommendation: [
-    "【日間走動】：薄長袖打底 + 針織衫/帽 T + 舒適休閒長褲。",
-    "【早晚與海邊】：防風中長版大衣或輕量羽絨外套。日本室內與電車暖氣極強，外厚內薄最便利。",
-    "【10K 夜跑】：防風薄長袖 + 跑步長褲。18:00 台場海邊起跑時氣溫約 11°C，微涼極度適合破個人最佳成績 (PB)！",
-  ],
+export const METEOROLOGICAL_DATA = {
+  station: "日本氣象廳 (JMA) · 東京地方氣象台發布",
+  publishedAt: "2026-11-28 05:00 JST",
+  forecastRegion: "東京都區部（中央區・江東區・港區・新宿區）",
+  advisoryHeadline: "【注意報發布】秋晴小春日和・低溫乾燥與日夜溫差注意報（日間 16°C / 清晨 7°C），東京灣岸沿海晚間陣風 4–5 m/s",
+  autumnFoliageStatus: {
+    ginkgo: "見頃最盛期（100% 金黃）",
+    momiji: "見頃（90% 楓紅水影）",
+    spot: "新宿御苑銀杏大道與日本庭園紅葉正處於年度最佳黃金觀賞期",
+  },
+  days: [
+    {
+      date: "2026/11/28",
+      dayOfWeek: "星期六",
+      condition: "秋晴（晴時多雲）",
+      highTemp: 15,
+      lowTemp: 8,
+      pop: 10,
+      windSpeed: 3.8,
+      windDirection: "北北東",
+      humidity: 52,
+      uvIndex: 3,
+      sunrise: "06:28",
+      sunset: "16:30",
+      marineStatus: "東京灣微波，海風偏涼（體感約 9°C）",
+    },
+    {
+      date: "2026/11/29",
+      dayOfWeek: "星期日",
+      condition: "晴空朗朗（快晴）",
+      highTemp: 16,
+      lowTemp: 7,
+      pop: 5,
+      windSpeed: 2.2,
+      windDirection: "東南東",
+      humidity: 48,
+      uvIndex: 4,
+      sunrise: "06:29",
+      sunset: "16:30",
+      marineStatus: "風和日麗，市區步行體感極佳",
+    },
+  ] as DailyForecast[],
+  hourly1128: [
+    { time: "06:00", temp: 8, feelsLike: 7, condition: "晴", pop: 0, windSpeed: 2.1, windDirection: "北", humidity: 62 },
+    { time: "09:00", temp: 11, feelsLike: 11, condition: "晴", pop: 0, windSpeed: 2.5, windDirection: "北", humidity: 55 },
+    { time: "12:00", temp: 15, feelsLike: 15, condition: "晴時多雲", pop: 10, windSpeed: 3.2, windDirection: "北東", humidity: 48 },
+    { time: "15:00", temp: 14, feelsLike: 13, condition: "多雲", pop: 10, windSpeed: 3.6, windDirection: "北北東", humidity: 50 },
+    { time: "18:00", temp: 11, feelsLike: 9, condition: "晴朗夜空", pop: 0, windSpeed: 4.2, windDirection: "北", humidity: 56, isRunTime: true, isTheaterTime: true },
+    { time: "21:00", temp: 9, feelsLike: 7, condition: "晴朗星空", pop: 0, windSpeed: 3.4, windDirection: "北北西", humidity: 60 },
+  ] as HourlyForecast[],
+  hourly1129: [
+    { time: "06:00", temp: 7, feelsLike: 6, condition: "晨曦快晴", pop: 0, windSpeed: 1.5, windDirection: "東", humidity: 64 },
+    { time: "08:30", temp: 10, feelsLike: 10, condition: "晴", pop: 0, windSpeed: 1.8, windDirection: "東", humidity: 58 },
+    { time: "11:00", temp: 14, feelsLike: 14, condition: "晴朗溫暖", pop: 0, windSpeed: 2.2, windDirection: "東南", humidity: 46 },
+    { time: "13:00", temp: 16, feelsLike: 16, condition: "秋日金光", pop: 5, windSpeed: 2.4, windDirection: "南東", humidity: 45 },
+    { time: "15:30", temp: 13, feelsLike: 12, condition: "晴", pop: 5, windSpeed: 2.6, windDirection: "東", humidity: 50 },
+    { time: "18:00", temp: 10, feelsLike: 9, condition: "晴夜", pop: 0, windSpeed: 2.9, windDirection: "北東", humidity: 55 },
+  ] as HourlyForecast[],
+  indices: {
+    clothing: "洋蔥式穿著：室內暖氣強勁（23°C），室外早晚寒涼，內穿薄排汗/針織，外搭防風厚大衣或輕羽絨。",
+    running: "台場灣岸 18:00 體感 9°C，海風 4.2 m/s，屬絕佳破 PB 低溫，建議配戴薄手套與防風長袖。",
+    theater: "東京花園劇場內部恆溫 22°C，長坐觀劇建議準備針織披肩或薄風衣。",
+    uv: "紫外線指數 3–4（弱至中級），戶外賞楓佩戴太陽眼鏡或防曬乳即可。",
+    airQuality: "空氣品質 AQI 22（優良 / 澄澈透明，遠處可望見富士山剪影）。",
+  },
 };
