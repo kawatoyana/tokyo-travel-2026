@@ -2,9 +2,9 @@ import React, { useState, useEffect } from "react";
 import { Header } from "./components/Header";
 import { Hero } from "./components/Hero";
 import { ItinerarySection } from "./components/ItinerarySection";
-import { RouteMapSection } from "./components/RouteMapSection";
 import { AttractionsSection } from "./components/AttractionsSection";
 import { FlightHotelSection } from "./components/FlightHotelSection";
+import { RouteMapSection } from "./components/RouteMapSection";
 import { PackingWeatherSection } from "./components/PackingWeatherSection";
 import { Footer } from "./components/Footer";
 import { ArrowUp } from "lucide-react";
@@ -29,7 +29,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0a070e] text-neutral-100 font-sans selection:bg-rose-900 selection:text-amber-200">
+    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-amber-100 selection:text-amber-900">
       {/* Top Bar Navigation */}
       <Header onPrint={handlePrint} />
 
@@ -38,10 +38,10 @@ export default function App() {
 
       {/* Main Content Sections */}
       <main>
-        {/* Daily Detailed Schedule (Major Event Cards & Compact Transit Connectors) */}
+        {/* Daily Detailed Schedule */}
         <ItinerarySection />
 
-        {/* Chronological Attractions & Dining Guide (Strictly Sorted 1 to 8) */}
+        {/* Chronological Attractions & Dining Guide (Strictly Sorted 1 to 8 with real photos) */}
         <AttractionsSection />
 
         {/* Flight & Hotel Logistics */}
@@ -54,7 +54,7 @@ export default function App() {
         <PackingWeatherSection />
       </main>
 
-      {/* Theatrical Footer */}
+      {/* Footer */}
       <Footer />
 
       {/* Scroll to Top Floating Button */}
@@ -62,7 +62,7 @@ export default function App() {
         <button
           onClick={scrollToTop}
           aria-label="回到頂部"
-          className="fixed bottom-6 right-6 z-40 p-3 bg-gradient-to-r from-rose-900 to-rose-800 text-amber-200 border border-amber-500/50 rounded-full shadow-lg shadow-rose-950/80 hover:from-rose-800 hover:to-rose-700 transition-all focus:outline-none focus:ring-2 focus:ring-amber-400"
+          className="fixed bottom-6 right-6 z-40 p-3 bg-slate-900 text-white rounded-full shadow-lg hover:bg-slate-800 transition-all focus:outline-none focus:ring-2 focus:ring-amber-500"
         >
           <ArrowUp className="w-5 h-5" />
         </button>
