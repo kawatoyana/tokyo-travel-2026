@@ -81,6 +81,7 @@ export interface ChecklistItem {
   title: string;
   desc?: string;
   defaultChecked?: boolean;
+  isImportant?: boolean;
 }
 
 export interface HourlyForecast {
@@ -249,12 +250,12 @@ export const DAY1_ITINERARY: ItineraryItem[] = [
   {
     id: "d1-7",
     time: "15:00–16:20",
-    title: "有明花園商場購物",
-    location: "有明花園購物中心 1F–4F",
-    description: "東京灣岸大型購物中心，擁有大型無印良品 (MUJI 東京有明旗艦店)、運動用品品牌與生活雜貨。",
+    title: "有明花園商場購物（必逛店家指南）",
+    location: "有明花園購物中心 1F–5F",
+    description: "東京灣岸近 200 間店舖的複合旗艦商場。必逛店家指南：\n• 【無印良品 東京有明】(1F–3F)：全關東最大規格旗艦店（佔地近 1,400 坪），擁有全品項生活選物、秤重零食點心與 Café&Meal 良品食堂。\n• 【AEON STYLE 大型超市】(1F)：超大生鮮熟食超市，採買當季日本水果、生魚片壽司熟食與伴手禮零食。\n• 【KOJIMA × Bic Camera】(3F)：大型免稅電器專賣店，提供美容家電、保溫瓶與旅行 3C 配件。\n• 【ABC-MART GRAND STAGE】(4F)：精選熱門日本限定球鞋、跑步裝備與運動潮流服飾。\n• 【泉天空之湯】(5F)：天然溫泉大浴場、露天風呂與賽後休憩設施。",
     category: "shopping",
     track: "shared",
-    tips: "無印良品有明店為全東京最大店之一，烘焙與限定生活選物相當齊全。",
+    tips: "商場服務台提供外國旅客免稅手續諮詢；大型寄物櫃多集中於 2F/3F 連通道旁。",
   },
   {
     id: "d1-8",
@@ -313,10 +314,11 @@ export const DAY1_ITINERARY: ItineraryItem[] = [
     durationMinutes: 40,
     title: "搭車返回人形町飯店",
     location: "有明站 → 新橋站 → 人形町站",
-    transitLine: "百合海鷗號至新橋（25 分鐘）+ 都營淺草線至人形町（7 分鐘）",
-    description: "搭車返回人形町飯店，辦理入住登記，前往 2F「水天之湯」大浴場泡湯放鬆休息。",
+    transitLine: "百合海鷗號（有明站 ➔ 新橋站）+ 轉乘都營淺草線（新橋站 ➔ 人形町站）",
+    description: "詳細交通路線：自商場步行 4 分鐘至「有明站」，搭乘【百合海鷗號（往新橋方向）】至終點「新橋站」（約 25 分鐘）；站內依循指標轉乘【都營地下鐵淺草線（往押上/青砥方向）】直達「人形町站」（約 7 分鐘），A3 出口步行 3 分鐘回抵飯店辦理入住手續。",
     category: "transit",
     track: "shared",
+    mapsQuery: "有明駅から人形町駅",
   },
   {
     id: "d1-14",
@@ -486,13 +488,13 @@ export const DAY2_ITINERARY: ItineraryItem[] = [
     time: "11:45–12:20",
     durationMinutes: 35,
     title: "搭地鐵前往新宿御苑",
-    location: "人形町站 / 日本橋站 → 新宿三丁目 / 新宿御苑前站",
-    transitLine: "搭乘東京地鐵淺草線/日比谷線或丸之內線抵達新宿御苑前站（約 30 分鐘）",
-    description: "搭乘地鐵前往新宿御苑前站，出站後步行 3 分鐘由「新宿門」進入庭園。",
+    location: "日本橋站 → 赤坂見附（同月台轉乘） → 新宿御苑前站",
+    transitLine: "銀座線（日本橋 ➔ 赤坂見附）+ 同月台轉丸之內線（赤坂見附 ➔ 新宿御苑前）",
+    description: "詳細交通路線：自花山烏龍麵步行 2 分鐘至「日本橋站」搭乘【東京地下鐵銀座線（往澀谷方向）】至「赤坂見附站」，於同月台對面直接轉乘【丸之內線（往荻窪方向）】至「新宿御苑前站」（車程約 20 分鐘），由 1 號出口出站步行 3 分鐘抵達新宿御苑「新宿門」。",
     category: "transit",
     track: "shared",
-    mapsQuery: "新宿御苑 新宿門",
-    tips: "秋季新宿御苑門票可於現場自動售票機購票（大人 500 日圓）。",
+    mapsQuery: "日本橋駅から新宿御苑前駅",
+    tips: "赤坂見附站為銀座線與丸之內線同月台平面轉乘，走 5 步即到對面月台，完全不需上下樓梯！",
   },
   {
     id: "d2-11",
@@ -509,11 +511,12 @@ export const DAY2_ITINERARY: ItineraryItem[] = [
     time: "14:20–15:10",
     durationMinutes: 50,
     title: "返回人形町飯店",
-    location: "新宿御苑前站 → 地鐵 → 人形町站",
-    transitLine: "丸之內線至赤坂見附轉銀座線/淺草線抵達人形町（約 30 分鐘）",
-    description: "結束賞楓行程，搭乘地鐵返抵人形町站，回到飯店準備領取早晨寄存的行李。",
+    location: "新宿御苑前站 → 赤坂見附/銀座 → 人形町站",
+    transitLine: "丸之內線（新宿御苑前 ➔ 銀座/赤坂見附）+ 轉銀座線/淺草線至人形町",
+    description: "詳細交通路線：自「新宿御苑前站」搭乘【丸之內線（往池袋方向）】至「赤坂見附站」同月台轉【銀座線（往淺草方向）】至「日本橋站」，轉乘【都營淺草線】1 站至「人形町站」（車程約 25 分鐘），A3 出口步行 3 分鐘回飯店取行李。",
     category: "transit",
     track: "shared",
+    mapsQuery: "新宿御苑前駅から人形町駅",
   },
   {
     id: "d2-13",

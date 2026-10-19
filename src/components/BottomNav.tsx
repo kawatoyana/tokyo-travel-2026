@@ -29,7 +29,7 @@ export const BottomNav: React.FC = () => {
 
   useEffect(() => {
     const handleScroll = () => {
-      const scrollPosition = window.scrollY + 200;
+      const scrollPosition = window.scrollY + 220;
 
       for (let i = NAV_ITEMS.length - 1; i >= 0; i--) {
         const item = NAV_ITEMS[i];
@@ -50,8 +50,7 @@ export const BottomNav: React.FC = () => {
     setActiveSection(id);
     const element = document.getElementById(id);
     if (element) {
-      // Calculate top offset for clean breathing room below sticky header
-      const headerOffset = 70;
+      const headerOffset = 65;
       const elementPosition = element.getBoundingClientRect().top;
       const offsetPosition = elementPosition + window.pageYOffset - headerOffset;
 
@@ -64,12 +63,11 @@ export const BottomNav: React.FC = () => {
 
   return (
     <nav
-      aria-label="底部主要快速導航"
-      className="fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-t border-stone-200/90 shadow-[0_-4px_20px_rgba(0,0,0,0.06)]"
-      style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}
+      aria-label="懸浮快速導覽"
+      className="fixed bottom-4 sm:bottom-6 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-1.25rem)] max-w-lg sm:max-w-xl"
     >
-      <div className="max-w-4xl mx-auto px-2 sm:px-4">
-        <div className="grid grid-cols-6 gap-1 py-1.5">
+      <div className="bg-white/95 backdrop-blur-xl border border-[#ebd8dc] shadow-[0_12px_35px_-8px_rgba(50,30,35,0.14)] rounded-full p-1.5 transition-all">
+        <div className="grid grid-cols-6 gap-1">
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
             const isActive = activeSection === item.id;
@@ -78,30 +76,30 @@ export const BottomNav: React.FC = () => {
               <button
                 key={item.id}
                 onClick={() => scrollToSection(item.id)}
-                className={`relative flex flex-col items-center justify-center py-1.5 px-1 rounded-xl transition-all duration-200 group ${
+                className={`relative flex flex-col items-center justify-center py-2 px-1 rounded-full transition-all duration-300 group ${
                   isActive
-                    ? "text-stone-900 bg-stone-100 font-semibold"
-                    : "text-stone-500 hover:text-stone-800 hover:bg-stone-50/80"
+                    ? "bg-white text-[#992545] shadow-xs font-semibold"
+                    : "text-[#7d5f66] hover:text-[#4a383d] hover:bg-white/60"
                 }`}
               >
-                {/* Active indicator dot */}
+                {/* Gentle Active Indicator Light */}
                 {isActive && (
-                  <span className="absolute top-1 w-1 h-1 rounded-full bg-amber-600" />
+                  <span className="absolute -top-1 w-1.5 h-1.5 rounded-full bg-[#b83358] shadow-[0_0_8px_rgba(184,51,88,0.8)] animate-pulse" />
                 )}
 
                 <div
-                  className={`transition-transform duration-200 ${
-                    isActive ? "scale-110 -translate-y-0.5 text-stone-900" : "group-hover:scale-105"
+                  className={`transition-transform duration-300 ${
+                    isActive ? "scale-110 -translate-y-0.5 text-[#b83358]" : "group-hover:scale-105"
                   }`}
                 >
                   <Icon
-                    className={`w-5 h-5 ${
-                      isActive ? "text-amber-700 stroke-[2.2]" : "text-stone-500 stroke-[1.8]"
+                    className={`w-4 h-4 sm:w-4.5 sm:h-4.5 ${
+                      isActive ? "text-[#b83358] stroke-[2.3]" : "text-[#8c606c] stroke-[1.8]"
                     }`}
                   />
                 </div>
 
-                <span className="text-[11px] sm:text-xs mt-1 tracking-tight truncate leading-tight">
+                <span className="text-[10px] sm:text-xs mt-0.5 tracking-tight truncate leading-tight font-medium">
                   <span className="hidden sm:inline">{item.label}</span>
                   <span className="inline sm:hidden">{item.shortLabel}</span>
                 </span>

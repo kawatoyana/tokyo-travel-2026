@@ -10,40 +10,54 @@ import {
   Luggage,
   Train,
   ExternalLink,
-  ShieldAlert,
 } from "lucide-react";
+import {
+  LuggageSticker,
+  TrainSticker,
+  SparkleDoodle,
+  FloatingBubble,
+} from "./CuteDoodles";
 
 export const FlightHotelSection: React.FC = () => {
   return (
-    <section id="flight-hotel" className="py-16 sm:py-20 bg-[#f7f6f2] border-b border-stone-200/80">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <section id="flight-hotel" className="py-14 sm:py-20 bg-white border-b border-[#eee4e7] relative overflow-hidden">
+      {/* Pure Frosted White Bubbles */}
+      <FloatingBubble size={28} className="absolute top-14 left-[6%] hidden md:block" delay="2.2s" />
+
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         {/* Section Header */}
         <div className="mb-10">
-          <div className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-amber-800 bg-amber-50 px-2.5 py-1 rounded-md border border-amber-200/60 mb-2">
-            <Plane className="w-3.5 h-3.5 text-amber-700" />
-            <span>Flights & Accommodation</span>
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#fdf2f4] text-[#8e2443] border border-[#f3d9de] mb-2.5">
+            <Plane className="w-3.5 h-3.5 text-[#992545]" />
+            <span>FLIGHTS & HOTEL JOURNAL</span>
+            <SparkleDoodle className="w-3 h-3 text-[#e0758e]" />
           </div>
-          <h2 className="text-2xl sm:text-3xl font-extrabold text-stone-900 tracking-tight">
+          <h2 className="text-2xl sm:text-3xl font-extrabold text-[#2d2527] tracking-tight">
             航班及住宿資訊
           </h2>
-          <p className="text-sm text-stone-600 mt-2 max-w-xl leading-relaxed">
+          <p className="text-xs sm:text-sm text-[#6e5d62] mt-1.5 max-w-xl leading-relaxed font-normal">
             酷航早去晚回班次安排、淺草線 Access 特急免換乘直達秘訣，與日本橋人形町大浴場飯店規格。
           </p>
         </div>
 
-        {/* Flight Cards Grid */}
+        {/* Flight Cards Grid - Boarding Pass Magazine Style */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
           {/* Outbound Card: TR866 */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-6 sm:p-7 flex flex-col justify-between shadow-xs">
+          <div className="bg-white rounded-3xl border border-[#fad4dd] p-6 sm:p-7 flex flex-col justify-between shadow-[0_6px_25px_rgba(240,160,180,0.08)] hover:shadow-[0_12px_32px_rgba(240,160,180,0.12)] hover:-translate-y-1 transition-all duration-300">
             <div>
-              <div className="flex items-center justify-between pb-4 border-b border-slate-100">
-                <div className="flex items-center gap-2">
-                  <Plane className="w-5 h-5 text-amber-700" />
-                  <span className="text-sm font-bold text-slate-900">
-                    去程航班 · {FLIGHTS.outbound.airline}
-                  </span>
+              <div className="flex items-center justify-between pb-4 border-b border-[#fae1e7]">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-2xl bg-[#fdebf0] border border-[#faccd7] flex items-center justify-center text-[#b83358]">
+                    <Plane className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="text-sm font-bold text-[#4a383d]">
+                      去程航班 · {FLIGHTS.outbound.airline}
+                    </span>
+                    <div className="text-[11px] text-[#8c606c]">{FLIGHTS.outbound.date}</div>
+                  </div>
                 </div>
-                <span className="text-xs font-mono font-bold px-2.5 py-1 bg-amber-100 text-amber-900 rounded-md">
+                <span className="text-xs font-mono font-bold px-3 py-1 bg-[#fff0f4] text-[#a82a51] rounded-full border border-[#fad2dd]">
                   {FLIGHTS.outbound.flightNumber}
                 </span>
               </div>
@@ -51,86 +65,84 @@ export const FlightHotelSection: React.FC = () => {
               {/* Flight Route Diagram */}
               <div className="mt-6 flex items-center justify-between gap-4">
                 <div className="text-left">
-                  <div className="text-2xl sm:text-3xl font-mono font-extrabold text-slate-900">
+                  <div className="text-2xl sm:text-3xl font-mono font-extrabold text-[#4a383d]">
                     {FLIGHTS.outbound.originCode}
                   </div>
-                  <div className="text-xs font-medium text-slate-600 mt-0.5">
+                  <div className="text-xs font-medium text-[#735860] mt-0.5">
                     {FLIGHTS.outbound.origin}
                   </div>
-                  <div className="text-[11px] text-slate-400 mt-0.5">
+                  <div className="text-[11px] text-[#9c7580] mt-0.5">
                     {FLIGHTS.outbound.originTerminal}
                   </div>
-                  <div className="text-xl sm:text-2xl font-bold font-mono text-amber-800 mt-2">
+                  <div className="text-base sm:text-lg font-mono font-bold text-[#b83358] mt-2">
                     {FLIGHTS.outbound.departureTime}
                   </div>
                 </div>
 
                 <div className="flex-1 flex flex-col items-center px-2">
-                  <span className="text-xs font-mono text-slate-500 mb-1">
+                  <span className="text-[11px] font-mono text-[#9c7580] mb-1">
                     {FLIGHTS.outbound.duration}
                   </span>
                   <div className="w-full flex items-center gap-1">
-                    <div className="h-0.5 flex-1 bg-slate-200" />
-                    <ArrowRight className="w-4 h-4 text-amber-700 shrink-0" />
+                    <div className="h-0.5 flex-1 bg-[#f9d7df]" />
+                    <Plane className="w-4 h-4 text-[#b83358] rotate-90 shrink-0" />
+                    <div className="h-0.5 flex-1 bg-[#f9d7df]" />
                   </div>
-                  <span className="text-[11px] text-slate-400 mt-1">直飛直達</span>
+                  <span className="text-[10px] text-[#286f4a] mt-1 font-semibold px-2 py-0.5 bg-[#f3f9f6] rounded-full border border-[#d7ecdf]">
+                    直飛班機
+                  </span>
                 </div>
 
                 <div className="text-right">
-                  <div className="text-2xl sm:text-3xl font-mono font-extrabold text-slate-900">
+                  <div className="text-2xl sm:text-3xl font-mono font-extrabold text-[#4a383d]">
                     {FLIGHTS.outbound.destinationCode}
                   </div>
-                  <div className="text-xs font-medium text-slate-600 mt-0.5">
+                  <div className="text-xs font-medium text-[#735860] mt-0.5">
                     {FLIGHTS.outbound.destination}
                   </div>
-                  <div className="text-[11px] text-slate-400 mt-0.5">
+                  <div className="text-[11px] text-[#9c7580] mt-0.5">
                     {FLIGHTS.outbound.destinationTerminal}
                   </div>
-                  <div className="text-xl sm:text-2xl font-bold font-mono text-amber-800 mt-2">
+                  <div className="text-base sm:text-lg font-mono font-bold text-[#b83358] mt-2">
                     {FLIGHTS.outbound.arrivalTime}
                   </div>
                 </div>
               </div>
 
-              {/* Date & Aircraft Specs */}
-              <div className="mt-6 pt-4 border-t border-slate-100 grid grid-cols-2 gap-4 text-xs">
-                <div>
-                  <span className="text-slate-400 block">出發日期</span>
-                  <span className="font-semibold text-slate-800 font-mono">
-                    {FLIGHTS.outbound.date}
-                  </span>
+              {/* Transit Tip */}
+              <div className="mt-6 p-4 bg-[#fff7f8] rounded-2xl border border-[#fae1e7] text-xs text-[#6b4f57] space-y-1.5">
+                <div className="font-bold text-[#a82a51] flex items-center gap-1.5">
+                  <TrainSticker className="w-5 h-5" />
+                  <span>成田直達人形町密技：</span>
                 </div>
-                <div>
-                  <span className="text-slate-400 block">執飛機型</span>
-                  <span className="font-semibold text-slate-800 font-mono">
-                    {FLIGHTS.outbound.aircraft}
-                  </span>
-                </div>
-              </div>
-
-              {/* Notes */}
-              <div className="mt-4 p-3.5 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-600 leading-relaxed">
-                {FLIGHTS.outbound.notes}
+                <p className="leading-relaxed">
+                  成田機場第 1 航廈搭乘 <strong>京成成田 Sky Access 特急</strong>（直通都營地下鐵淺草線班次），一車到底免換車，約 70 分鐘舒適直達人形町站，省時又免搬行李！
+                </p>
               </div>
             </div>
 
-            <div className="mt-4 pt-3 flex items-center gap-2 text-xs text-slate-500">
-              <Clock className="w-4 h-4 text-slate-400 shrink-0" />
-              <span>建議 04:50 抵達桃機 T1 報到，登機門於起飛前 20 分鐘關閉。</span>
+            <div className="mt-5 pt-3 border-t border-[#fae1e7] flex items-center justify-between text-xs text-[#8c606c]">
+              <span>報到航廈：桃園國際機場 T1</span>
+              <span>行李：手提 10kg + 托運</span>
             </div>
           </div>
 
           {/* Inbound Card: TR875 */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-6 sm:p-7 flex flex-col justify-between shadow-xs">
+          <div className="bg-white rounded-3xl border border-[#fad4dd] p-6 sm:p-7 flex flex-col justify-between shadow-[0_6px_25px_rgba(240,160,180,0.08)] hover:shadow-[0_12px_32px_rgba(240,160,180,0.12)] hover:-translate-y-1 transition-all duration-300">
             <div>
-              <div className="flex items-center justify-between pb-4 border-b border-slate-100">
-                <div className="flex items-center gap-2">
-                  <Plane className="w-5 h-5 text-amber-700" />
-                  <span className="text-sm font-bold text-slate-900">
-                    回程航班 · {FLIGHTS.inbound.airline}
-                  </span>
+              <div className="flex items-center justify-between pb-4 border-b border-[#fae1e7]">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-2xl bg-[#fdebf0] border border-[#faccd7] flex items-center justify-center text-[#b83358]">
+                    <Plane className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="text-sm font-bold text-[#4a383d]">
+                      回程航班 · {FLIGHTS.inbound.airline}
+                    </span>
+                    <div className="text-[11px] text-[#8c606c]">{FLIGHTS.inbound.date}</div>
+                  </div>
                 </div>
-                <span className="text-xs font-mono font-bold px-2.5 py-1 bg-amber-100 text-amber-900 rounded-md">
+                <span className="text-xs font-mono font-bold px-3 py-1 bg-[#fff0f4] text-[#a82a51] rounded-full border border-[#fad2dd]">
                   {FLIGHTS.inbound.flightNumber}
                 </span>
               </div>
@@ -138,192 +150,142 @@ export const FlightHotelSection: React.FC = () => {
               {/* Flight Route Diagram */}
               <div className="mt-6 flex items-center justify-between gap-4">
                 <div className="text-left">
-                  <div className="text-2xl sm:text-3xl font-mono font-extrabold text-slate-900">
+                  <div className="text-2xl sm:text-3xl font-mono font-extrabold text-[#4a383d]">
                     {FLIGHTS.inbound.originCode}
                   </div>
-                  <div className="text-xs font-medium text-slate-600 mt-0.5">
+                  <div className="text-xs font-medium text-[#735860] mt-0.5">
                     {FLIGHTS.inbound.origin}
                   </div>
-                  <div className="text-[11px] text-slate-400 mt-0.5">
+                  <div className="text-[11px] text-[#9c7580] mt-0.5">
                     {FLIGHTS.inbound.originTerminal}
                   </div>
-                  <div className="text-xl sm:text-2xl font-bold font-mono text-amber-800 mt-2">
+                  <div className="text-base sm:text-lg font-mono font-bold text-[#b83358] mt-2">
                     {FLIGHTS.inbound.departureTime}
                   </div>
                 </div>
 
                 <div className="flex-1 flex flex-col items-center px-2">
-                  <span className="text-xs font-mono text-slate-500 mb-1">
+                  <span className="text-[11px] font-mono text-[#9c7580] mb-1">
                     {FLIGHTS.inbound.duration}
                   </span>
                   <div className="w-full flex items-center gap-1">
-                    <div className="h-0.5 flex-1 bg-slate-200" />
-                    <ArrowRight className="w-4 h-4 text-amber-700 shrink-0" />
+                    <div className="h-0.5 flex-1 bg-[#f9d7df]" />
+                    <Plane className="w-4 h-4 text-[#b83358] rotate-90 shrink-0" />
+                    <div className="h-0.5 flex-1 bg-[#f9d7df]" />
                   </div>
-                  <span className="text-[11px] text-slate-400 mt-1">直飛返台</span>
+                  <span className="text-[10px] text-[#286f4a] mt-1 font-semibold px-2 py-0.5 bg-[#f3f9f6] rounded-full border border-[#d7ecdf]">
+                    直飛班機
+                  </span>
                 </div>
 
                 <div className="text-right">
-                  <div className="text-2xl sm:text-3xl font-mono font-extrabold text-slate-900">
+                  <div className="text-2xl sm:text-3xl font-mono font-extrabold text-[#4a383d]">
                     {FLIGHTS.inbound.destinationCode}
                   </div>
-                  <div className="text-xs font-medium text-slate-600 mt-0.5">
+                  <div className="text-xs font-medium text-[#735860] mt-0.5">
                     {FLIGHTS.inbound.destination}
                   </div>
-                  <div className="text-[11px] text-slate-400 mt-0.5">
+                  <div className="text-[11px] text-[#9c7580] mt-0.5">
                     {FLIGHTS.inbound.destinationTerminal}
                   </div>
-                  <div className="text-xl sm:text-2xl font-bold font-mono text-amber-800 mt-2">
+                  <div className="text-base sm:text-lg font-mono font-bold text-[#b83358] mt-2">
                     {FLIGHTS.inbound.arrivalTime}
                   </div>
                 </div>
               </div>
 
-              {/* Date & Aircraft Specs */}
-              <div className="mt-6 pt-4 border-t border-slate-100 grid grid-cols-2 gap-4 text-xs">
-                <div>
-                  <span className="text-slate-400 block">回程日期</span>
-                  <span className="font-semibold text-slate-800 font-mono">
-                    {FLIGHTS.inbound.date}
-                  </span>
+              {/* Transit Tip */}
+              <div className="mt-6 p-4 bg-[#fff7f8] rounded-2xl border border-[#fae1e7] text-xs text-[#6b4f57] space-y-1.5">
+                <div className="font-bold text-[#a82a51] flex items-center gap-1.5">
+                  <LuggageSticker className="w-5 h-5" />
+                  <span>返程機場報到建議：</span>
                 </div>
-                <div>
-                  <span className="text-slate-400 block">執飛機型</span>
-                  <span className="font-semibold text-slate-800 font-mono">
-                    {FLIGHTS.inbound.aircraft}
-                  </span>
-                </div>
-              </div>
-
-              {/* Notes */}
-              <div className="mt-4 p-3.5 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-600 leading-relaxed">
-                {FLIGHTS.inbound.notes}
+                <p className="leading-relaxed">
+                  人形町站 15:30 搭乘直通班次前往成田機場 T1，約 17:00 抵達。酷航櫃檯提前 3 小時開放辦理托運與出境，預留充裕時間在免稅店採買伴手禮。
+                </p>
               </div>
             </div>
 
-            <div className="mt-4 pt-3 flex items-center gap-2 text-xs text-slate-500">
-              <Clock className="w-4 h-4 text-slate-400 shrink-0" />
-              <span>最晚 17:30 抵達成田 T1 報到，預留充裕時間出境與採買伴手禮。</span>
+            <div className="mt-5 pt-3 border-t border-[#fae1e7] flex items-center justify-between text-xs text-[#8c606c]">
+              <span>報到航廈：成田國際機場 T1</span>
+              <span>降落時間：22:55（台灣時間）</span>
             </div>
           </div>
         </div>
 
-        {/* Hotel Details Card */}
-        <div className="bg-white rounded-3xl p-6 sm:p-10 border border-slate-200 shadow-sm">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-            {/* Left 7 cols: Hotel Identity, Address & Highlights */}
-            <div className="lg:col-span-7">
-              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-amber-700">
-                <Building2 className="w-4 h-4" />
-                <span>Accommodation & Onsen</span>
+        {/* Hotel Details Card - commi.me Magazine Editorial Style */}
+        <div className="bg-white rounded-3xl border border-[#fad4dd] p-6 sm:p-8 shadow-[0_8px_30px_rgba(240,160,180,0.08)]">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 pb-6 border-b border-[#fae1e7]">
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-xs font-semibold px-3 py-1 rounded-full bg-[#fdebf0] text-[#a82a51] border border-[#fad2dd]">
+                  下榻飯店 · 2026/11/28–11/29（1 泊）
+                </span>
+                <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-[#f3f9f6] text-[#286f4a] border border-[#d7ecdf]">
+                  都營淺草線直通
+                </span>
               </div>
-              <h3 className="text-2xl sm:text-3xl font-bold text-slate-900 mt-1">
+              <h3 className="text-xl sm:text-2xl font-bold text-[#4a383d]">
                 {HOTEL.name}
               </h3>
-              <div className="text-xs text-slate-500 mt-1">
+              <p className="text-xs sm:text-sm text-[#8c606c] mt-1 font-mono">
                 {HOTEL.japaneseName}
-              </div>
-
-              <div className="mt-4 text-xs sm:text-sm text-slate-600 leading-relaxed">
-                位於東京中央區日本橋老街核心地段。最大優勢為「都營淺草線」直達成田機場免換車，步行 3 分鐘即可抵達小網神社與甘酒橫丁。頂樓配備「水天之湯」微細氣泡溫泉大浴場，是跑步與觀劇後修復身心的極佳享受。
-              </div>
-
-              {/* Key Amenities */}
-              <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 flex items-start gap-3">
-                  <Bath className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
-                  <div>
-                    <div className="text-xs font-bold text-slate-900">水天之湯大浴場</div>
-                    <div className="text-xs text-slate-500 mt-0.5">
-                      {HOTEL.features.bathhouse}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 flex items-start gap-3">
-                  <Luggage className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
-                  <div>
-                    <div className="text-xs font-bold text-slate-900">智慧行李免費寄存</div>
-                    <div className="text-xs text-slate-500 mt-0.5">
-                      {HOTEL.features.luggage}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 flex items-start gap-3">
-                  <Train className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
-                  <div>
-                    <div className="text-xs font-bold text-slate-900">機場直達極速通勤</div>
-                    <div className="text-xs text-slate-500 mt-0.5">
-                      {HOTEL.features.subway}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 flex items-start gap-3">
-                  <Sparkles className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
-                  <div>
-                    <div className="text-xs font-bold text-slate-900">便利商店與下町老街</div>
-                    <div className="text-xs text-slate-500 mt-0.5">
-                      {HOTEL.features.convenience}
-                    </div>
-                  </div>
-                </div>
-              </div>
+              </p>
             </div>
 
-            {/* Right 5 cols: Check-in / Out, Transit Spec & Google Maps button */}
-            <div className="lg:col-span-5 bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-4">
-              <div className="text-xs font-bold uppercase tracking-wider text-slate-600">
-                入住與交通資訊
+            <a
+              href={HOTEL.googleMapsUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-5 py-2.5 text-xs font-semibold text-[#8b2947] bg-[#fff0f4] hover:bg-[#fde2ea] rounded-full transition-all border border-[#fad4dd] shrink-0 self-start lg:self-auto hover:-translate-y-0.5"
+            >
+              <span>開啟飯店 Google Maps 定位</span>
+              <ExternalLink className="w-3.5 h-3.5 text-[#b83358]" />
+            </a>
+          </div>
+
+          {/* Hotel Highlights Grid */}
+          <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="p-4 bg-[#fff7f8] rounded-2xl border border-[#fae1e7]">
+              <div className="flex items-center gap-2 text-[#4a383d] font-bold text-sm mb-2">
+                <Bath className="w-4 h-4 text-[#a82a51]" />
+                <span>最上階「水天之湯」大浴場</span>
               </div>
+              <p className="text-xs text-[#6b4f57] leading-relaxed font-normal">
+                {HOTEL.features.bathhouse}
+              </p>
+            </div>
 
-              <div className="space-y-3 text-xs">
-                <div>
-                  <span className="text-slate-400 block">飯店地址</span>
-                  <span className="font-medium text-slate-800">{HOTEL.address}</span>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-200">
-                  <div>
-                    <span className="text-slate-400 block">入住時間 (Check-in)</span>
-                    <span className="font-semibold text-slate-800">{HOTEL.checkIn}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 block">退房時間 (Check-out)</span>
-                    <span className="font-semibold text-slate-800">{HOTEL.checkOut}</span>
-                  </div>
-                </div>
-
-                <div className="pt-2 border-t border-slate-200">
-                  <span className="text-slate-400 block">最近地鐵站出口</span>
-                  <span className="text-slate-600 leading-relaxed block mt-0.5">
-                    {HOTEL.access}
-                  </span>
-                </div>
+            <div className="p-4 bg-[#fff7f8] rounded-2xl border border-[#fae1e7]">
+              <div className="flex items-center gap-2 text-[#4a383d] font-bold text-sm mb-2">
+                <Train className="w-4 h-4 text-[#286f4a]" />
+                <span>黃金地鐵樞紐</span>
               </div>
+              <p className="text-xs text-[#6b4f57] leading-relaxed font-normal">
+                {HOTEL.features.subway}
+              </p>
+            </div>
 
-              <div className="pt-2">
-                <a
-                  href={HOTEL.googleMapsUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full inline-flex items-center justify-center gap-2 py-3 px-4 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 rounded-xl transition-colors shadow-xs"
-                >
-                  <span>開啟飯店 Google 地圖導航</span>
-                  <ExternalLink className="w-3.5 h-3.5" />
-                </a>
+            <div className="p-4 bg-[#fff7f8] rounded-2xl border border-[#fae1e7]">
+              <div className="flex items-center gap-2 text-[#4a383d] font-bold text-sm mb-2">
+                <Luggage className="w-4 h-4 text-[#b83358]" />
+                <span>免費行李寄存</span>
               </div>
+              <p className="text-xs text-[#6b4f57] leading-relaxed font-normal">
+                {HOTEL.features.luggage}
+              </p>
             </div>
           </div>
-        </div>
 
-        {/* Airport Access Notice Banner */}
-        <div className="mt-8 p-4 bg-amber-50 rounded-xl border border-amber-200/80 flex items-start gap-3">
-          <ShieldAlert className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
-          <div className="text-xs text-amber-900 leading-relaxed">
-            <strong>搭車乘車關鍵提示：</strong>在人形町站搭乘「都營淺草線」時，請看準月台跑馬燈標示「
-            <strong>成田空港行（Access 特急／快速特急）</strong>」的直通班次，無需在青砥或高砂換車，一車到底直抵成田機場第一航廈地下月台。
+          {/* Check-in info strip */}
+          <div className="mt-6 pt-5 border-t border-[#fae1e7] flex flex-wrap items-center justify-between gap-4 text-xs text-[#735860]">
+            <div className="flex items-center gap-4">
+              <span><strong>入住時間：</strong>{HOTEL.checkIn}</span>
+              <span><strong>退房時間：</strong>{HOTEL.checkOut}</span>
+            </div>
+            <div className="text-[#8c606c]">
+              地址：{HOTEL.address}
+            </div>
           </div>
         </div>
       </div>

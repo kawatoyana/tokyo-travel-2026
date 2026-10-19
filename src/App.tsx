@@ -30,8 +30,8 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#faf9f6] text-stone-900 font-sans selection:bg-amber-100 selection:text-amber-900 pb-20 sm:pb-24">
-      {/* Top Bar Navigation */}
+    <div className="min-h-screen bg-[#faf9f7] text-[#332a2c] font-sans selection:bg-[#fde2e8] selection:text-[#8e2443] pb-24 sm:pb-28">
+      {/* Top Magazine Header (Without duplicate navigation links) */}
       <Header onPrint={handlePrint} />
 
       {/* Hero Visual Section */}
@@ -58,17 +58,17 @@ export default function App() {
       {/* Footer */}
       <Footer />
 
-      {/* Fixed Bottom Navigation Bar */}
+      {/* Fixed Floating Bottom Navigation Bar (The Single Main Nav Bar) */}
       <BottomNav />
 
-      {/* Scroll to Top Floating Button (positioned above bottom nav) */}
+      {/* Scroll to Top Floating Button (positioned above floating bottom nav) */}
       {showScrollTop && (
         <button
           onClick={scrollToTop}
           aria-label="回到頂部"
-          className="fixed bottom-20 sm:bottom-24 right-4 sm:right-6 z-40 p-2.5 sm:p-3 bg-stone-900/90 text-white backdrop-blur-md rounded-full shadow-lg hover:bg-stone-800 transition-all hover:-translate-y-0.5 focus:outline-hidden"
+          className="fixed bottom-20 sm:bottom-24 right-4 sm:right-6 z-40 p-2.5 sm:p-3 bg-stone-800/85 text-white backdrop-blur-md rounded-full shadow-lg hover:bg-stone-800 transition-all hover:-translate-y-0.5 focus:outline-hidden"
         >
-          <ArrowUp className="w-4 h-4 sm:w-5 sm:h-5 text-amber-300" />
+          <ArrowUp className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-amber-300" />
         </button>
       )}
     </div>

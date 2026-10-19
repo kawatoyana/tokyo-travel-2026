@@ -5,10 +5,67 @@
     font-family: 'Plus Jakarta Sans', 'Noto Sans TC', system-ui, -apple-system, sans-serif;
     scroll-behavior: smooth;
     -webkit-font-smoothing: antialiased;
+    background-color: #faf9f7;
+    color: #332a2c;
   }
 }
 
-/* Custom scrollbars for clean timeline and route tables */
+/* Dreamy floating animation & gentle sparkles */
+@keyframes floatBubble {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-8px) rotate(3deg);
+  }
+}
+
+@keyframes floatBubbleSlow {
+  0%, 100% {
+    transform: translateY(0px) scale(1);
+  }
+  50% {
+    transform: translateY(-12px) scale(1.04);
+  }
+}
+
+@keyframes twinkleStar {
+  0%, 100% {
+    opacity: 0.35;
+    transform: scale(0.85);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.15) rotate(15deg);
+  }
+}
+
+@keyframes runnerTrackGlow {
+  0%, 100% {
+    stroke-dashoffset: 0;
+  }
+  50% {
+    stroke-dashoffset: -40;
+  }
+}
+
+.animate-float-slow {
+  animation: floatBubble 5s ease-in-out infinite;
+}
+
+.animate-float-slower {
+  animation: floatBubbleSlow 7s ease-in-out infinite;
+}
+
+.animate-twinkle {
+  animation: twinkleStar 3s ease-in-out infinite;
+}
+
+.animate-track-pulse {
+  animation: runnerTrackGlow 4s linear infinite;
+}
+
+/* Custom scrollbars with soft pinkish oat tones */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -19,10 +76,10 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.4);
+  background: rgba(240, 168, 185, 0.45);
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(148, 163, 184, 0.7);
+  background: rgba(224, 138, 160, 0.75);
 }
