@@ -94,7 +94,7 @@ export const RouteMapSection: React.FC = () => {
       address: "東京都中央区日本橋人形町2-24-3",
       mapQuery: "VIA INN PRIME 日本橋人形町",
       transitTips: "人形町站出站步行 3 分鐘抵達飯店；於 1F 自動寄物櫃免費寄放行李後輕裝出發。",
-      highlights: ["頂樓 2F「水天之湯」微細氣泡溫泉浴場", "自助智能行李寄物機", "都營淺草線直通樞紐"],
+      highlights: ["全客房席夢思名床與加濕空氣清淨機", "自助智能行李寄物機", "都營淺草線直通樞紐"],
       googleMapsUrl: "https://www.google.com/maps/search/?api=1&query=VIA+INN+PRIME+Nihonbashi+Ningyocho",
     },
     {
@@ -149,7 +149,7 @@ export const RouteMapSection: React.FC = () => {
       address: "東京都中央区日本橋人形町2-24-3",
       mapQuery: "VIA INN PRIME 日本橋人形町",
       transitTips: "自有明花園步行 4 分鐘至「有明站」，搭百合海鷗號至「新橋站」（25 分），轉乘都營淺草線至「人形町站」（7 分），A3 出口步行 3 分鐘回飯店。",
-      highlights: ["21:00 劇場大廳順利會合", "平穩電車返程免塞車", "回飯店享受水天之湯大浴場消除疲勞"],
+      highlights: ["21:00 劇場大廳順利會合", "平穩電車返程免塞車", "回飯店安頓入住與客房充分休息"],
       googleMapsUrl: "https://www.google.com/maps/search/?api=1&query=VIA+INN+PRIME+Nihonbashi+Ningyocho",
     },
   ];

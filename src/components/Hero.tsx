@@ -3,74 +3,139 @@ import {
   ArrowDown,
   Plane,
   Building2,
-  Footprints,
-  Sparkles,
   Navigation,
   MapPin,
   Calendar,
-  Compass,
+  ChevronLeft,
+  ChevronRight,
+  ShieldCheck,
 } from "lucide-react";
 import { SmartImage } from "./SmartImage";
 import {
   SparkleDoodle,
   FloatingBubble,
-  CameraSticker,
-  LuggageSticker,
+  TheaterMaskSticker,
   GinkgoLeafSticker,
   RunningShoeSticker,
   ShrineSticker,
+  CompassSticker,
 } from "./CuteDoodles";
+
+type TapePattern = "stripes" | "gingham" | "dots";
 
 export const Hero: React.FC = () => {
   const [activePhoto, setActivePhoto] = useState<number>(0);
+  const [tapePattern, setTapePattern] = useState<TapePattern>("stripes");
 
+  // Requirement 5 & 9: Authentic public & official photography (strictly NO AI-generated images)
   const heroPhotos = [
     {
-      title: "東京花園劇場 ＆ 有明",
-      subtitle: "SHOCK 舞台劇・臨海商場",
-      tag: "DAY 1 舞台與購物",
-      imageSrc: "./images/attraction_ariake_theater.jpg",
-      fallbackSrc: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=800&q=80",
-      location: "東京都江東区有明",
+      title: "《Endless SHOCK Memories》",
+      subtitle: "堂本光一 主演・東宝 25 年 2,128 回全完售神話",
+      tag: "DAY 1 東宝官方巨作",
+      imageSrc: "/images/attraction_shock_stage.jpg",
+      fallbackSrc: "https://www.tohostage.com/shock/images/visual.jpg",
+      location: "東京花園劇場",
+      sticker: <TheaterMaskSticker className="w-6 h-6" />,
+      sourceNote: "東宝官網公開主視覺",
+    },
+    {
+      title: "有明花園 ＆ 東京花園劇場",
+      subtitle: "關東最大無印良品・住友不動產臨海商城",
+      tag: "DAY 1 漫步購物",
+      imageSrc: "/images/official_ariake_garden.jpg",
+      fallbackSrc: "https://images.unsplash.com/photo-1503899036084-c55cdd92da26?auto=format&fit=crop&w=1200&q=80",
+      location: "江東区有明",
+      sticker: <CompassSticker className="w-6 h-6" />,
+      sourceNote: "有明花園官網公開照片",
     },
     {
       title: "新宿御苑 金黃銀杏林",
-      subtitle: "秋末金黃落葉毯・中之池紅葉",
+      subtitle: "環境省國民公園・秋季金黃落葉毯與池泉庭園",
       tag: "DAY 2 秋日賞楓",
-      imageSrc: "https://images.unsplash.com/photo-1503899036084-c55cdd92da26?auto=format&fit=crop&w=800&q=80",
-      fallbackSrc: "https://images.unsplash.com/photo-1503899036084-c55cdd92da26?auto=format&fit=crop&w=800&q=80",
-      location: "東京都新宿区内藤町",
+      imageSrc: "/images/official_shinjuku_gyoen.jpg",
+      fallbackSrc: "https://images.unsplash.com/photo-1578637387939-43c525550085?auto=format&fit=crop&w=1200&q=80",
+      location: "新宿区内藤町",
+      sticker: <GinkgoLeafSticker className="w-6 h-6" />,
+      sourceNote: "環境省新宿御苑官方照片",
     },
     {
       title: "台場海濱 ＆ 彩虹大橋",
-      subtitle: "10K 臨海夜跑・海風夜景",
-      tag: "DAY 1 夜跑",
-      imageSrc: "https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?auto=format&fit=crop&w=800&q=80",
-      fallbackSrc: "https://images.unsplash.com/photo-1503899036084-c55cdd92da26?auto=format&fit=crop&w=800&q=80",
-      location: "東京都港区台場",
+      subtitle: "10K 臨海無折返夜跑・東京官方觀光景點",
+      tag: "DAY 1 跑步環線",
+      imageSrc: "/images/official_odaiba_gotokyo.webp",
+      fallbackSrc: "https://images.unsplash.com/photo-1536098561742-ca998e48cbcc?auto=format&fit=crop&w=1200&q=80",
+      location: "港区台場",
+      sticker: <RunningShoeSticker className="w-6 h-6" />,
+      sourceNote: "Go Tokyo 官方觀光寫真",
     },
     {
       title: "日本橋小網神社",
-      subtitle: "東京強運厄除・洗錢錢母",
-      tag: "DAY 2 神社參拜",
-      imageSrc: "./images/attraction_koami_shrine.jpg",
-      fallbackSrc: "https://images.unsplash.com/photo-1589083115456-6f4e66248386?auto=format&fit=crop&w=800&q=80",
-      location: "東京都中央区日本橋",
+      subtitle: "東京第一強運厄除・洗錢之井錢母本殿",
+      tag: "DAY 2 名剎參拜",
+      imageSrc: "/images/official_koami_jinja.jpg",
+      fallbackSrc: "https://images.unsplash.com/photo-1589083115456-6f4e66248386?auto=format&fit=crop&w=1200&q=80",
+      location: "中央区日本橋",
+      sticker: <ShrineSticker className="w-6 h-6" />,
+      sourceNote: "小網神社官網公開照片",
     },
   ];
 
+  const handlePrevPhoto = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setActivePhoto((prev) => (prev === 0 ? heroPhotos.length - 1 : prev - 1));
+  };
+
+  const handleNextPhoto = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setActivePhoto((prev) => (prev === heroPhotos.length - 1 ? 0 : prev + 1));
+  };
+
+  // Requirement 4: Realistic Japanese Washi Tape Styles (條紋, 格子, 波點)
+  const getTapeStyle = (pattern: TapePattern): React.CSSProperties => {
+    switch (pattern) {
+      case "stripes":
+        return {
+          background:
+            "repeating-linear-gradient(45deg, #f7ccd6 0px, #f7ccd6 7px, #fff2f5 7px, #fff2f5 14px)",
+        };
+      case "gingham":
+        return {
+          backgroundColor: "#fde8ed",
+          backgroundImage:
+            "linear-gradient(90deg, rgba(200, 70, 100, 0.22) 50%, transparent 50%), linear-gradient(rgba(200, 70, 100, 0.22) 50%, transparent 50%)",
+          backgroundSize: "11px 11px",
+        };
+      case "dots":
+        return {
+          backgroundColor: "#fff0f3",
+          backgroundImage:
+            "radial-gradient(rgba(185, 45, 80, 0.4) 22%, transparent 22%)",
+          backgroundSize: "8px 8px",
+        };
+    }
+  };
+
   return (
     <section className="relative overflow-hidden bg-gradient-to-b from-[#fefdfc] via-[#faf8f6] to-[#f6f2ef] border-b border-[#eee4e7]">
-      {/* Subtle Frosted White Bubbles (Monochrome, no color) */}
+      {/* Breathing Twinkling Stars (SparkleDoodle) across Hero */}
+      <SparkleDoodle className="w-6 h-6 text-pink-400 absolute top-8 left-[12%]" speed="fast" />
+      <SparkleDoodle className="w-4 h-4 text-rose-300 absolute top-24 left-[28%]" speed="slow" />
+      <SparkleDoodle className="w-5 h-5 text-amber-300 absolute top-12 right-[18%]" speed="normal" />
+      <SparkleDoodle className="w-4 h-4 text-pink-400 absolute bottom-12 right-[32%]" speed="fast" />
+      <SparkleDoodle className="w-3.5 h-3.5 text-rose-400 absolute bottom-20 left-[6%]" speed="normal" />
+
+      {/* Subtle Frosted White Bubbles (Monochrome, non-colorful) */}
       <FloatingBubble size={32} className="absolute top-10 left-[7%] hidden md:block" delay="0s" />
       <FloatingBubble size={20} className="absolute top-32 left-[20%]" delay="1.8s" />
       <FloatingBubble size={38} className="absolute top-14 right-[10%] hidden sm:block" delay="2.4s" />
       <FloatingBubble size={18} className="absolute bottom-16 right-[22%]" delay="0.9s" />
 
-      <div className="relative max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-10 pb-16 sm:pt-14 sm:pb-20">
-        {/* Main Hero Split Grid: Editorial Left + Visual Magazine Collage Right */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
-          {/* Left Column: Editorial Headline & Travel Meta (7 cols) */}
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-10 pb-14 sm:pt-14 sm:pb-20 relative z-10">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-8 items-center">
+          {/* Left Column: Magazine Typography & Metadata (7 cols) */}
           <div className="lg:col-span-7 space-y-5">
             {/* Magazine Date & Seal Badge */}
             <div className="flex flex-wrap items-center gap-2.5">
@@ -98,6 +163,7 @@ export const Hero: React.FC = () => {
                 <span className="text-[11px] font-sans font-normal text-[#8c7b80]">
                   「東京の秋をあるく」
                 </span>
+                <SparkleDoodle className="w-3.5 h-3.5 text-pink-400" speed="fast" />
               </div>
 
               <h1 className="text-3xl sm:text-4xl lg:text-[42px] font-black tracking-tight text-[#2d2527] leading-[1.25]">
@@ -115,7 +181,8 @@ export const Hero: React.FC = () => {
             {/* Flight Mini Boarding Pass Chip */}
             <div className="p-3.5 bg-white rounded-2xl border border-[#ebd8dc] shadow-2xs flex flex-wrap items-center justify-between gap-3 text-xs max-w-lg">
               <div className="flex items-center gap-2">
-                <Plane className="w-4 h-4 text-[#992545]" />
+                {/* Outbound flies ↗ towards top-right */}
+                <Plane className="w-4 h-4 text-[#992545]" style={{ transform: "rotate(0deg)" }} />
                 <span className="font-bold text-[#2d2527]">酷航航班：</span>
                 <span className="text-[#5d5054]">TR866 (06:50) ⇄ TR875 (19:45)</span>
               </div>
@@ -156,118 +223,164 @@ export const Hero: React.FC = () => {
 
               {/* Main Featured Photo Card */}
               <div className="bg-white p-3.5 sm:p-4 rounded-3xl border border-[#ebd8dc] shadow-[0_12px_36px_rgba(60,40,45,0.08)] relative z-10 transition-all duration-300">
-                {/* Simulated Washi Tape on Top */}
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2 w-24 h-6 bg-[#f7d6dd]/80 backdrop-blur-xs border border-white/60 -rotate-1 shadow-2xs z-20" />
+                {/* Requirement 4: Realistic Japanese Washi Tape (條紋、格子、波點) with ripped edges */}
+                <div
+                  style={{
+                    ...getTapeStyle(tapePattern),
+                    clipPath:
+                      "polygon(4px 0%, calc(100% - 4px) 0%, 100% 25%, calc(100% - 4px) 50%, 100% 75%, calc(100% - 4px) 100%, 4px 100%, 0% 75%, 4px 50%, 0% 25%)",
+                  }}
+                  className="absolute -top-3 left-1/2 -translate-x-1/2 w-28 h-6.5 opacity-95 -rotate-1 shadow-[0_2px_8px_rgba(180,90,110,0.18)] z-20 transition-all duration-300"
+                  title={`紙膠帶款式：${tapePattern === "stripes" ? "條紋" : tapePattern === "gingham" ? "格子" : "波點"}`}
+                />
 
-                <div className="relative aspect-[4/3] rounded-2xl overflow-hidden bg-[#f4ecef]">
+                {/* Main Photo Viewport - Fixed image switching with smooth transition and prev/next controls */}
+                <div className="relative aspect-[4/3] rounded-2xl overflow-hidden bg-[#f4ecef] group">
                   <SmartImage
+                    key={`hero-photo-${activePhoto}-${heroPhotos[activePhoto].imageSrc}`}
                     src={heroPhotos[activePhoto].imageSrc}
                     fallbackSrc={heroPhotos[activePhoto].fallbackSrc}
                     alt={heroPhotos[activePhoto].title}
-                    className="w-full h-full object-cover transition-transform duration-700 hover:scale-105"
+                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-102"
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent pointer-events-none" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/20 pointer-events-none" />
 
-                  {/* Photo Tag Badge */}
-                  <div className="absolute top-3 left-3 bg-white/95 backdrop-blur-md px-2.5 py-1 rounded-full text-[11px] font-bold text-[#8e2443] shadow-xs border border-[#ebd8dc]">
-                    {heroPhotos[activePhoto].tag}
+                  {/* Previous / Next Arrow Controls */}
+                  <button
+                    type="button"
+                    onClick={handlePrevPhoto}
+                    className="absolute left-2.5 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/80 hover:bg-white text-[#4a383d] flex items-center justify-center shadow-md transition-all cursor-pointer opacity-80 hover:opacity-100 hover:scale-105 z-20"
+                    aria-label="前一張照片"
+                  >
+                    <ChevronLeft className="w-5 h-5 -ml-0.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleNextPhoto}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/80 hover:bg-white text-[#4a383d] flex items-center justify-center shadow-md transition-all cursor-pointer opacity-80 hover:opacity-100 hover:scale-105 z-20"
+                    aria-label="下一張照片"
+                  >
+                    <ChevronRight className="w-5 h-5 -mr-0.5" />
+                  </button>
+
+                  {/* Photo Tag Badge & Cute Hand-drawn Sticker */}
+                  <div className="absolute top-3 left-3 flex items-center gap-1.5 z-10">
+                    <div className="bg-white/95 backdrop-blur-md px-2.5 py-1 rounded-full text-[11px] font-bold text-[#8e2443] shadow-xs border border-[#ebd8dc] flex items-center gap-1">
+                      <SparkleDoodle className="w-3 h-3 text-pink-400" speed="fast" />
+                      <span>{heroPhotos[activePhoto].tag}</span>
+                    </div>
+                  </div>
+
+                  {/* Official Source Verification Badge */}
+                  <div className="absolute top-3 right-3 z-10">
+                    <div className="bg-stone-900/80 backdrop-blur-md px-2 py-0.5 rounded-full text-[10px] font-medium text-white/95 flex items-center gap-1">
+                      <ShieldCheck className="w-3 h-3 text-emerald-400" />
+                      <span>{heroPhotos[activePhoto].sourceNote}</span>
+                    </div>
                   </div>
 
                   {/* Photo Title Overlay */}
-                  <div className="absolute bottom-3 left-3 right-3 text-white">
+                  <div className="absolute bottom-3 left-3 right-3 text-white z-10 pointer-events-none">
                     <h3 className="font-bold text-sm sm:text-base drop-shadow-sm flex items-center justify-between">
                       <span>{heroPhotos[activePhoto].title}</span>
-                      <span className="text-xs font-normal text-pink-200 flex items-center gap-1">
+                      <span className="text-xs font-normal text-pink-200 flex items-center gap-1 shrink-0">
                         <MapPin className="w-3 h-3" />
                         <span>{heroPhotos[activePhoto].location}</span>
                       </span>
                     </h3>
-                    <p className="text-xs text-white/90 drop-shadow-sm mt-0.5">
+                    <p className="text-xs text-white/90 drop-shadow-sm mt-0.5 line-clamp-1">
                       {heroPhotos[activePhoto].subtitle}
                     </p>
                   </div>
                 </div>
 
-                {/* 4 Interactive Thumbnail Previews */}
-                <div className="mt-3 grid grid-cols-4 gap-2">
-                  {heroPhotos.map((photo, pIdx) => (
-                    <button
-                      key={pIdx}
-                      onClick={() => setActivePhoto(pIdx)}
-                      className={`relative aspect-[4/3] rounded-xl overflow-hidden border-2 transition-all duration-200 ${
-                        activePhoto === pIdx
-                          ? "border-[#992545] shadow-xs scale-102"
-                          : "border-transparent opacity-70 hover:opacity-100"
-                      }`}
-                    >
-                      <SmartImage
-                        src={photo.imageSrc}
-                        fallbackSrc={photo.fallbackSrc}
-                        alt={photo.title}
-                        className="w-full h-full object-cover"
-                      />
-                    </button>
-                  ))}
+                {/* Requirement 4: Washi Tape Style Switcher & Photo Index Pill */}
+                <div className="mt-2.5 flex items-center justify-between text-xs px-1">
+                  <div className="flex items-center gap-1 text-[11px] font-medium text-[#7a5963]">
+                    <span>紙膠帶：</span>
+                    <div className="inline-flex p-0.5 bg-[#fbf0f2] rounded-full border border-[#f3d3dc] text-[10px]">
+                      <button
+                        type="button"
+                        onClick={() => setTapePattern("stripes")}
+                        className={`px-2 py-0.5 rounded-full font-bold transition-all cursor-pointer ${
+                          tapePattern === "stripes"
+                            ? "bg-[#992545] text-white shadow-2xs"
+                            : "text-[#7a5963] hover:text-[#992545]"
+                        }`}
+                      >
+                        條紋
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTapePattern("gingham")}
+                        className={`px-2 py-0.5 rounded-full font-bold transition-all cursor-pointer ${
+                          tapePattern === "gingham"
+                            ? "bg-[#992545] text-white shadow-2xs"
+                            : "text-[#7a5963] hover:text-[#992545]"
+                        }`}
+                      >
+                        格子
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTapePattern("dots")}
+                        className={`px-2 py-0.5 rounded-full font-bold transition-all cursor-pointer ${
+                          tapePattern === "dots"
+                            ? "bg-[#992545] text-white shadow-2xs"
+                            : "text-[#7a5963] hover:text-[#992545]"
+                        }`}
+                      >
+                        波點
+                      </button>
+                    </div>
+                  </div>
+
+                  <span className="text-[11px] font-mono font-medium text-[#9c6a76]">
+                    {activePhoto + 1} / {heroPhotos.length}
+                  </span>
+                </div>
+
+                {/* Requirement 3: Interactive Thumbnail Previews with Smooth Switching */}
+                <div className="mt-2.5 grid grid-cols-5 gap-2">
+                  {heroPhotos.map((photo, pIdx) => {
+                    const isSelected = activePhoto === pIdx;
+                    return (
+                      <button
+                        key={pIdx}
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setActivePhoto(pIdx);
+                        }}
+                        className={`relative aspect-[4/3] rounded-xl overflow-hidden border-2 transition-all duration-200 cursor-pointer ${
+                          isSelected
+                            ? "border-[#992545] shadow-xs scale-105 ring-2 ring-[#992545]/25"
+                            : "border-transparent opacity-70 hover:opacity-100 hover:scale-102"
+                        }`}
+                        aria-label={`切換至 ${photo.title}`}
+                      >
+                        <img
+                          src={photo.imageSrc}
+                          alt={photo.title}
+                          className="w-full h-full object-cover pointer-events-none"
+                          onError={(e) => {
+                            if (photo.fallbackSrc && e.currentTarget.src !== photo.fallbackSrc) {
+                              e.currentTarget.src = photo.fallbackSrc;
+                            }
+                          }}
+                        />
+                        {isSelected && (
+                          <div className="absolute inset-0 bg-[#992545]/10 border border-[#992545] rounded-xl pointer-events-none" />
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
               {/* Floating Accent Doodles Behind Photo */}
               <div className="absolute -bottom-3 -left-3 -z-0 bg-[#fbf0f2] w-full h-full rounded-3xl border border-[#ebd8dc]" />
-            </div>
-          </div>
-        </div>
-
-        {/* Japanese Magazine Style KPI Summary Cards */}
-        <div className="mt-12 grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-white rounded-3xl p-4 sm:p-5 border border-[#ebd8dc] shadow-2xs hover:shadow-sm hover:-translate-y-0.5 transition-all duration-300">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-semibold text-[#786b6f]">酷航航班</span>
-              <LuggageSticker className="w-6 h-6" />
-            </div>
-            <div className="text-sm sm:text-base font-bold text-[#2d2527] font-mono">
-              TR866 / TR875
-            </div>
-            <div className="text-[11px] text-[#786b6f] mt-1">
-              早去晚回 · 淺草線直通成田
-            </div>
-          </div>
-
-          <div className="bg-white rounded-3xl p-4 sm:p-5 border border-[#ebd8dc] shadow-2xs hover:shadow-sm hover:-translate-y-0.5 transition-all duration-300">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-semibold text-[#786b6f]">下榻飯店</span>
-              <Building2 className="w-5 h-5 text-[#992545]" />
-            </div>
-            <div className="text-sm sm:text-base font-bold text-[#2d2527] truncate">
-              VIA INN 人形町
-            </div>
-            <div className="text-[11px] text-[#786b6f] mt-1">
-              頂樓「水天之湯」大浴場
-            </div>
-          </div>
-
-          <div className="bg-white rounded-3xl p-4 sm:p-5 border border-[#ebd8dc] shadow-2xs hover:shadow-sm hover:-translate-y-0.5 transition-all duration-300">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-semibold text-[#786b6f]">東京灣夜跑</span>
-              <RunningShoeSticker className="w-6 h-6" />
-            </div>
-            <div className="text-sm sm:text-base font-bold text-[#2d2527] font-mono">
-              10.0 公里環線
-            </div>
-            <div className="text-[11px] text-[#786b6f] mt-1">
-              有明 → 台場 → 青海零折返
-            </div>
-          </div>
-
-          <div className="bg-white rounded-3xl p-4 sm:p-5 border border-[#ebd8dc] shadow-2xs hover:shadow-sm hover:-translate-y-0.5 transition-all duration-300">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-semibold text-[#786b6f]">經典名所</span>
-              <CameraSticker className="w-6 h-6" />
-            </div>
-            <div className="text-sm sm:text-base font-bold text-[#2d2527] truncate">
-              小網神社 ＆ 新宿御苑
-            </div>
-            <div className="text-[11px] text-[#786b6f] mt-1">
-              洗錢強運・百年寬烏龍麵
             </div>
           </div>
         </div>

@@ -34,14 +34,22 @@ export const ItinerarySection: React.FC = () => {
   const [viewMode, setViewMode] = useState<"tab" | "all">("tab"); // "tab" or "all" (Continuous 48H mode)
   const [day1Track, setDay1Track] = useState<"all" | "theater" | "runner">("all");
 
-  const getCategoryBadge = (category: ItineraryItem["category"]) => {
+  const getCategoryBadge = (category: ItineraryItem["category"], itemId?: string) => {
     switch (category) {
-      case "flight":
+      case "flight": {
+        const isReturn = itemId?.includes("d2");
         return {
-          label: "航班飛行",
-          icon: <Plane className="w-3.5 h-3.5" />,
+          label: isReturn ? "返台航班" : "啟程出發",
+          icon: (
+            <Plane
+              className={`w-3.5 h-3.5 ${
+                isReturn ? "rotate-90" : "rotate-0"
+              }`}
+            />
+          ),
           style: "bg-[#fdebf1] text-[#a82a51] border-[#fad0de]",
         };
+      }
       case "transit":
         return {
           label: "交通接駁",
@@ -118,7 +126,7 @@ export const ItinerarySection: React.FC = () => {
     "利久牛舌晚餐",
     "分流(看劇/10K夜跑)",
     "21:00 劇場會合",
-    "回飯店水天之湯泡湯",
+    "回飯店入住休息",
   ];
 
   const day2FlowSteps = [
@@ -170,7 +178,7 @@ export const ItinerarySection: React.FC = () => {
   ];
 
   const renderTimelineItem = (item: ItineraryItem) => {
-    const badge = getCategoryBadge(item.category);
+    const badge = getCategoryBadge(item.category, item.id);
     const isTransit = item.category === "transit";
     const isShopping = item.id === "d1-7";
     const isReturningToHotel = item.id === "d1-13";
@@ -314,11 +322,20 @@ export const ItinerarySection: React.FC = () => {
           {item.id === "d1-10" && (
             <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3 pt-3 border-t border-[#fae1e7]">
               <div className="p-4 bg-[#fbf2fa] rounded-2xl border border-[#f4daf0] text-xs">
-                <div className="font-bold text-[#78377e] mb-1.5 flex items-center gap-1.5">
-                  <span>🎭 看劇者視角：SHOCK 舞台劇</span>
+                <div className="font-bold text-[#78377e] mb-1.5 flex items-center justify-between gap-1.5">
+                  <span>🎭 看劇者視角：堂本光一 主演《Endless SHOCK Memories》</span>
+                  <a
+                    href="https://www.tohostage.com/shock/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-[11px] text-[#78377e] hover:underline font-bold shrink-0"
+                  >
+                    <span>東宝官網</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
                 </div>
                 <p className="text-[#69466e] leading-relaxed">
-                  開演時間 18:00，於 8,000 人座席的東京花園劇場欣賞精彩的 Endless SHOCK 舞台劇演出。
+                  開演時間 18:00（17:05 開放入場），於東京花園劇場欣賞由堂本光一親自主演・構成・演出的經典神作《Endless SHOCK Memories -CONTINUE-》，見證無安全繩客席紅綢高空飛越與 25 年殿堂傳奇！
                 </p>
               </div>
               <div className="p-4 bg-[#f3f9f6] rounded-2xl border border-[#d7ecdf] text-xs">

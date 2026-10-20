@@ -31,12 +31,25 @@
 
 @keyframes twinkleStar {
   0%, 100% {
-    opacity: 0.35;
-    transform: scale(0.85);
+    opacity: 0.25;
+    transform: scale(0.75) rotate(0deg);
+    filter: drop-shadow(0 0 1px rgba(244, 114, 182, 0.2));
   }
   50% {
     opacity: 1;
-    transform: scale(1.15) rotate(15deg);
+    transform: scale(1.28) rotate(18deg);
+    filter: drop-shadow(0 0 8px rgba(244, 114, 182, 0.85));
+  }
+}
+
+@keyframes breatheGlow {
+  0%, 100% {
+    opacity: 0.4;
+    transform: scale(0.92);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.08);
   }
 }
 
@@ -59,6 +72,18 @@
 
 .animate-twinkle {
   animation: twinkleStar 3s ease-in-out infinite;
+}
+
+.animate-twinkle-fast {
+  animation: twinkleStar 1.8s ease-in-out infinite;
+}
+
+.animate-twinkle-slow {
+  animation: twinkleStar 4.5s ease-in-out infinite;
+}
+
+.animate-breathe {
+  animation: breatheGlow 3s ease-in-out infinite;
 }
 
 .animate-track-pulse {

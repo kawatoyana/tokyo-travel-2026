@@ -15,6 +15,11 @@ import {
   CoffeeCupSticker,
   ShrineSticker,
   GinkgoLeafSticker,
+  TheaterMaskSticker,
+  RunningShoeSticker,
+  UdonBowlSticker,
+  ShoppingBagSticker,
+  CompassSticker,
   FloatingBubble,
 } from "./CuteDoodles";
 
@@ -28,6 +33,17 @@ export const AttractionsSection: React.FC = () => {
 
   const getAttractionSticker = (id: string) => {
     switch (id) {
+      case "attr-shock-musical":
+        return <TheaterMaskSticker className="w-6 h-6" />;
+      case "attr-odaiba-run":
+        return <RunningShoeSticker className="w-6 h-6" />;
+      case "attr-hanayama-udon":
+      case "attr-rikyu":
+        return <UdonBowlSticker className="w-6 h-6" />;
+      case "attr-miharado":
+        return <ShoppingBagSticker className="w-6 h-6" />;
+      case "attr-ariake-theater":
+        return <CompassSticker className="w-6 h-6" />;
       case "attr-koami":
         return <ShrineSticker className="w-6 h-6" />;
       case "attr-dixans":
@@ -159,6 +175,13 @@ export const AttractionsSection: React.FC = () => {
                       </div>
                     </div>
 
+                    {/* Official Image Badge */}
+                    <div className="absolute top-11 right-3.5">
+                      <span className="text-[10px] bg-emerald-950/80 text-emerald-200 border border-emerald-500/30 px-2 py-0.5 rounded-full font-medium backdrop-blur-xs">
+                        官方寫真
+                      </span>
+                    </div>
+
                     {/* Timestamp in Overlay */}
                     <div className="absolute bottom-3.5 left-3.5 right-3.5 text-white text-xs font-medium flex items-center gap-1.5 drop-shadow-sm">
                       <Clock className="w-3.5 h-3.5 text-pink-300 shrink-0" />
@@ -226,8 +249,39 @@ export const AttractionsSection: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Card Action Link */}
-                <div className="p-6 pt-0">
+                {/* Card Action Links */}
+                <div className="p-6 pt-0 space-y-2">
+                  {attraction.officialWebsite && (
+                    <a
+                      href={attraction.officialWebsite}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full inline-flex items-center justify-center gap-1.5 py-2.5 px-4 text-xs font-semibold text-white bg-[#992545] hover:bg-[#801e38] rounded-full transition-all duration-200 hover:-translate-y-0.5 shadow-sm"
+                    >
+                      <span>
+                        {attraction.id === "attr-shock-musical"
+                          ? "東宝演劇『Endless SHOCK』公式特設網站"
+                          : attraction.id === "attr-ariake-theater"
+                          ? "有明花園 ＆ 東京花園劇場 官方網站"
+                          : attraction.id === "attr-rikyu"
+                          ? "牛たん炭焼 利久 官方菜單指南"
+                          : attraction.id === "attr-odaiba-run"
+                          ? "Go Tokyo 台場官方觀光指南"
+                          : attraction.id === "attr-koami"
+                          ? "小網神社 官方參拜指南"
+                          : attraction.id === "attr-dixans"
+                          ? "DIXANS 人形町 Instagram 官方專頁"
+                          : attraction.id === "attr-amazake-miharado"
+                          ? "甘酒橫丁老街 官方觀光導覽"
+                          : attraction.id === "attr-hanayama"
+                          ? "五代目 花山烏龍麵 官方網站"
+                          : attraction.id === "attr-shinjuku"
+                          ? "環境省 新宿御苑 官方公園導覽"
+                          : "造訪景點／店家官方網站"}
+                      </span>
+                      <ExternalLink className="w-3.5 h-3.5 text-white/90" />
+                    </a>
+                  )}
                   <a
                     href={attraction.googleMapsUrl}
                     target="_blank"

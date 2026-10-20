@@ -24,7 +24,7 @@ export interface HotelInfo {
   access: string;
   highlights: string[];
   features: {
-    bathhouse: string;
+    comfort: string;
     luggage: string;
     subway: string;
     convenience: string;
@@ -72,6 +72,7 @@ export interface Attraction {
   tips: string[];
   imageSrc: string;
   unsplashUrl?: string;
+  officialWebsite?: string;
   googleMapsUrl: string;
 }
 
@@ -158,19 +159,19 @@ export const FLIGHTS: { outbound: FlightInfo; inbound: FlightInfo } = {
 
 export const HOTEL: HotelInfo = {
   name: "VIA INN PRIME 日本橋人形町",
-  japaneseName: "ヴィアインプライム日本橋人形町（水天の湯）",
+  japaneseName: "ヴィアインプライム日本橋人形町",
   address: "東京都中央区日本橋人形町2-24-3",
   checkIn: "15:00 以後（可提前於 13:30 寄放行李）",
   checkOut: "10:00 以前（退房後可寄放行李至返程）",
   access: "都營淺草線／東京地鐵日比谷線「人形町站」A3/A6 出口步行約 3 分鐘；半藏門線「水天宮前站」步行約 7 分鐘",
   highlights: [
     "直通成田機場：都營淺草線免換乘直達，省時省力免搬行李走樓梯",
-    "水天之湯頂樓大浴場：男女獨立大型浴場與微氣泡風呂，消除整日疲勞",
+    "全客房席夢思名床：配備獨立筒名床與加濕空氣清淨機，享受靜謐好眠",
     "人形町下町老街核心：周邊包圍小網神社、甘酒橫丁、三原堂與排隊名店",
     "自助智能行李寄存機：全自動置物鎖，取放行李免漫長排隊",
   ],
   features: {
-    bathhouse: "2F 水天之湯大浴場（15:00–25:00 / 06:00–09:00 開放）",
+    comfort: "全室配備席夢思 (Simmons) 獨立筒名床、加濕空氣清淨機與獨立衛浴設備",
     luggage: "入住前與退房後均提供免費自動寄存櫃服務",
     subway: "都營淺草線直通 Access 特急，一線直抵成田機場與新橋",
     convenience: "步行 1 分鐘內即有 7-Eleven 與 FamilyMart 便利商店",
@@ -283,10 +284,10 @@ export const DAY1_ITINERARY: ItineraryItem[] = [
     time: "18:00–約 19:20",
     title: "一人欣賞 SHOCK 舞台劇；另一人完成 10 公里跑步",
     location: "東京花園劇場 vs 有明·台場·青海 10 公里環線",
-    description: "【看劇者】於東京花園劇場欣賞 SHOCK 舞台劇演出。\n【跑步者】由劇場出發，橫越夢之大橋，沿台場海濱公園、彩虹大橋夜景海岸、潮風公園、青海南埠頭，跑出完整不重複的 10 公里環線！",
+    description: "【看劇者】於東京花園劇場欣賞由堂本光一主演・構成・演出的經典神作《Endless SHOCK Memories -CONTINUE-》（東宝官網：https://www.tohostage.com/shock/），見證客席紅綢飛越與 25 年殿堂傳奇。\n【跑步者】由劇場出發，橫越夢之大橋，沿台場海濱公園、彩虹大橋夜景海岸、潮風公園、青海南埠頭，跑出完整不重複的 10 公里環線！",
     category: "activity",
     track: "shared",
-    tips: "跑者配速約 5:30–6:00/km，約 55–60 分鐘完成；路線平坦安全，夜間照明良好。",
+    tips: "看劇注意：劇場 17:05 開放進場，開演前手機請關靜音，演出全程嚴禁攝影；跑者配速約 5:30–6:00/km，夜間海風清爽照明極佳。",
   },
   {
     id: "d1-11",
@@ -323,12 +324,12 @@ export const DAY1_ITINERARY: ItineraryItem[] = [
   {
     id: "d1-14",
     time: "21:40–23:00",
-    title: "飯店大浴場泡湯放鬆",
-    location: "VIA INN PRIME 人形町 2F「水天之湯」",
-    description: "浸泡在微細氣泡溫泉大浴場舒緩雙腿肌肉，洗去整日奔波疲憊。",
+    title: "飯店辦理入住與客房舒眠放鬆",
+    location: "VIA INN PRIME 日本橋人形町",
+    description: "於自助智能機台辦理入住領取房卡，進入客房享受席夢思名床與舒適衛浴，整理今日戰利品並充分放鬆休息，儲備明日探索老街與賞楓的滿滿活力。",
     category: "hotel",
     track: "shared",
-    tips: "大浴場開放至深夜 01:00，備有吹風機、沐浴用品與乾淨毛巾。",
+    tips: "客房配備獨立溫控空調、加濕型空氣清淨機與高品質洗沐用品，環境安靜優雅。",
   },
 ];
 
@@ -563,7 +564,7 @@ export const DAY2_ITINERARY: ItineraryItem[] = [
 ];
 
 // CHRONOLOGICAL ORDER of Attractions strictly matching the user's itinerary,
-// WITH AUTHENTIC, DOCUMENTARY PHOTOS OF EACH ACTUAL SPOT:
+// WITH AUTHENTIC, DOCUMENTARY PHOTOS OF EACH ACTUAL SPOT FROM OFFICIAL WEBSITES:
 export const ATTRACTIONS: Attraction[] = [
   {
     id: "attr-ariake-theater",
@@ -581,8 +582,9 @@ export const ATTRACTIONS: Attraction[] = [
       "商場設有豐富自動寄物櫃與休息沙發，跑者與看劇者極佳會合據點",
       "5F 泉天空之湯溫泉提供跑後洗浴放鬆",
     ],
-    imageSrc: "./images/attraction_ariake_theater.jpg",
-    unsplashUrl: "https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?auto=format&fit=crop&w=1200&q=80",
+    imageSrc: "/images/official_ariake_garden.jpg",
+    unsplashUrl: "https://ariake.shopping-sumitomo-rd.com/",
+    officialWebsite: "https://ariake.shopping-sumitomo-rd.com/",
     googleMapsUrl: "https://www.google.com/maps/search/?api=1&query=Tokyo+Garden+Theater",
   },
   {
@@ -601,9 +603,32 @@ export const ATTRACTIONS: Attraction[] = [
       "16:20 前來可完全避開週末晚間排隊人潮",
       "備有日英對照菜單，出餐迅速",
     ],
-    imageSrc: "./images/attraction_rikyu_gyutan.jpg",
-    unsplashUrl: "https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=1200&q=80",
+    imageSrc: "/images/official_rikyu_gyutan.jpg",
+    unsplashUrl: "https://corp.rikyu-gyutan.co.jp/menu/",
+    officialWebsite: "https://corp.rikyu-gyutan.co.jp/menu/",
     googleMapsUrl: "https://www.google.com/maps/search/?api=1&query=牛たん炭焼+利久+有明ガーデン店",
+  },
+  {
+    id: "attr-shock-musical",
+    itineraryOrder: 3,
+    itineraryTime: "DAY 1｜17:05 入場準備・18:00–約 19:20 觀劇",
+    name: "堂本光一 主演《Endless SHOCK Memories -CONTINUE-》",
+    japaneseName: "堂本光一 主演 ミュージカル『Endless SHOCK Memories -CONTINUE-』",
+    category: "東宝殿堂級音樂劇・25年傳奇最終章巡演",
+    day: 1,
+    highlight: "【東宝官方】「Show Must Go On!」堂本光一創下 25 年 2,128 回公演全數即日完售神話，2026.11.28 全國巡迴首站於東京花園劇場盛大啟航！",
+    description: "日本原創音樂劇的最高到達點！由堂本光一自 2000 年 11 月以 21 歲創下帝國劇場史上最年少座長紀錄以來，締造 25 年全 2,128 回公演全數即日完售的空前神話，動員超過 370 萬人。全劇以“Show Must Go On!”（無論如何演出必須繼續）為靈魂，描繪柯一（Koichi）與其カンパニー在命運洪流中奔馳的姿態。演出集結帝劇頂級世界級舞台機構、極限 22 段階梯滾落（階段落ち）、大迫力雙刀殺陣真劍交鋒、和太鼓演奏與堂本光一無安全繩紅綢飛越 1,900 席客席上空（客席フライング）！2026 年 11 月 28 日（六）全國巡迴《Endless SHOCK Memories -CONTINUE-》首場盛典於東京花園劇場震撼啟航，歷代豪華共演陣容齊聚！",
+    address: "東京都江東区有明2-1-6 東京ガーデンシアター",
+    tips: [
+      "東宝官方特設網站：https://www.tohostage.com/shock/（官方最新公演日程與情報）",
+      "17:05 開放驗票入場，建議提早 30–40 分鐘抵達現場購買官方場刊手冊與紀念週邊",
+      "東京花園劇場 8,000 席世界級聲光，演出全程嚴格禁止任何拍照、錄音、錄影，開演前請將手機關靜音",
+      "首站豪華卡司陣容：堂本光一、ふぉ～ゆ～（福田悠太/辰巳雄大/越岡裕貴/松崎祐介）、佐藤勝利、島田歌穂、前田美波里等",
+    ],
+    imageSrc: "/images/attraction_shock_stage.jpg",
+    unsplashUrl: "https://www.tohostage.com/shock/images/visual.jpg",
+    officialWebsite: "https://www.tohostage.com/shock/",
+    googleMapsUrl: "https://www.google.com/maps/search/?api=1&query=Tokyo+Garden+Theater",
   },
   {
     id: "attr-odaiba-run",
@@ -621,8 +646,9 @@ export const ATTRACTIONS: Attraction[] = [
       "沿途公廁、長椅與飲料販賣機密集，補給方便",
       "傍晚 16:30 日落，18:00 起跑正好處於華燈初上的絕美夜景",
     ],
-    imageSrc: "./images/attraction_tokyo_bay_run.jpg",
-    unsplashUrl: "https://images.unsplash.com/photo-1536098561742-ca998e48cbcc?auto=format&fit=crop&w=1200&q=80",
+    imageSrc: "/images/official_odaiba_gotokyo.webp",
+    unsplashUrl: "https://www.gotokyo.org/tc/destinations/southern-tokyo/odaiba/index.html",
+    officialWebsite: "https://www.gotokyo.org/tc/destinations/southern-tokyo/odaiba/index.html",
     googleMapsUrl: "https://www.google.com/maps/search/?api=1&query=Odaiba+Marine+Park",
   },
   {
@@ -641,8 +667,9 @@ export const ATTRACTIONS: Attraction[] = [
       "將 5 円或 500 円硬幣放在竹簍中浸潤神泉洗滌，擦乾後放入皮夾作為「錢母」",
       "代表性的「強運厄除龍御守」雕工精緻，極具紀念價值",
     ],
-    imageSrc: "./images/attraction_koami_shrine.jpg",
-    unsplashUrl: "https://images.unsplash.com/photo-1578637387939-43c525550085?auto=format&fit=crop&w=1200&q=80",
+    imageSrc: "/images/official_koami_jinja.jpg",
+    unsplashUrl: "https://www.koamijinja.or.jp/",
+    officialWebsite: "https://www.koamijinja.or.jp/",
     googleMapsUrl: "https://www.google.com/maps/search/?api=1&query=Koami+Shrine",
   },
   {
@@ -661,8 +688,9 @@ export const ATTRACTIONS: Attraction[] = [
       "除厚吐司外，店內特製栗子蒙布朗與布丁亦很受歡迎",
       "二樓提供寬敞座位區與溫暖木質採光，環境舒適安靜",
     ],
-    imageSrc: "./images/attraction_dixans_toast.jpg",
-    unsplashUrl: "https://images.unsplash.com/photo-1509722747041-616f39b57569?auto=format&fit=crop&w=1200&q=80",
+    imageSrc: "/images/official_dixans_ningyocho.jpg",
+    unsplashUrl: "https://www.instagram.com/dixans.ningyocho/",
+    officialWebsite: "https://www.instagram.com/dixans.ningyocho/",
     googleMapsUrl: "https://www.google.com/maps/search/?api=1&query=DIXANS+Ningyocho",
   },
   {
@@ -681,8 +709,9 @@ export const ATTRACTIONS: Attraction[] = [
       "亦販售季節限定之生菓子與銅鑼燒",
       "人形町站出站十字路口即可見醒目招牌",
     ],
-    imageSrc: "./images/attraction_miharado_senbei.jpg",
-    unsplashUrl: "https://images.unsplash.com/photo-1528164344705-475426879c0d?auto=format&fit=crop&w=1200&q=80",
+    imageSrc: "/images/official_amazake_yokocho.jpg",
+    unsplashUrl: "https://iconia.co.jp/zh-tw/attractions-amazake-yokocho-tokyo-japan",
+    officialWebsite: "https://iconia.co.jp/zh-tw/attractions-amazake-yokocho-tokyo-japan",
     googleMapsUrl: "https://www.google.com/maps/search/?api=1&query=三原堂本店+人形町",
   },
   {
@@ -701,8 +730,9 @@ export const ATTRACTIONS: Attraction[] = [
       "推薦「鬼御膳（花山寬麵 + 天婦羅小天丼）」雙重享受",
       "店內可購買生麵條伴手禮盒回家烹煮",
     ],
-    imageSrc: "./images/attraction_hanayama_udon.jpg",
-    unsplashUrl: "https://images.unsplash.com/photo-1618841557871-b4664fbf0cb3?auto=format&fit=crop&w=1200&q=80",
+    imageSrc: "/images/official_hanayama_udon.jpg",
+    unsplashUrl: "https://www.hanayamaudon.co.jp/",
+    officialWebsite: "https://www.hanayamaudon.co.jp/",
     googleMapsUrl: "https://www.google.com/maps/search/?api=1&query=五代目+花山うどん+日本橋店",
   },
   {
@@ -721,8 +751,9 @@ export const ATTRACTIONS: Attraction[] = [
       "推薦由「新宿門」進入，先拍中之池與銀杏林，再前往日本庭園觀賞水面倒影",
       "園區全域禁止飲酒、全面禁菸，環境維持極為清幽雅緻",
     ],
-    imageSrc: "./images/attraction_shinjuku_gyoen.jpg",
-    unsplashUrl: "https://images.unsplash.com/photo-1508873696983-2df5293cb32f?auto=format&fit=crop&w=1200&q=80",
+    imageSrc: "/images/official_shinjuku_gyoen.jpg",
+    unsplashUrl: "https://policies.env.go.jp/national-garden/shinjukugyoen/index.html",
+    officialWebsite: "https://policies.env.go.jp/national-garden/shinjukugyoen/index.html",
     googleMapsUrl: "https://www.google.com/maps/search/?api=1&query=Shinjuku+Gyoen+National+Garden",
   },
 ];

@@ -36,7 +36,7 @@ export const FlightHotelSection: React.FC = () => {
             航班及住宿資訊
           </h2>
           <p className="text-xs sm:text-sm text-[#6e5d62] mt-1.5 max-w-xl leading-relaxed font-normal">
-            酷航早去晚回班次安排、淺草線 Access 特急免換乘直達秘訣，與日本橋人形町大浴場飯店規格。
+            酷航早去晚回班次安排、淺草線 Access 特急免換乘直達秘訣，與日本橋人形町住宿規格。
           </p>
         </div>
 
@@ -47,8 +47,9 @@ export const FlightHotelSection: React.FC = () => {
             <div>
               <div className="flex items-center justify-between pb-4 border-b border-[#fae1e7]">
                 <div className="flex items-center gap-2.5">
+                  {/* Requirement 1: Outbound plane flies ↗ (朝右上角航行) */}
                   <div className="w-8 h-8 rounded-2xl bg-[#fdebf0] border border-[#faccd7] flex items-center justify-center text-[#b83358]">
-                    <Plane className="w-4 h-4" />
+                    <Plane className="w-4 h-4 rotate-0" style={{ transform: "rotate(0deg)" }} />
                   </div>
                   <div>
                     <span className="text-sm font-bold text-[#4a383d]">
@@ -85,7 +86,8 @@ export const FlightHotelSection: React.FC = () => {
                   </span>
                   <div className="w-full flex items-center gap-1">
                     <div className="h-0.5 flex-1 bg-[#f9d7df]" />
-                    <Plane className="w-4 h-4 text-[#b83358] rotate-90 shrink-0" />
+                    {/* Requirement 1: Outbound plane flies ↗ (朝右上角航行) */}
+                    <Plane className="w-4 h-4 text-[#b83358] rotate-0 shrink-0" style={{ transform: "rotate(0deg)" }} />
                     <div className="h-0.5 flex-1 bg-[#f9d7df]" />
                   </div>
                   <span className="text-[10px] text-[#286f4a] mt-1 font-semibold px-2 py-0.5 bg-[#f3f9f6] rounded-full border border-[#d7ecdf]">
@@ -132,8 +134,9 @@ export const FlightHotelSection: React.FC = () => {
             <div>
               <div className="flex items-center justify-between pb-4 border-b border-[#fae1e7]">
                 <div className="flex items-center gap-2.5">
+                  {/* Requirement 2: Return flight icon flies ↘ (朝右下角俯衝) */}
                   <div className="w-8 h-8 rounded-2xl bg-[#fdebf0] border border-[#faccd7] flex items-center justify-center text-[#b83358]">
-                    <Plane className="w-4 h-4" />
+                    <Plane className="w-4 h-4 rotate-90" style={{ transform: "rotate(90deg)", transformOrigin: "center" }} />
                   </div>
                   <div>
                     <span className="text-sm font-bold text-[#4a383d]">
@@ -170,7 +173,8 @@ export const FlightHotelSection: React.FC = () => {
                   </span>
                   <div className="w-full flex items-center gap-1">
                     <div className="h-0.5 flex-1 bg-[#f9d7df]" />
-                    <Plane className="w-4 h-4 text-[#b83358] rotate-90 shrink-0" />
+                    {/* Requirement 2: Return flight middle plane flies ↘ (朝右下角俯衝) */}
+                    <Plane className="w-4 h-4 text-[#b83358] rotate-90 shrink-0" style={{ transform: "rotate(90deg)", transformOrigin: "center" }} />
                     <div className="h-0.5 flex-1 bg-[#f9d7df]" />
                   </div>
                   <span className="text-[10px] text-[#286f4a] mt-1 font-semibold px-2 py-0.5 bg-[#f3f9f6] rounded-full border border-[#d7ecdf]">
@@ -248,11 +252,11 @@ export const FlightHotelSection: React.FC = () => {
           <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="p-4 bg-[#fff7f8] rounded-2xl border border-[#fae1e7]">
               <div className="flex items-center gap-2 text-[#4a383d] font-bold text-sm mb-2">
-                <Bath className="w-4 h-4 text-[#a82a51]" />
-                <span>最上階「水天之湯」大浴場</span>
+                <Sparkles className="w-4 h-4 text-[#a82a51]" />
+                <span>全室席夢思名床舒眠</span>
               </div>
               <p className="text-xs text-[#6b4f57] leading-relaxed font-normal">
-                {HOTEL.features.bathhouse}
+                {HOTEL.features.comfort}
               </p>
             </div>
 
