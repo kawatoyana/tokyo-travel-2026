@@ -19,6 +19,8 @@ import {
   Thermometer,
   Droplets,
   ListChecks,
+  RefreshCw,
+  Radio,
 } from "lucide-react";
 import {
   LuggageSticker,
@@ -48,6 +50,62 @@ export const PackingWeatherSection: React.FC = () => {
   const [categoryFilter, setCategoryFilter] = useState<string>("全部");
   const [newItemTitle, setNewItemTitle] = useState("");
   const [newItemCategory, setNewItemCategory] = useState("個人備品");
+
+  // Requirement 7: Real-time Live Meteorological Data (Tokyo Bay / Ariake / Minato)
+  const [liveWeather, setLiveWeather] = useState<{
+    temperature: number;
+    apparentTemperature: number;
+    humidity: number;
+    windSpeed: number;
+    weatherCode: number;
+    updatedAt: string;
+  } | null>(null);
+  const [isRefreshingWeather, setIsRefreshingWeather] = useState<boolean>(false);
+
+  const getWmoDescription = (code: number) => {
+    if (code === 0) return { label: "晴朗無雲", note: "陽光充足，能見度極佳" };
+    if (code === 1 || code === 2) return { label: "晴時多雲", note: "舒適微風，適宜散步跑跳" };
+    if (code === 3) return { label: "陰天覆蓋", note: "雲層較厚，氣溫稍降注意保暖" };
+    if (code >= 45 && code <= 48) return { label: "晨霧薄靄", note: "早晚海灣稍有薄霧" };
+    if (code >= 51 && code <= 67) return { label: "細雨/局部小雨", note: "外出備輕量折疊傘" };
+    if (code >= 71 && code <= 77) return { label: "飄雪/微雪", note: "高空冷空氣通過" };
+    if (code >= 80 && code <= 82) return { label: "短暫陣雨", note: "局部陣發性降水" };
+    if (code >= 95) return { label: "雷陣雨", note: "防雷防海面強陣風" };
+    return { label: "秋日晴好", note: "秋末東京灣岸氣候舒適" };
+  };
+
+  const fetchRealtimeWeather = async () => {
+    try {
+      setIsRefreshingWeather(true);
+      const res = await fetch(
+        "https://api.open-meteo.com/v1/forecast?latitude=35.6366&longitude=139.7925&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m&timezone=Asia%2FTokyo"
+      );
+      if (!res.ok) throw new Error("Weather API request failed");
+      const data = await res.json();
+      if (data && data.current) {
+        setLiveWeather({
+          temperature: Math.round(data.current.temperature_2m * 10) / 10,
+          apparentTemperature: Math.round(data.current.apparent_temperature * 10) / 10,
+          humidity: Math.round(data.current.relative_humidity_2m),
+          windSpeed: Math.round((data.current.wind_speed_10m / 3.6) * 10) / 10, // km/h to m/s
+          weatherCode: data.current.weather_code,
+          updatedAt: new Date().toLocaleTimeString("zh-TW", {
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+          }),
+        });
+      }
+    } catch (err) {
+      console.warn("Live weather fetch fallback:", err);
+    } finally {
+      setIsRefreshingWeather(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchRealtimeWeather();
+  }, []);
 
   useEffect(() => {
     try {
@@ -337,10 +395,73 @@ export const PackingWeatherSection: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="text-xs text-[#9c7580] font-mono">
-                  發布時間：{METEOROLOGICAL_DATA.publishedAt}
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-[#9c7580] font-mono">
+                    {liveWeather ? `即時觀測：${liveWeather.updatedAt}` : `發布時間：${METEOROLOGICAL_DATA.publishedAt}`}
+                  </span>
+                  <button
+                    onClick={fetchRealtimeWeather}
+                    disabled={isRefreshingWeather}
+                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold text-[#8e2443] bg-[#fdf2f4] hover:bg-[#fae4e8] border border-[#f3d9de] transition-all cursor-pointer shadow-2xs disabled:opacity-50"
+                    title="立即重新整理氣象資料"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${isRefreshingWeather ? "animate-spin" : ""}`} />
+                    <span>即時更新</span>
+                  </button>
                 </div>
               </div>
+
+              {/* Requirement 7: Live Real-Time Weather Banner */}
+              {liveWeather && (
+                <div className="mt-4 p-4 bg-gradient-to-r from-[#fff3f6] to-[#fff8f9] rounded-2xl border border-[#fad4df] flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="relative flex h-3 w-3 shrink-0">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-[#b83358] uppercase tracking-wider">
+                          LIVE 即時現場氣象（有明・台場）
+                        </span>
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#fdebf0] text-[#a82a51] border border-[#faccd7]">
+                          {getWmoDescription(liveWeather.weatherCode).label}
+                        </span>
+                      </div>
+                      <p className="text-xs text-[#6e5d62] mt-0.5">
+                        {getWmoDescription(liveWeather.weatherCode).note} · 隨時與 Open-Meteo 氣象台連線同步
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-3 sm:gap-4 text-xs font-mono">
+                    <div className="px-3 py-1.5 bg-white rounded-xl border border-[#fae0e6] shadow-2xs">
+                      <span className="text-[10px] text-[#9c7580] block">即時氣溫</span>
+                      <span className="font-extrabold text-[#b83358] text-sm">
+                        {liveWeather.temperature}°C
+                      </span>
+                    </div>
+                    <div className="px-3 py-1.5 bg-white rounded-xl border border-[#fae0e6] shadow-2xs">
+                      <span className="text-[10px] text-[#9c7580] block">體感溫度</span>
+                      <span className="font-extrabold text-[#4a383d] text-sm">
+                        {liveWeather.apparentTemperature}°C
+                      </span>
+                    </div>
+                    <div className="px-3 py-1.5 bg-white rounded-xl border border-[#fae0e6] shadow-2xs">
+                      <span className="text-[10px] text-[#9c7580] block">相對濕度</span>
+                      <span className="font-extrabold text-sky-600 text-sm">
+                        {liveWeather.humidity}%
+                      </span>
+                    </div>
+                    <div className="px-3 py-1.5 bg-white rounded-xl border border-[#fae0e6] shadow-2xs">
+                      <span className="text-[10px] text-[#9c7580] block">海灣風速</span>
+                      <span className="font-extrabold text-[#78377e] text-sm">
+                        {liveWeather.windSpeed} m/s
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Advisory Headline */}
               <div className="mt-4 flex items-start gap-2.5 text-xs sm:text-sm text-[#992545] bg-[#fff0f4] p-4 rounded-2xl border border-[#fad4df] leading-relaxed">

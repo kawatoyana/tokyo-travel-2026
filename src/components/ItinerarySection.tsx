@@ -28,6 +28,7 @@ import {
   ShoppingBagSticker,
   FloatingBubble,
 } from "./CuteDoodles";
+import { OutboundPlaneIcon, InboundPlaneIcon } from "./FlightIcons";
 
 export const ItinerarySection: React.FC = () => {
   const [activeDay, setActiveDay] = useState<1 | 2>(1);
@@ -40,12 +41,10 @@ export const ItinerarySection: React.FC = () => {
         const isReturn = itemId?.includes("d2");
         return {
           label: isReturn ? "返台航班" : "啟程出發",
-          icon: (
-            <Plane
-              className={`w-3.5 h-3.5 ${
-                isReturn ? "rotate-90" : "rotate-0"
-              }`}
-            />
+          icon: isReturn ? (
+            <InboundPlaneIcon className="w-3.5 h-3.5" />
+          ) : (
+            <OutboundPlaneIcon className="w-3.5 h-3.5" />
           ),
           style: "bg-[#fdebf1] text-[#a82a51] border-[#fad0de]",
         };
@@ -387,12 +386,12 @@ export const ItinerarySection: React.FC = () => {
             </p>
           </div>
 
-          {/* Day Tabs & View Mode Switcher */}
-          <div className="flex flex-wrap items-center gap-2">
+          {/* Day Tabs & View Mode Switcher - Optimized for Mobile (DAY 1 & DAY 2 never cut off) */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full sm:w-auto">
             {/* View Mode Toggle: Tab or Full 48H */}
             <button
               onClick={() => setViewMode(viewMode === "tab" ? "all" : "tab")}
-              className={`px-3.5 py-2 text-xs font-semibold rounded-full border transition-all duration-300 flex items-center gap-1.5 ${
+              className={`px-3.5 py-2 text-xs font-semibold rounded-full border transition-all duration-300 flex items-center justify-center gap-1.5 shrink-0 ${
                 viewMode === "all"
                   ? "bg-[#b83358] text-white border-[#b83358] shadow-xs"
                   : "bg-white text-[#833a52] border-[#faccd7] hover:bg-[#fff0f4]"
@@ -402,28 +401,30 @@ export const ItinerarySection: React.FC = () => {
               <span>{viewMode === "all" ? "切回分日標籤" : "連續全覽 (48H)"}</span>
             </button>
 
-            {/* Day Switcher Pills (when in Tab mode) */}
+            {/* Day Switcher Pills (when in Tab mode) - Guaranteed 50% split on mobile so DAY 2 is 100% visible */}
             {viewMode === "tab" && (
-              <div className="inline-flex p-1.5 bg-[#fce8ed] rounded-full border border-[#f7d5df] shrink-0 shadow-2xs">
+              <div className="w-full sm:w-auto grid grid-cols-2 p-1 sm:p-1.5 bg-[#fce8ed] rounded-full border border-[#f7d5df] shadow-2xs">
                 <button
                   onClick={() => switchToDay(1)}
-                  className={`px-4 sm:px-5 py-2 text-xs sm:text-sm font-semibold rounded-full transition-all duration-300 ${
+                  className={`px-3 sm:px-5 py-2 text-xs sm:text-sm font-semibold rounded-full transition-all duration-300 text-center ${
                     activeDay === 1
                       ? "bg-white text-[#a82a51] shadow-xs"
                       : "text-[#7d5f66] hover:text-[#4a383d]"
                   }`}
                 >
-                  DAY 1｜11/28（六）有明・SHOCK・10K
+                  <span className="hidden sm:inline">DAY 1｜11/28（六）有明・SHOCK・10K</span>
+                  <span className="sm:hidden">DAY 1 · 11/28</span>
                 </button>
                 <button
                   onClick={() => switchToDay(2)}
-                  className={`px-4 sm:px-5 py-2 text-xs sm:text-sm font-semibold rounded-full transition-all duration-300 ${
+                  className={`px-3 sm:px-5 py-2 text-xs sm:text-sm font-semibold rounded-full transition-all duration-300 text-center ${
                     activeDay === 2
                       ? "bg-white text-[#a82a51] shadow-xs"
                       : "text-[#7d5f66] hover:text-[#4a383d]"
                   }`}
                 >
-                  DAY 2｜11/29（日）人形町・小網神社・新宿
+                  <span className="hidden sm:inline">DAY 2｜11/29（日）人形町・小網神社・新宿</span>
+                  <span className="sm:hidden">DAY 2 · 11/29</span>
                 </button>
               </div>
             )}
@@ -572,35 +573,24 @@ export const ItinerarySection: React.FC = () => {
           )}
         </div>
 
-        {/* Requirement 6: Smooth Day Switcher at the bottom so user never has to scroll up manually */}
+        {/* Requirement 1 (3) & (4): Clean bottom Day Switcher */}
         {viewMode === "tab" && (
-          <div className="mt-12 p-6 sm:p-7 bg-white/95 rounded-3xl border border-[#fad4dd] shadow-[0_6px_25px_rgba(240,160,180,0.1)] flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="text-center sm:text-left">
-              <span className="text-xs font-bold text-[#b83358] tracking-wider uppercase block">
-                {activeDay === 1 ? "NEXT STEP ➔ DAY 2" : "PREVIOUS STEP ⬅ DAY 1"}
-              </span>
-              <h4 className="text-sm sm:text-base font-extrabold text-[#4a383d] mt-0.5">
-                {activeDay === 1
-                  ? "已閱畢 DAY 1！直接翻閱 DAY 2 人形町與新宿賞楓行程"
-                  : "已閱畢 DAY 2！隨時翻回 DAY 1 有明與夜跑行程"}
-              </h4>
-            </div>
-
+          <div className="mt-10 flex justify-center">
             {activeDay === 1 ? (
               <button
                 onClick={() => switchToDay(2)}
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3.5 text-xs sm:text-sm font-bold text-white bg-[#b83358] hover:bg-[#992545] rounded-full transition-all duration-300 shadow-md hover:shadow-lg hover:-translate-y-0.5 group shrink-0"
+                className="inline-flex items-center justify-center gap-2 px-8 py-3.5 text-xs sm:text-sm font-bold text-white bg-[#b83358] hover:bg-[#992545] rounded-full transition-all duration-300 shadow-md hover:shadow-lg hover:-translate-y-0.5 group cursor-pointer"
               >
-                <span>直接切換至 DAY 2 行程</span>
+                <span>DAY 2</span>
                 <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
               </button>
             ) : (
               <button
                 onClick={() => switchToDay(1)}
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3.5 text-xs sm:text-sm font-bold text-[#a82a51] bg-[#fff0f4] hover:bg-[#fde2ea] border border-[#faccd7] rounded-full transition-all duration-300 shadow-2xs hover:shadow-xs hover:-translate-y-0.5 group shrink-0"
+                className="inline-flex items-center justify-center gap-2 px-8 py-3.5 text-xs sm:text-sm font-bold text-[#a82a51] bg-[#fff0f4] hover:bg-[#fde2ea] border border-[#faccd7] rounded-full transition-all duration-300 shadow-2xs hover:shadow-xs hover:-translate-y-0.5 group cursor-pointer"
               >
                 <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-1" />
-                <span>翻回 DAY 1 行程</span>
+                <span>DAY 1</span>
               </button>
             )}
           </div>

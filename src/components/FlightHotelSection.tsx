@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { FLIGHTS, HOTEL } from "../data/tripData";
 import {
   Plane,
@@ -10,6 +10,7 @@ import {
   Luggage,
   Train,
   ExternalLink,
+  QrCode,
 } from "lucide-react";
 import {
   LuggageSticker,
@@ -17,8 +18,11 @@ import {
   SparkleDoodle,
   FloatingBubble,
 } from "./CuteDoodles";
+import { VjwGuideModal } from "./VjwGuideModal";
+import { OutboundPlaneIcon, InboundPlaneIcon } from "./FlightIcons";
 
 export const FlightHotelSection: React.FC = () => {
+  const [isVjwOpen, setIsVjwOpen] = useState<boolean>(false);
   return (
     <section id="flight-hotel" className="py-14 sm:py-20 bg-white border-b border-[#eee4e7] relative overflow-hidden">
       {/* Pure Frosted White Bubbles */}
@@ -49,7 +53,7 @@ export const FlightHotelSection: React.FC = () => {
                 <div className="flex items-center gap-2.5">
                   {/* Requirement 1: Outbound plane flies ↗ (朝右上角航行) */}
                   <div className="w-8 h-8 rounded-2xl bg-[#fdebf0] border border-[#faccd7] flex items-center justify-center text-[#b83358]">
-                    <Plane className="w-4 h-4 rotate-0" style={{ transform: "rotate(0deg)" }} />
+                    <OutboundPlaneIcon className="w-4 h-4" />
                   </div>
                   <div>
                     <span className="text-sm font-bold text-[#4a383d]">
@@ -87,7 +91,7 @@ export const FlightHotelSection: React.FC = () => {
                   <div className="w-full flex items-center gap-1">
                     <div className="h-0.5 flex-1 bg-[#f9d7df]" />
                     {/* Requirement 1: Outbound plane flies ↗ (朝右上角航行) */}
-                    <Plane className="w-4 h-4 text-[#b83358] rotate-0 shrink-0" style={{ transform: "rotate(0deg)" }} />
+                    <OutboundPlaneIcon className="w-4 h-4 text-[#b83358] shrink-0" />
                     <div className="h-0.5 flex-1 bg-[#f9d7df]" />
                   </div>
                   <span className="text-[10px] text-[#286f4a] mt-1 font-semibold px-2 py-0.5 bg-[#f3f9f6] rounded-full border border-[#d7ecdf]">
@@ -136,7 +140,7 @@ export const FlightHotelSection: React.FC = () => {
                 <div className="flex items-center gap-2.5">
                   {/* Requirement 2: Return flight icon flies ↘ (朝右下角俯衝) */}
                   <div className="w-8 h-8 rounded-2xl bg-[#fdebf0] border border-[#faccd7] flex items-center justify-center text-[#b83358]">
-                    <Plane className="w-4 h-4 rotate-90" style={{ transform: "rotate(90deg)", transformOrigin: "center" }} />
+                    <InboundPlaneIcon className="w-4 h-4" />
                   </div>
                   <div>
                     <span className="text-sm font-bold text-[#4a383d]">
@@ -174,7 +178,7 @@ export const FlightHotelSection: React.FC = () => {
                   <div className="w-full flex items-center gap-1">
                     <div className="h-0.5 flex-1 bg-[#f9d7df]" />
                     {/* Requirement 2: Return flight middle plane flies ↘ (朝右下角俯衝) */}
-                    <Plane className="w-4 h-4 text-[#b83358] rotate-90 shrink-0" style={{ transform: "rotate(90deg)", transformOrigin: "center" }} />
+                    <InboundPlaneIcon className="w-4 h-4 text-[#b83358] shrink-0" />
                     <div className="h-0.5 flex-1 bg-[#f9d7df]" />
                   </div>
                   <span className="text-[10px] text-[#286f4a] mt-1 font-semibold px-2 py-0.5 bg-[#f3f9f6] rounded-full border border-[#d7ecdf]">
@@ -215,6 +219,39 @@ export const FlightHotelSection: React.FC = () => {
               <span>降落時間：22:55（台灣時間）</span>
             </div>
           </div>
+        </div>
+
+        {/* Requirement 13: Interactive Visit Japan Web (VJW) Setup Guide Card */}
+        <div className="mb-12 bg-gradient-to-r from-[#fff2f5] via-[#fff9fa] to-white rounded-3xl border border-[#faccd7] p-5 sm:p-7 shadow-[0_6px_25px_rgba(240,160,180,0.1)] flex flex-col md:flex-row items-start md:items-center justify-between gap-5">
+          <div className="flex items-start gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-[#992545] text-white flex items-center justify-center shrink-0 shadow-xs">
+              <QrCode className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-bold text-[#992545] uppercase tracking-wider">
+                  VISIT JAPAN WEB ASSISTANT
+                </span>
+                <span className="text-[10px] bg-emerald-100 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded-full font-bold">
+                  通關必備
+                </span>
+              </div>
+              <h3 className="text-base sm:text-lg font-bold text-[#2d2527] mt-1">
+                Visit Japan Web 入境預填複製助手 ＆ 離線 QR Code 保險箱
+              </h3>
+              <p className="text-xs text-[#6e5d62] mt-1 max-w-xl leading-relaxed">
+                包含酷航 TR866 航班與人形町飯店日文/英文地址一鍵複製、7 大入境手續進度清單，並可上傳與離線保存通關 QR Code。
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={() => setIsVjwOpen(true)}
+            className="w-full md:w-auto px-6 py-3 rounded-full bg-[#992545] hover:bg-[#7e1c36] text-white text-xs sm:text-sm font-bold shadow-xs hover:shadow-md transition-all flex items-center justify-center gap-2 shrink-0 cursor-pointer hover:-translate-y-0.5"
+          >
+            <QrCode className="w-4 h-4 text-pink-200" />
+            <span>開啟 VJW 設定指南</span>
+          </button>
         </div>
 
         {/* Hotel Details Card - commi.me Magazine Editorial Style */}
@@ -293,6 +330,9 @@ export const FlightHotelSection: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* VJW Interactive Assistant Modal */}
+      <VjwGuideModal isOpen={isVjwOpen} onClose={() => setIsVjwOpen(false)} />
     </section>
   );
 };

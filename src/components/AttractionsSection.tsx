@@ -156,11 +156,13 @@ export const AttractionsSection: React.FC = () => {
                       src={attraction.imageSrc}
                       fallbackSrc={attraction.unsplashUrl}
                       alt={attraction.name}
-                      className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
+                      className={`w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105 ${
+                        attraction.id.includes("shock") ? "object-[center_18%]" : "object-center"
+                      }`}
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-stone-900/60 via-transparent to-transparent pointer-events-none" />
 
-                    {/* Category Badge (No 01, 02 station prefix) */}
+                    {/* Category Badge (No station prefix) */}
                     <div className="absolute top-3.5 left-3.5 bg-white/95 backdrop-blur-md text-[#992545] text-xs font-semibold px-3 py-1 rounded-full shadow-2xs border border-[#fad2dd]">
                       {attraction.category}
                     </div>
@@ -173,13 +175,6 @@ export const AttractionsSection: React.FC = () => {
                       <div className="hidden sm:block">
                         {getAttractionSticker(attraction.id)}
                       </div>
-                    </div>
-
-                    {/* Official Image Badge */}
-                    <div className="absolute top-11 right-3.5">
-                      <span className="text-[10px] bg-emerald-950/80 text-emerald-200 border border-emerald-500/30 px-2 py-0.5 rounded-full font-medium backdrop-blur-xs">
-                        官方寫真
-                      </span>
                     </div>
 
                     {/* Timestamp in Overlay */}

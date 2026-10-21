@@ -65,10 +65,10 @@ export default function App() {
       {showScrollTop && (
         <button
           onClick={scrollToTop}
-          aria-label="回到頂部"
-          className="fixed bottom-20 sm:bottom-24 right-4 sm:right-6 z-40 p-2.5 sm:p-3 bg-stone-800/85 text-white backdrop-blur-md rounded-full shadow-lg hover:bg-stone-800 transition-all hover:-translate-y-0.5 focus:outline-hidden"
+          aria-label="返回頂端"
+          className="fixed bottom-20 sm:bottom-24 right-4 sm:right-6 z-40 p-2.5 sm:p-3 bg-[#fff8fa]/95 text-[#a82a51] border border-[#f5cfd9] rounded-full shadow-[0_4px_18px_rgba(180,70,95,0.18)] hover:bg-[#ffeef3] hover:border-[#ea9fb2] hover:shadow-[0_6px_22px_rgba(180,70,95,0.25)] hover:scale-105 active:scale-95 transition-all duration-300 backdrop-blur-md focus:outline-hidden cursor-pointer"
         >
-          <ArrowUp className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-amber-300" />
+          <ArrowUp className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-[#b83358]" />
         </button>
       )}
     </div>
