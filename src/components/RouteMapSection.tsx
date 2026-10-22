@@ -18,6 +18,7 @@ import {
   SparkleDoodle,
   FloatingBubble,
 } from "./CuteDoodles";
+import { RunningRouteModal } from "./RunningRouteModal";
 
 interface DailyStop {
   id: string;
@@ -33,6 +34,7 @@ interface DailyStop {
 
 export const RouteMapSection: React.FC = () => {
   const [activeDay, setActiveDay] = useState<1 | 2>(1);
+  const [isRunningModalOpen, setIsRunningModalOpen] = useState<boolean>(false);
 
   // Selected stop in Day 1 and Day 2 Google Maps view
   const [selectedDay1StopIdx, setSelectedDay1StopIdx] = useState<number>(3); // Default to Ariake Garden
@@ -313,23 +315,33 @@ export const RouteMapSection: React.FC = () => {
           </div>
 
           {activeDay === 1 && (
-            <button
-              onClick={handleDownloadPdf}
-              disabled={isDownloadingPdf}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-[#8e2443] bg-[#fdf2f4] hover:bg-[#fae4e8] border border-[#f3d9de] rounded-full transition-all cursor-pointer shadow-2xs"
-            >
-              {isDownloadingPdf ? (
-                <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span>生成中...</span>
-                </>
-              ) : (
-                <>
-                  <Download className="w-3.5 h-3.5" />
-                  <span>下載 10K 路線離線 PDF</span>
-                </>
-              )}
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={() => setIsRunningModalOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-white bg-[#992545] hover:bg-[#7e1c36] rounded-full transition-all cursor-pointer shadow-2xs"
+              >
+                <Footprints className="w-3.5 h-3.5" />
+                <span>開啟 10K 路線地圖與指南</span>
+              </button>
+
+              <button
+                onClick={handleDownloadPdf}
+                disabled={isDownloadingPdf}
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-[#8e2443] bg-[#fdf2f4] hover:bg-[#fae4e8] border border-[#f3d9de] rounded-full transition-all cursor-pointer shadow-2xs"
+              >
+                {isDownloadingPdf ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>生成中...</span>
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-3.5 h-3.5" />
+                    <span>離線 PDF</span>
+                  </>
+                )}
+              </button>
+            </div>
           )}
         </div>
 
@@ -578,6 +590,12 @@ export const RouteMapSection: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Requirement 4: Interactive 10K Running Route Modal with drawn vector map */}
+      <RunningRouteModal
+        isOpen={isRunningModalOpen}
+        onClose={() => setIsRunningModalOpen(false)}
+      />
     </section>
   );
 };

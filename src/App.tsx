@@ -8,18 +8,38 @@ import { RouteMapSection } from "./components/RouteMapSection";
 import { PackingWeatherSection } from "./components/PackingWeatherSection";
 import { Footer } from "./components/Footer";
 import { BottomNav } from "./components/BottomNav";
-import { ArrowUp } from "lucide-react";
+import { ArrowUp, ArrowLeft } from "lucide-react";
+
+const TAB_TITLES: Record<string, string> = {
+  itinerary: "每日行程・2天1夜時間表",
+  attractions: "精選景點・舞台劇與美饌",
+  "flight-hotel": "航班住宿・酷航與人形町飯店",
+  routes: "路線導航・台場 10K 路線地圖",
+  checklist: "準備清單・行李與手提打包",
+  weather: "天氣概要・東京連線氣象預報",
+};
 
 export default function App() {
+  const [activeTab, setActiveTab] = useState<string>("home");
   const [showScrollTop, setShowScrollTop] = useState(false);
 
   useEffect(() => {
     const handleScroll = () => {
-      setShowScrollTop(window.scrollY > 400);
+      setShowScrollTop(window.scrollY > 350);
     };
     window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
+
+  const handleSelectTab = (tabId: string) => {
+    setActiveTab(tabId);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handleGoHome = () => {
+    setActiveTab("home");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   const scrollToTop = () => {
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -31,37 +51,67 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#faf9f7] text-[#332a2c] font-sans selection:bg-[#fde2e8] selection:text-[#8e2443] pb-24 sm:pb-28">
-      {/* Top Magazine Header (Without duplicate navigation links) */}
-      <Header onPrint={handlePrint} />
+      {/* Top Global Header (Fixed across all views) */}
+      <Header
+        onPrint={handlePrint}
+        onGoHome={handleGoHome}
+        activeTab={activeTab}
+      />
 
-      {/* Hero Visual Section */}
-      <Hero />
+      {/* Breadcrumb Bar when viewing specific tab page */}
+      {activeTab !== "home" && (
+        <div className="bg-white/80 border-b border-[#eee4e7] backdrop-blur-xs sticky top-[57px] z-20">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 py-2 flex items-center justify-between text-xs">
+            <button
+              type="button"
+              onClick={handleGoHome}
+              className="inline-flex items-center gap-1.5 font-bold text-[#8e2443] hover:text-[#5f132a] transition-colors cursor-pointer group"
+            >
+              <ArrowLeft className="w-3.5 h-3.5 transition-transform group-hover:-translate-x-0.5" />
+              <span>返回首頁</span>
+            </button>
+            <span className="font-semibold text-[#5a484e] bg-[#fdf2f4] px-2.5 py-0.5 rounded-full border border-[#f5d9df] text-[11px] truncate max-w-[200px] sm:max-w-none">
+              {TAB_TITLES[activeTab] || "行程專欄"}
+            </span>
+          </div>
+        </div>
+      )}
 
-      {/* Main Content Sections */}
-      <main>
+      {/* Dynamic Main Content: Tab Isolated SPA Architecture */}
+      <main className="transition-opacity duration-300">
+        {/* Default View: Home Hero & Features Portal */}
+        {activeTab === "home" && <Hero onNavigate={handleSelectTab} />}
+
         {/* ① 每日行程 (ID: itinerary) */}
-        <ItinerarySection />
+        {activeTab === "itinerary" && <ItinerarySection />}
 
         {/* ② 景點介紹 (ID: attractions) */}
-        <AttractionsSection />
+        {activeTab === "attractions" && <AttractionsSection />}
 
         {/* ③ 航班及住宿資訊 (ID: flight-hotel) */}
-        <FlightHotelSection />
+        {activeTab === "flight-hotel" && <FlightHotelSection />}
 
         {/* ④ 每日路線導航圖 (ID: routes) */}
-        <RouteMapSection />
+        {activeTab === "routes" && <RouteMapSection />}
 
-        {/* ⑤ 準備清單 (ID: checklist) ＆ ⑥ 天氣概要 (ID: weather) */}
-        <PackingWeatherSection />
+        {/* ⑤ 準備清單 (ID: checklist) */}
+        {activeTab === "checklist" && (
+          <PackingWeatherSection viewMode="checklist" />
+        )}
+
+        {/* ⑥ 天氣概要 (ID: weather) */}
+        {activeTab === "weather" && (
+          <PackingWeatherSection viewMode="weather" />
+        )}
       </main>
 
-      {/* Footer */}
-      <Footer />
+      {/* Global Footer */}
+      <Footer onNavigate={handleSelectTab} />
 
-      {/* Fixed Floating Bottom Navigation Bar (The Single Main Nav Bar) */}
-      <BottomNav />
+      {/* Fixed Floating Bottom Navigation Bar (Synchronized with activeTab) */}
+      <BottomNav activeTab={activeTab} onSelectTab={handleSelectTab} />
 
-      {/* Scroll to Top Floating Button (positioned above floating bottom nav) */}
+      {/* Scroll to Top Floating Button */}
       {showScrollTop && (
         <button
           onClick={scrollToTop}

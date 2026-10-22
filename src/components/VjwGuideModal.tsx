@@ -180,11 +180,11 @@ export const VjwGuideModal: React.FC<VjwGuideModalProps> = ({ isOpen, onClose })
     <div
       role="dialog"
       aria-modal="true"
-      className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 overflow-y-auto"
+      className="fixed inset-0 z-[70] bg-black/65 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 overflow-y-auto"
       onClick={onClose}
     >
       <div
-        className="relative w-full max-w-2xl bg-white rounded-3xl shadow-2xl border border-[#ebd8dc] overflow-hidden my-auto max-h-[92vh] flex flex-col"
+        className="relative w-full max-w-2xl bg-white rounded-3xl shadow-2xl border border-[#ebd8dc] overflow-hidden my-auto max-h-[88vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
@@ -630,7 +630,7 @@ export const VjwGuideModal: React.FC<VjwGuideModalProps> = ({ isOpen, onClose })
         <div
           role="dialog"
           aria-modal="true"
-          className="fixed inset-0 z-60 bg-white flex flex-col items-center justify-center p-4"
+          className="fixed inset-0 z-[80] bg-white flex flex-col items-center justify-center p-4"
           onClick={() => setIsQrFullscreen(false)}
         >
           <div className="absolute top-4 right-4 z-10">

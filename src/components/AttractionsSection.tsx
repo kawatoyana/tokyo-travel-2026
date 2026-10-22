@@ -156,8 +156,9 @@ export const AttractionsSection: React.FC = () => {
                       src={attraction.imageSrc}
                       fallbackSrc={attraction.unsplashUrl}
                       alt={attraction.name}
+                      style={attraction.id.includes("shock") ? { objectPosition: "center 0%" } : undefined}
                       className={`w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105 ${
-                        attraction.id.includes("shock") ? "object-[center_18%]" : "object-center"
+                        attraction.id.includes("shock") ? "object-top" : "object-center"
                       }`}
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-stone-900/60 via-transparent to-transparent pointer-events-none" />

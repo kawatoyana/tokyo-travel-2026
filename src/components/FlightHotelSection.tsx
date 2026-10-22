@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { FLIGHTS, HOTEL } from "../data/tripData";
 import {
   Plane,
@@ -11,6 +11,7 @@ import {
   Train,
   ExternalLink,
   QrCode,
+  RefreshCw,
 } from "lucide-react";
 import {
   LuggageSticker,
@@ -20,9 +21,32 @@ import {
 } from "./CuteDoodles";
 import { VjwGuideModal } from "./VjwGuideModal";
 import { OutboundPlaneIcon, InboundPlaneIcon } from "./FlightIcons";
+import {
+  fetchTaoyuanFlightCounter,
+  DEFAULT_TPE_SCOOT_COUNTER,
+  FlightCounterInfo,
+} from "../services/taoyuanAirportService";
 
 export const FlightHotelSection: React.FC = () => {
   const [isVjwOpen, setIsVjwOpen] = useState<boolean>(false);
+  const [tpeCounter, setTpeCounter] = useState<FlightCounterInfo>(DEFAULT_TPE_SCOOT_COUNTER);
+  const [isRefreshingTpe, setIsRefreshingTpe] = useState<boolean>(false);
+
+  const loadTpeCounter = async () => {
+    try {
+      setIsRefreshingTpe(true);
+      const data = await fetchTaoyuanFlightCounter();
+      setTpeCounter(data);
+    } catch (err) {
+      console.warn("TPE counter refresh error:", err);
+    } finally {
+      setIsRefreshingTpe(false);
+    }
+  };
+
+  useEffect(() => {
+    loadTpeCounter();
+  }, []);
   return (
     <section id="flight-hotel" className="py-14 sm:py-20 bg-white border-b border-[#eee4e7] relative overflow-hidden">
       {/* Pure Frosted White Bubbles */}
@@ -115,8 +139,73 @@ export const FlightHotelSection: React.FC = () => {
                 </div>
               </div>
 
+              {/* Requirement 5: Official Taoyuan Airport Real-Time Check-in Counter */}
+              <div className="mt-5 p-4 bg-gradient-to-br from-[#fff2f5] via-white to-[#fff8fa] rounded-2xl border border-[#faccd7] shadow-2xs">
+                <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-[#fae1e7]">
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex h-2.5 w-2.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                    </div>
+                    <span className="text-[11px] font-bold text-[#8e2443] uppercase tracking-wider font-mono">
+                      桃園國際機場官方 FIDS 連線
+                    </span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#fdebf0] text-[#a82a51] font-bold border border-[#fad2dd]">
+                      {tpeCounter.status}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="text-[10px] text-[#9c7580] font-mono">
+                      {tpeCounter.updatedAt}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={loadTpeCounter}
+                      disabled={isRefreshingTpe}
+                      className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-white hover:bg-[#fff0f4] text-[#8e2443] border border-[#f3d9de] text-[11px] font-semibold cursor-pointer shadow-2xs transition-all disabled:opacity-50"
+                      title="向桃園機場官方系統重新整理最新櫃台"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${isRefreshingTpe ? "animate-spin text-[#b83358]" : ""}`} />
+                      <span>更新櫃台</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                  <div className="p-2.5 bg-white rounded-xl border border-[#fae0e6] shadow-2xs">
+                    <span className="text-[10px] text-[#9c7580] block font-medium">機場報到櫃台 (Check-in)</span>
+                    <span className="text-sm sm:text-base font-extrabold text-[#b83358] font-mono mt-0.5 block">
+                      {tpeCounter.counter}
+                    </span>
+                    <span className="text-[10px] text-[#735860] block mt-0.5">{tpeCounter.terminal}</span>
+                  </div>
+
+                  <div className="p-2.5 bg-white rounded-xl border border-[#fae0e6] shadow-2xs">
+                    <span className="text-[10px] text-[#9c7580] block font-medium">櫃台開放時間</span>
+                    <span className="text-xs sm:text-sm font-bold text-[#4a383d] font-mono mt-0.5 block">
+                      04:20–05:50
+                    </span>
+                    <span className="text-[10px] text-[#a82a51] block mt-0.5">起飛前 60 分鐘關櫃</span>
+                  </div>
+                </div>
+
+                <div className="mt-2.5 flex items-center justify-between text-[11px] text-[#786b6f]">
+                  <span>預估登機門：{tpeCounter.gate}</span>
+                  <a
+                    href="https://www.taoyuan-airport.com/flight_departures"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[#8e2443] hover:underline font-bold inline-flex items-center gap-1"
+                  >
+                    <span>桃機官網航顯</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+              </div>
+
               {/* Transit Tip */}
-              <div className="mt-6 p-4 bg-[#fff7f8] rounded-2xl border border-[#fae1e7] text-xs text-[#6b4f57] space-y-1.5">
+              <div className="mt-5 p-4 bg-[#fff7f8] rounded-2xl border border-[#fae1e7] text-xs text-[#6b4f57] space-y-1.5">
                 <div className="font-bold text-[#a82a51] flex items-center gap-1.5">
                   <TrainSticker className="w-5 h-5" />
                   <span>成田直達人形町密技：</span>

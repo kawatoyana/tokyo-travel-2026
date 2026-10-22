@@ -2,7 +2,23 @@ import React from "react";
 import { Compass, ShieldCheck } from "lucide-react";
 import { SparkleDoodle } from "./CuteDoodles";
 
-export const Footer: React.FC = () => {
+interface FooterProps {
+  onNavigate?: (tabId: string) => void;
+}
+
+export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
+  const handleNavClick = (e: React.MouseEvent, tabId: string) => {
+    e.preventDefault();
+    if (onNavigate) {
+      onNavigate(tabId);
+    } else {
+      const element = document.getElementById(tabId);
+      if (element) {
+        element.scrollIntoView({ behavior: "smooth" });
+      }
+    }
+  };
+
   return (
     <footer className="bg-[#2a2025] text-[#b8a6ad] py-14 border-t border-[#3d2f36]">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -29,19 +45,31 @@ export const Footer: React.FC = () => {
               </div>
               <ul className="space-y-1.5 text-[#9e8b92]">
                 <li>
-                  <a href="#itinerary" className="hover:text-white transition-colors">
+                  <button
+                    type="button"
+                    onClick={(e) => handleNavClick(e, "itinerary")}
+                    className="hover:text-white transition-colors cursor-pointer text-left"
+                  >
                     每日行程時間表
-                  </a>
+                  </button>
                 </li>
                 <li>
-                  <a href="#attractions" className="hover:text-white transition-colors">
+                  <button
+                    type="button"
+                    onClick={(e) => handleNavClick(e, "attractions")}
+                    className="hover:text-white transition-colors cursor-pointer text-left"
+                  >
                     精選景點與美饌導覽
-                  </a>
+                  </button>
                 </li>
                 <li>
-                  <a href="#routes" className="hover:text-white transition-colors">
-                    10K 路線軌跡 ＆ 離線 PDF
-                  </a>
+                  <button
+                    type="button"
+                    onClick={(e) => handleNavClick(e, "routes")}
+                    className="hover:text-white transition-colors cursor-pointer text-left"
+                  >
+                    10K 路線軌跡 ＆ 離線地圖
+                  </button>
                 </li>
               </ul>
             </div>
@@ -52,19 +80,31 @@ export const Footer: React.FC = () => {
               </div>
               <ul className="space-y-1.5 text-[#9e8b92]">
                 <li>
-                  <a href="#flight-hotel" className="hover:text-white transition-colors">
+                  <button
+                    type="button"
+                    onClick={(e) => handleNavClick(e, "flight-hotel")}
+                    className="hover:text-white transition-colors cursor-pointer text-left"
+                  >
                     酷航航班 ＆ VIA INN 人形町
-                  </a>
+                  </button>
                 </li>
                 <li>
-                  <a href="#checklist" className="hover:text-white transition-colors">
+                  <button
+                    type="button"
+                    onClick={(e) => handleNavClick(e, "checklist")}
+                    className="hover:text-white transition-colors cursor-pointer text-left"
+                  >
                     行前行李準備清單
-                  </a>
+                  </button>
                 </li>
                 <li>
-                  <a href="#weather" className="hover:text-white transition-colors">
+                  <button
+                    type="button"
+                    onClick={(e) => handleNavClick(e, "weather")}
+                    className="hover:text-white transition-colors cursor-pointer text-left"
+                  >
                     東京天氣概要與氣象預報
-                  </a>
+                  </button>
                 </li>
               </ul>
             </div>

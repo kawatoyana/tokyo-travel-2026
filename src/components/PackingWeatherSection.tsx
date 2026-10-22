@@ -29,7 +29,13 @@ import {
   FloatingBubble,
 } from "./CuteDoodles";
 
-export const PackingWeatherSection: React.FC = () => {
+interface PackingWeatherSectionProps {
+  viewMode?: "all" | "checklist" | "weather";
+}
+
+export const PackingWeatherSection: React.FC<PackingWeatherSectionProps> = ({
+  viewMode = "all",
+}) => {
   const [weatherDayTab, setWeatherDayTab] = useState<"1128" | "1129">("1128");
 
   const [checklist, setChecklist] = useState<ChecklistItem[]>(() => {
@@ -183,6 +189,9 @@ export const PackingWeatherSection: React.FC = () => {
       ? METEOROLOGICAL_DATA.days[0]
       : METEOROLOGICAL_DATA.days[1];
 
+  const showChecklist = viewMode === "all" || viewMode === "checklist";
+  const showWeather = viewMode === "all" || viewMode === "weather";
+
   return (
     <div className="bg-[#faf8f6] divide-y divide-[#eee4e7] relative overflow-hidden">
       {/* Pure Frosted White Bubbles */}
@@ -192,7 +201,8 @@ export const PackingWeatherSection: React.FC = () => {
       {/* ============================================================== */}
       {/* 1. CHECKLIST SECTION (ID: checklist)                            */}
       {/* ============================================================== */}
-      <section id="checklist" className="py-14 sm:py-20 relative z-10">
+      {showChecklist && (
+        <section id="checklist" className="py-14 sm:py-20 relative z-10">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
             <div>
@@ -331,11 +341,13 @@ export const PackingWeatherSection: React.FC = () => {
           </div>
         </div>
       </section>
+      )}
 
       {/* ============================================================== */}
       {/* 2. WEATHER SECTION (ID: weather)                              */}
       {/* ============================================================== */}
-      <section id="weather" className="py-16 sm:py-24 relative z-10">
+      {showWeather && (
+        <section id="weather" className="py-16 sm:py-24 relative z-10">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12">
             <div>
@@ -599,6 +611,7 @@ export const PackingWeatherSection: React.FC = () => {
           </div>
         </div>
       </section>
+      )}
     </div>
   );
 };

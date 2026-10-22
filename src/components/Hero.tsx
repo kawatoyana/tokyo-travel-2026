@@ -21,7 +21,11 @@ import {
   CompassSticker,
 } from "./CuteDoodles";
 
-export const Hero: React.FC = () => {
+interface HeroProps {
+  onNavigate?: (tab: string) => void;
+}
+
+export const Hero: React.FC<HeroProps> = ({ onNavigate }) => {
   const [activePhoto, setActivePhoto] = useState<number>(0);
   const [isLightboxOpen, setIsLightboxOpen] = useState<boolean>(false);
 
@@ -152,8 +156,11 @@ export const Hero: React.FC = () => {
 
               <h1 className="text-3xl sm:text-4xl lg:text-[42px] font-black tracking-tight text-[#2d2527] leading-[1.25]">
                 台北東京週末散策記
-                <span className="block text-lg sm:text-2xl font-bold text-[#8e2443] mt-2">
-                  有明購物・SHOCK 舞台劇・東京灣 10K 夜跑・新宿御苑
+                <span className="block text-base sm:text-xl lg:text-2xl font-bold text-[#8e2443] mt-2 leading-relaxed">
+                  <span className="inline-block">有明購物</span>・
+                  <span className="inline-block">SHOCK 舞台劇</span>・
+                  <span className="inline-block">東京灣 10K 夜跑</span>・
+                  <span className="inline-block">新宿御苑</span>
                 </span>
               </h1>
 
@@ -162,17 +169,17 @@ export const Hero: React.FC = () => {
               </p>
             </div>
 
-            {/* Flight Mini Boarding Pass Chip (Requirement 11: Correct plane angles ↗ and ↘) */}
+            {/* Flight Mini Boarding Pass Chip (Requirement 1: Removed ↗ and ↘ arrows) */}
             <div className="p-3.5 bg-white rounded-2xl border border-[#ebd8dc] shadow-2xs flex flex-wrap items-center justify-between gap-3 text-xs max-w-lg">
               <div className="flex items-center gap-2.5">
                 <div className="flex items-center gap-1 text-[#2d2527] font-semibold">
                   <OutboundPlaneIcon className="w-3.5 h-3.5 text-[#992545]" />
-                  <span>TR866 06:50 ↗</span>
+                  <span>TR866 06:50</span>
                 </div>
                 <span className="text-[#c8b4ba]">|</span>
                 <div className="flex items-center gap-1 text-[#2d2527] font-semibold">
                   <InboundPlaneIcon className="w-3.5 h-3.5 text-[#992545]" />
-                  <span>TR875 19:45 ↘</span>
+                  <span>TR875 19:45</span>
                 </div>
               </div>
 
@@ -181,6 +188,34 @@ export const Hero: React.FC = () => {
                 <span>宿 VIA INN PRIME 日本橋人形町</span>
               </div>
             </div>
+
+            {/* Quick Feature Portal Links for SPA Navigation */}
+            {onNavigate && (
+              <div className="pt-2">
+                <span className="text-[11px] font-bold text-[#8c7b80] uppercase tracking-wider block mb-2">
+                  快速翻閱手帖章節：
+                </span>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { id: "itinerary", label: "每日行程", tag: "DAY 1–2" },
+                    { id: "attractions", label: "景點介紹", tag: "8 大必訪" },
+                    { id: "flight-hotel", label: "航班住宿", tag: "酷航+VIA" },
+                    { id: "routes", label: "路線導航", tag: "10K+地圖" },
+                    { id: "checklist", label: "準備清單", tag: "行前打勾" },
+                    { id: "weather", label: "天氣概要", tag: "即時連線" },
+                  ].map((btn) => (
+                    <button
+                      key={btn.id}
+                      onClick={() => onNavigate(btn.id)}
+                      className="px-3 py-1.5 rounded-full bg-white hover:bg-[#fff0f4] border border-[#ebd8dc] text-xs font-semibold text-[#6e5d62] hover:text-[#992545] shadow-2xs transition-all cursor-pointer flex items-center gap-1"
+                    >
+                      <span>{btn.label}</span>
+                      <span className="text-[10px] text-[#992545] font-mono">({btn.tag})</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Right Column: Visual Magazine Polaroid & Photo Showcase (5 cols) */}
@@ -202,15 +237,16 @@ export const Hero: React.FC = () => {
                   title="日式斜紋櫻粉紙膠帶"
                 />
 
-                {/* Main Photo Viewport - Requirement 9: SHOCK poster shifted downwards to show character & title */}
-                <div className="relative aspect-[4/3] rounded-2xl overflow-hidden bg-[#f4ecef] group">
+                {/* Main Photo Viewport - Requirement 3: Koichi Domoto face 100% visible with objectPosition center 0% */}
+                <div className="relative aspect-[4/3] rounded-2xl overflow-hidden bg-[#1a0f12] group">
                   <SmartImage
                     key={`hero-photo-${activePhoto}-${heroPhotos[activePhoto].imageSrc}`}
                     src={heroPhotos[activePhoto].imageSrc}
                     fallbackSrc={heroPhotos[activePhoto].fallbackSrc}
                     alt={heroPhotos[activePhoto].title}
+                    style={heroPhotos[activePhoto].isPoster ? { objectPosition: "center 0%" } : undefined}
                     className={`w-full h-full object-cover transition-transform duration-500 group-hover:scale-102 ${
-                      heroPhotos[activePhoto].isPoster ? "object-[center_18%]" : "object-center"
+                      heroPhotos[activePhoto].isPoster ? "object-top" : "object-center"
                     }`}
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/20 pointer-events-none" />

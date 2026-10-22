@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React from "react";
 import {
   Calendar,
   Compass,
@@ -24,43 +24,15 @@ const NAV_ITEMS: NavItem[] = [
   { id: "weather", label: "天氣概要", shortLabel: "天氣", icon: CloudSun },
 ];
 
-export const BottomNav: React.FC = () => {
-  const [activeSection, setActiveSection] = useState<string>("itinerary");
+interface BottomNavProps {
+  activeTab: string;
+  onSelectTab: (tabId: string) => void;
+}
 
-  useEffect(() => {
-    const handleScroll = () => {
-      const scrollPosition = window.scrollY + 220;
-
-      for (let i = NAV_ITEMS.length - 1; i >= 0; i--) {
-        const item = NAV_ITEMS[i];
-        const el = document.getElementById(item.id);
-        if (el && el.offsetTop <= scrollPosition) {
-          setActiveSection(item.id);
-          return;
-        }
-      }
-    };
-
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    handleScroll();
-    return () => window.removeEventListener("scroll", handleScroll);
-  }, []);
-
-  const scrollToSection = (id: string) => {
-    setActiveSection(id);
-    const element = document.getElementById(id);
-    if (element) {
-      const headerOffset = 65;
-      const elementPosition = element.getBoundingClientRect().top;
-      const offsetPosition = elementPosition + window.pageYOffset - headerOffset;
-
-      window.scrollTo({
-        top: offsetPosition,
-        behavior: "smooth",
-      });
-    }
-  };
-
+export const BottomNav: React.FC<BottomNavProps> = ({
+  activeTab,
+  onSelectTab,
+}) => {
   return (
     <nav
       aria-label="懸浮快速導覽"
@@ -70,21 +42,22 @@ export const BottomNav: React.FC = () => {
         <div className="grid grid-cols-6 gap-1">
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
-            const isActive = activeSection === item.id;
+            const isActive = activeTab === item.id;
 
             return (
               <button
                 key={item.id}
-                onClick={() => scrollToSection(item.id)}
-                className={`relative flex flex-col items-center justify-center py-2 px-1 rounded-full transition-all duration-300 group ${
+                type="button"
+                onClick={() => onSelectTab(item.id)}
+                className={`relative flex flex-col items-center justify-center py-2 px-1 rounded-full transition-all duration-300 group cursor-pointer ${
                   isActive
-                    ? "bg-white text-[#992545] shadow-xs font-semibold"
+                    ? "bg-white text-[#992545] shadow-xs font-bold"
                     : "text-[#7d5f66] hover:text-[#4a383d] hover:bg-white/60"
                 }`}
               >
-                {/* Gentle Active Indicator Light */}
+                {/* Active Red Dot Indicator - Exactly synchronized with activeTab */}
                 {isActive && (
-                  <span className="absolute -top-1 w-1.5 h-1.5 rounded-full bg-[#b83358] shadow-[0_0_8px_rgba(184,51,88,0.8)] animate-pulse" />
+                  <span className="absolute -top-1 w-2 h-2 rounded-full bg-[#b83358] shadow-[0_0_8px_rgba(184,51,88,0.85)] animate-pulse" />
                 )}
 
                 <div
@@ -94,7 +67,7 @@ export const BottomNav: React.FC = () => {
                 >
                   <Icon
                     className={`w-4 h-4 sm:w-4.5 sm:h-4.5 ${
-                      isActive ? "text-[#b83358] stroke-[2.3]" : "text-[#8c606c] stroke-[1.8]"
+                      isActive ? "text-[#b83358] stroke-[2.4]" : "text-[#8c606c] stroke-[1.8]"
                     }`}
                   />
                 </div>
