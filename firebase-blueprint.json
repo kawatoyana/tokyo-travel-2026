@@ -25,6 +25,11 @@
           "maxLength": 50,
           "description": "Category: dining, sightseeing, shopping, cafe, stay, or other"
         },
+        "categoryLabel": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "Friendly Chinese category label"
+        },
         "summary": {
           "type": "string",
           "maxLength": 1000,

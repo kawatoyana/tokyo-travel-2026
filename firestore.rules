@@ -25,12 +25,13 @@ service cloud.firestore {
 
     function isValidSavedPlace(data) {
       return data.keys().hasAll(['url', 'name', 'category', 'userId']) &&
-             data.keys().hasOnly(['url', 'name', 'japaneseName', 'category', 'summary', 'highlight', 'address', 'tips', 'notes', 'isVisited', 'addedByName', 'userId', 'createdAt', 'updatedAt']) &&
+             data.keys().hasOnly(['url', 'name', 'japaneseName', 'category', 'categoryLabel', 'summary', 'highlight', 'address', 'tips', 'notes', 'isVisited', 'addedByName', 'userId', 'createdAt', 'updatedAt']) &&
              data.url is string && data.url.size() <= 1000 &&
              data.name is string && data.name.size() <= 200 &&
              data.category is string && data.category.size() <= 50 &&
              data.userId is string && data.userId.size() <= 128 &&
              (!('japaneseName' in data) || (data.japaneseName is string && data.japaneseName.size() <= 200)) &&
+             (!('categoryLabel' in data) || (data.categoryLabel is string && data.categoryLabel.size() <= 100)) &&
              (!('summary' in data) || (data.summary is string && data.summary.size() <= 1000)) &&
              (!('highlight' in data) || (data.highlight is string && data.highlight.size() <= 500)) &&
              (!('address' in data) || (data.address is string && data.address.size() <= 300)) &&

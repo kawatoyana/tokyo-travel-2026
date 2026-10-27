@@ -452,35 +452,37 @@ async function startServer() {
       // Generate rich baseline place information using our knowledge base & area synthesis
       const richBaseline = generateRichPlaceInfo(resolvedUrl, placeQueryHint, rawText);
 
-      // 2. Call Gemini AI (gemini-3.8-flash) to analyze and enrich place
+      // 2. Call Gemini AI (gemini-3.5-flash-lite) to analyze and enrich place
       let aiResult = richBaseline;
       if (process.env.GEMINI_API_KEY) {
         try {
           const effectiveName = (placeQueryHint || richBaseline.name || rawText || "日本熱門景點").trim();
           const prompt = `你是一位精通日本東京自由行的旅遊達人與在地嚮導。
-請針對以下 Google Maps 地點資訊進行專業分析與介紹：
-- 地點名稱：${effectiveName}
-- 原始連結：${targetUrl}
-- 解析後網址與座標：${resolvedUrl}
+請針對以下 Google Maps 地點/地址資訊進行專業深度分析與介紹：
+- 地點或地址：${effectiveName}
+- 原始連結或輸入：${targetUrl}
+- 解析後網址：${resolvedUrl}
 - 預估所在區域：${richBaseline.address}
-- 備註：${rawText || "無"}
+- 額外備註：${rawText || "無"}
 
-請以道地繁體中文提供完整景點/店家資訊，格式必須為合法 JSON：
-1. name: 繁體中文全名（如「志乃多壽司（稻荷壽司）」、「淺草寺」、「皇居」）
-2. japaneseName: 日文原名及假名標音（如「志乃多寿司（しのだずし）」、「浅草寺（せんそうじ）」）
-3. category: 嚴格限定為下列代碼之一：dining, sightseeing, shopping, cafe, stay, other
-4. categoryLabel: 對應中文標籤（如「餐廳美饌」、「觀光景點」、「購物商場」、「甜點咖啡」、「旅宿飯店」、「其他探訪」）
-5. highlight: 一句話招牌亮點（30字內，如「百年名鋪多汁油揚豆腐皮稻荷壽司與甘甜干瓢卷」）
-6. summary: 2至3句話（80至120字）具體介紹該店/景點的招牌必吃、歷史背景或魅力，嚴禁使用空泛套話！
-7. address: 所在區域或地址（如「東京都台東區淺草」）
-8. tips: 1至2句實用建議（如推薦餐點、參拜最佳時段、排隊預約技巧）
+重要解析指示：
+1. 若輸入的是日本地址（如包含區、町、丁目、番地或郵遞區號），請精確辨識該地址所在的著名景點、商場、百年名店或代表性地標名稱（例如「押上1-1-2」對應東京晴空塔、「千代田1-1」對應皇居、「淺草2-3-1」對應淺草寺；若為一般民宅/商務地址，則給出該街區最具代表性的推薦據點與商圈特色）。
+2. 請以道地繁體中文提供完整景點/店家資訊，格式必須為合法的純 JSON：
+- name: 繁體中文全名（如「東京晴空塔」、「志乃多壽司」、「淺草寺」）
+- japaneseName: 日文原名及假名標音（如「東京スカイツリー」、「志乃多寿司（しのだずし）」、「浅草寺（せんそうじ）」）
+- category: 嚴格限定為下列代碼之一：dining, sightseeing, shopping, cafe, stay, other
+- categoryLabel: 對應中文標籤（餐廳美饌、觀光景點、購物商場、甜點咖啡、旅宿飯店、其他探訪）
+- highlight: 一句話招牌亮點（30字內，如「世界最高自立式電波塔、360度展望台與晴空街道」）
+- summary: 2至3句話（80至130字）具體介紹該地點的招牌必吃、歷史亮點或核心魅力，切忌空泛套話！
+- address: 所在區域或地址（如「東京都墨田區押上1-1-2」）
+- tips: 1至2句自由行旅人實用貼心建議（如最佳拍攝時段、排隊預約技巧或外帶推薦）
 
 純 JSON 格式回應，不得包含 Markdown 標記：
 {
   "name": "...",
   "japaneseName": "...",
-  "category": "dining",
-  "categoryLabel": "餐廳美饌",
+  "category": "sightseeing",
+  "categoryLabel": "觀光景點",
   "highlight": "...",
   "summary": "...",
   "address": "...",
@@ -488,15 +490,17 @@ async function startServer() {
 }`;
 
           try {
+            // Prefer fast and responsive gemini-3.5-flash-lite, fallback to gemini-3.8-flash
+            const modelToUse = "gemini-3.5-flash-lite";
             const geminiPromise = ai.models.generateContent({
-              model: "gemini-3.8-flash",
+              model: modelToUse,
               contents: prompt,
               config: {
                 responseMimeType: "application/json",
               },
             });
             const timeoutPromise = new Promise((_, reject) =>
-              setTimeout(() => reject(new Error("Gemini API call timed out")), 5000)
+              setTimeout(() => reject(new Error("Gemini API call timed out")), 7000)
             );
             const response = (await Promise.race([geminiPromise, timeoutPromise])) as any;
             if (response && response.text) {
@@ -509,7 +513,24 @@ async function startServer() {
               }
             }
           } catch (modelErr: any) {
-            console.warn("Gemini call skipped/timed out, using high-fidelity rich baseline:", modelErr?.message);
+            console.warn("Primary Gemini call failed, attempting fallback model:", modelErr?.message);
+            try {
+              const fallbackResponse = await ai.models.generateContent({
+                model: "gemini-3.8-flash",
+                contents: prompt,
+                config: {
+                  responseMimeType: "application/json",
+                },
+              });
+              if (fallbackResponse && fallbackResponse.text) {
+                const parsed = JSON.parse(fallbackResponse.text);
+                if (parsed && parsed.name && parsed.summary) {
+                  aiResult = { ...richBaseline, ...parsed };
+                }
+              }
+            } catch (fallbackErr: any) {
+              console.warn("Gemini fallback also failed, using rich baseline:", fallbackErr?.message);
+            }
           }
         } catch (geminiError) {
           console.warn("Gemini API processing failed, falling back to smart rich baseline:", geminiError);

@@ -223,6 +223,9 @@ export const PocketWishlistSection: React.FC = () => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // Newly added highlight tracking
+  const [recentlyAddedId, setRecentlyAddedId] = useState<string | null>(null);
+
   // Firebase unauthorized-domain helper modal state
   const [showAuthDomainModal, setShowAuthDomainModal] = useState(false);
   const [copiedDomain, setCopiedDomain] = useState(false);
@@ -245,28 +248,34 @@ export const PocketWishlistSection: React.FC = () => {
     return () => unsubscribe();
   }, []);
 
-  // 2. Real-time Firestore Sync with onSnapshot
+  // 2. Real-time Firestore Sync with onSnapshot & intelligent local reconciliation
   useEffect(() => {
     const placesQuery = query(collection(db, "savedPlaces"));
 
     const unsubscribe = onSnapshot(
       placesQuery,
       (snapshot) => {
-        if (!snapshot.empty) {
-          const list: SavedPlace[] = [];
-          snapshot.forEach((docSnap) => {
-            list.push({ id: docSnap.id, ...(docSnap.data() as Omit<SavedPlace, "id">) });
-          });
-          // Sort by createdAt desc
-          list.sort((a, b) => {
+        setIsLoadingPlaces(false);
+        const remoteList: SavedPlace[] = [];
+        snapshot.forEach((docSnap) => {
+          remoteList.push({ id: docSnap.id, ...(docSnap.data() as Omit<SavedPlace, "id">) });
+        });
+
+        setPlaces((prevPlaces) => {
+          // Keep local documents that are not yet in remoteList (preserves pending writes and local offline items)
+          const remoteIds = new Set(remoteList.map((p) => p.id));
+          const localOnly = prevPlaces.filter((p) => !remoteIds.has(p.id));
+
+          const combined = [...remoteList, ...localOnly];
+          combined.sort((a, b) => {
             const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
             const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
             return timeB - timeA;
           });
-          setPlaces(list);
-          savePlacesToLocal(list);
-        }
-        setIsLoadingPlaces(false);
+
+          savePlacesToLocal(combined);
+          return combined;
+        });
       },
       (error) => {
         console.warn("Firestore onSnapshot offline or permissions error:", error);
@@ -472,38 +481,69 @@ export const PocketWishlistSection: React.FC = () => {
           : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cleanUrl)}`;
 
       const placeId = "p-" + Date.now() + "-" + Math.random().toString(36).substring(2, 7);
+
+      // Determine canonical category
+      let safeCategory = (analyzed?.category || "other").toLowerCase().trim();
+      if (!CATEGORY_MAP[safeCategory]) {
+        safeCategory = "other";
+      }
+      const safeCategoryLabel = CATEGORY_MAP[safeCategory]?.label || "其他探訪";
+
+      const nowIso = new Date().toISOString();
       const newPlaceDoc: SavedPlace = {
         id: placeId,
         url: finalUrl.slice(0, 1000),
-        name: (analyzed.name || cleanUrl).slice(0, 200),
-        japaneseName: (analyzed.japaneseName || "").slice(0, 200),
-        category: (analyzed.category || "dining").slice(0, 50),
-        categoryLabel: analyzed.categoryLabel || "推薦店家",
-        summary: (analyzed.summary || "旅人私房收藏景點。").slice(0, 1000),
-        highlight: (analyzed.highlight || "熱門推薦私房清單").slice(0, 500),
-        address: (analyzed.address || (cleanUrl.startsWith("http") ? "" : cleanUrl)).slice(0, 300),
-        tips: (analyzed.tips || "").slice(0, 500),
+        name: String(analyzed?.name || cleanUrl).trim().slice(0, 200),
+        japaneseName: String(analyzed?.japaneseName || analyzed?.name || cleanUrl).trim().slice(0, 200),
+        category: safeCategory.slice(0, 50),
+        categoryLabel: safeCategoryLabel.slice(0, 100),
+        summary: String(analyzed?.summary || "旅人私房收藏景點。").trim().slice(0, 1000),
+        highlight: String(analyzed?.highlight || `${analyzed?.name || cleanUrl} 推薦特色`).trim().slice(0, 500),
+        address: String(analyzed?.address || (cleanUrl.startsWith("http") ? "東京都內" : cleanUrl)).trim().slice(0, 300),
+        tips: String(analyzed?.tips || "前往前建議先確認最新營業動態與公休日。").trim().slice(0, 500),
         notes: inputNotes.trim().slice(0, 1000),
         isVisited: false,
-        addedByName: (currentUser?.displayName || currentUser?.email?.split("@")[0] || "旅伴").slice(0, 100),
+        addedByName: String(currentUser?.displayName || currentUser?.email?.split("@")[0] || "旅伴").slice(0, 100),
         userId: currentUser?.uid || "local-user",
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        createdAt: nowIso,
+        updatedAt: nowIso,
       };
 
       // 3. Immediately persist to React state & localStorage
       setPlaces((prev) => {
-        const next = [newPlaceDoc, ...prev];
+        const next = [newPlaceDoc, ...prev.filter((p) => p.id !== placeId)];
         savePlacesToLocal(next);
         return next;
       });
 
+      // Always reset category and visit filters so the newly added place is guaranteed visible immediately
+      setSelectedCategory("all");
+      setVisitedFilter("all");
+      setRecentlyAddedId(placeId);
+      setTimeout(() => setRecentlyAddedId(null), 10000);
+
       // 4. If logged in to Firebase, sync to Firestore
       if (currentUser) {
         try {
-          const { id, ...firestoreData } = newPlaceDoc;
+          const firestoreData = {
+            url: newPlaceDoc.url,
+            name: newPlaceDoc.name,
+            japaneseName: newPlaceDoc.japaneseName || "",
+            category: newPlaceDoc.category,
+            categoryLabel: newPlaceDoc.categoryLabel || "",
+            summary: newPlaceDoc.summary || "",
+            highlight: newPlaceDoc.highlight || "",
+            address: newPlaceDoc.address || "",
+            tips: newPlaceDoc.tips || "",
+            notes: newPlaceDoc.notes || "",
+            isVisited: false,
+            addedByName: newPlaceDoc.addedByName || "",
+            userId: currentUser.uid,
+            createdAt: newPlaceDoc.createdAt || nowIso,
+            updatedAt: newPlaceDoc.updatedAt || nowIso,
+          };
           await setDoc(doc(db, "savedPlaces", placeId), firestoreData);
-        } catch (dbErr) {
+        } catch (dbErr: any) {
           console.warn("Firestore sync error:", dbErr);
           try {
             handleFirestoreError(dbErr, OperationType.CREATE, `savedPlaces/${placeId}`);
@@ -518,10 +558,17 @@ export const PocketWishlistSection: React.FC = () => {
           ? `🎉 已成功辨識並同步收藏：「${newPlaceDoc.name}」！`
           : `🎉 已成功辨識並收藏至清單：「${newPlaceDoc.name}」！`
       );
-      setTimeout(() => setFormSuccess(null), 5000);
+      setTimeout(() => setFormSuccess(null), 6000);
+
+      // Smooth scroll to the newly added item so the user immediately sees it
+      setTimeout(() => {
+        const el = document.getElementById(`place-${placeId}`);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+      }, 150);
     } catch (err: any) {
       console.error("Save place error:", err);
-      // Guarantee clean, human-readable error messages
       setFormError("已為您以在地離線模式加入收藏清單！");
     } finally {
       setIsAnalyzing(false);
@@ -901,12 +948,16 @@ export const PocketWishlistSection: React.FC = () => {
             {filteredPlaces.map((place) => {
               const catConfig = CATEGORY_MAP[place.category] || CATEGORY_MAP.other;
               const CatIcon = catConfig.icon;
+              const isRecentlyAdded = place.id === recentlyAddedId;
 
               return (
                 <div
                   key={place.id}
+                  id={`place-${place.id}`}
                   className={`bg-white rounded-3xl p-5 border transition-all duration-300 flex flex-col justify-between group ${
-                    place.isVisited
+                    isRecentlyAdded
+                      ? "ring-2 ring-[#992545] border-[#992545] bg-[#fffbfd] shadow-md"
+                      : place.isVisited
                       ? "border-emerald-200 bg-emerald-50/20 shadow-2xs"
                       : "border-[#ebd8dc] hover:border-[#b83358] shadow-xs hover:shadow-md"
                   }`}
@@ -914,13 +965,19 @@ export const PocketWishlistSection: React.FC = () => {
                   <div>
                     {/* Top Row: Category Badge, Checkbox & Actions */}
                     <div className="flex items-center justify-between gap-2 mb-2.5">
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         <span
                           className={`inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full ${catConfig.bg} ${catConfig.color} border ${catConfig.border}`}
                         >
                           <CatIcon className="w-3 h-3" />
                           <span>{catConfig.label}</span>
                         </span>
+
+                        {isRecentlyAdded && (
+                          <span className="text-[10px] font-extrabold text-white bg-[#992545] px-2 py-0.5 rounded-full animate-pulse shadow-xs">
+                            ✨ 剛新增
+                          </span>
+                        )}
 
                         {place.isVisited && (
                           <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">
