@@ -40,6 +40,7 @@ export async function fetchTaoyuanFlightCounter(): Promise<FlightCounterInfo> {
 
   try {
     const res = await fetch(directUrl, {
+      signal: AbortSignal.timeout(4000),
       headers: {
         Accept: "application/json",
       },
@@ -49,7 +50,12 @@ export async function fetchTaoyuanFlightCounter(): Promise<FlightCounterInfo> {
       throw new Error(`HTTP error ${res.status}`);
     }
 
-    const data = await res.json();
+    const rawText = await res.text();
+    if (!rawText || !rawText.trim().startsWith("[")) {
+      throw new Error("Invalid FIDS response format");
+    }
+
+    const data = JSON.parse(rawText);
     if (!Array.isArray(data) || data.length === 0) {
       throw new Error("No flight data returned");
     }

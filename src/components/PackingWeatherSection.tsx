@@ -84,10 +84,13 @@ export const PackingWeatherSection: React.FC<PackingWeatherSectionProps> = ({
     try {
       setIsRefreshingWeather(true);
       const res = await fetch(
-        "https://api.open-meteo.com/v1/forecast?latitude=35.6366&longitude=139.7925&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m&timezone=Asia%2FTokyo"
+        "https://api.open-meteo.com/v1/forecast?latitude=35.6366&longitude=139.7925&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m&timezone=Asia%2FTokyo",
+        { signal: AbortSignal.timeout(4000) }
       );
       if (!res.ok) throw new Error("Weather API request failed");
-      const data = await res.json();
+      const rawText = await res.text();
+      if (!rawText.trim().startsWith("{")) throw new Error("Invalid weather response");
+      const data = JSON.parse(rawText);
       if (data && data.current) {
         setLiveWeather({
           temperature: Math.round(data.current.temperature_2m * 10) / 10,

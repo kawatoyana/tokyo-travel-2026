@@ -522,11 +522,24 @@ async function startServer() {
       });
     } catch (err: any) {
       console.error("Error in /api/analyze-place:", err);
-      return res.status(500).json({
-        error: "分析地點失敗，請稍後重試",
-        details: err.message,
+      // Guarantee valid JSON response even if an unexpected exception occurs
+      const fallbackUrl = req.body?.url || "";
+      const fallbackText = req.body?.rawText || "";
+      const fallbackResult = generateRichPlaceInfo(fallbackUrl, fallbackText, fallbackText);
+      return res.status(200).json({
+        success: true,
+        data: {
+          url: fallbackUrl,
+          resolvedUrl: fallbackUrl,
+          ...fallbackResult,
+        },
       });
     }
+  });
+
+  // API 404 handler - prevents API requests from falling through to the HTML SPA index
+  app.all("/api/*", (_req, res) => {
+    res.status(404).json({ success: false, error: "API endpoint not found" });
   });
 
   // Global exception and rejection safeguards
