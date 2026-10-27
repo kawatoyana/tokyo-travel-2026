@@ -1,0 +1,87 @@
+{
+  "entities": {
+    "SavedPlace": {
+      "title": "SavedPlace",
+      "description": "Collaborative travel wishlist items and bookmarked places shared across companions",
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string",
+          "maxLength": 1000,
+          "description": "The original Google Maps share link"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "Name of the place or restaurant in Traditional Chinese"
+        },
+        "japaneseName": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "Japanese name or kanji/katakana of the spot"
+        },
+        "category": {
+          "type": "string",
+          "maxLength": 50,
+          "description": "Category: dining, sightseeing, shopping, cafe, stay, or other"
+        },
+        "summary": {
+          "type": "string",
+          "maxLength": 1000,
+          "description": "AI summary and character of the place"
+        },
+        "highlight": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Key highlight or signature dish/view"
+        },
+        "address": {
+          "type": "string",
+          "maxLength": 300,
+          "description": "Address or approximate district"
+        },
+        "tips": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Traveler advice, recommended order or best timing"
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 1000,
+          "description": "Traveler notes, remarks or reasons for saving"
+        },
+        "isVisited": {
+          "type": "boolean",
+          "description": "Whether the place has been checked in / visited during the trip"
+        },
+        "addedByName": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "Display name of traveler who added this place"
+        },
+        "userId": {
+          "type": "string",
+          "maxLength": 128,
+          "description": "Author user ID from Firebase Auth"
+        },
+        "createdAt": {
+          "type": "string",
+          "maxLength": 50,
+          "description": "ISO timestamp of creation"
+        },
+        "updatedAt": {
+          "type": "string",
+          "maxLength": 50,
+          "description": "ISO timestamp of last update"
+        }
+      },
+      "required": ["url", "name", "category", "userId"]
+    }
+  },
+  "firestore": {
+    "/savedPlaces/{placeId}": {
+      "schema": "SavedPlace",
+      "description": "Collaborative saved places accessible across mobile and desktop devices"
+    }
+  }
+}

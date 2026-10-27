@@ -148,12 +148,15 @@ export const VjwGuideModal: React.FC<VjwGuideModalProps> = ({ isOpen, onClose })
     setChecklist(DEFAULT_VJW_CHECKLIST.map((item) => ({ ...item, checked: false })));
   };
 
+  const [fileError, setFileError] = useState<string | null>(null);
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     if (!file.type.startsWith("image/")) {
-      alert("請選擇圖片格式檔案（JPG, PNG 或 WebP）");
+      setFileError("請選擇圖片格式檔案（JPG, PNG 或 WebP）");
+      setTimeout(() => setFileError(null), 4000);
       return;
     }
 
@@ -162,15 +165,14 @@ export const VjwGuideModal: React.FC<VjwGuideModalProps> = ({ isOpen, onClose })
       const result = event.target?.result as string;
       if (result) {
         setQrCodeDataUrl(result);
+        setFileError(null);
       }
     };
     reader.readAsDataURL(file);
   };
 
   const handleClearQr = () => {
-    if (window.confirm("確定要移除目前保存的 VJW QR Code 嗎？")) {
-      setQrCodeDataUrl(null);
-    }
+    setQrCodeDataUrl(null);
   };
 
   const completedCount = checklist.filter((item) => item.checked).length;
@@ -595,6 +597,12 @@ export const VjwGuideModal: React.FC<VjwGuideModalProps> = ({ isOpen, onClose })
                     <Upload className="w-4 h-4 text-pink-200" />
                     <span>選擇 QR Code 截圖上傳</span>
                   </button>
+
+                  {fileError && (
+                    <p className="mt-2 text-xs font-semibold text-rose-600 bg-rose-50 px-3 py-1 rounded-full border border-rose-200">
+                      {fileError}
+                    </p>
+                  )}
                 </div>
               )}
 

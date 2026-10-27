@@ -6,6 +6,7 @@ import { AttractionsSection } from "./components/AttractionsSection";
 import { FlightHotelSection } from "./components/FlightHotelSection";
 import { RouteMapSection } from "./components/RouteMapSection";
 import { PackingWeatherSection } from "./components/PackingWeatherSection";
+import { PocketWishlistSection } from "./components/PocketWishlistSection";
 import { Footer } from "./components/Footer";
 import { BottomNav } from "./components/BottomNav";
 import { ArrowUp } from "lucide-react";
@@ -66,12 +67,15 @@ export default function App() {
         {/* ④ 每日路線導航圖 (ID: routes) */}
         {activeTab === "routes" && <RouteMapSection />}
 
-        {/* ⑤ 準備清單 (ID: checklist) */}
+        {/* ⑤ 旅人口袋私房清單 (ID: wishlist) */}
+        {activeTab === "wishlist" && <PocketWishlistSection />}
+
+        {/* ⑥ 準備清單 (ID: checklist) */}
         {activeTab === "checklist" && (
           <PackingWeatherSection viewMode="checklist" />
         )}
 
-        {/* ⑥ 天氣概要 (ID: weather) */}
+        {/* ⑦ 天氣概要 (ID: weather) */}
         {activeTab === "weather" && (
           <PackingWeatherSection viewMode="weather" />
         )}

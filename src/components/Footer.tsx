@@ -71,6 +71,15 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
                     10K 路線軌跡 ＆ 離線地圖
                   </button>
                 </li>
+                <li>
+                  <button
+                    type="button"
+                    onClick={(e) => handleNavClick(e, "wishlist")}
+                    className="hover:text-white transition-colors cursor-pointer text-left"
+                  >
+                    旅人口袋私房清單 (AI 收藏)
+                  </button>
+                </li>
               </ul>
             </div>
 

@@ -4,6 +4,7 @@ import {
   Compass,
   Building2,
   Route,
+  BookmarkCheck,
   ListChecks,
   CloudSun,
 } from "lucide-react";
@@ -20,6 +21,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: "attractions", label: "景點介紹", shortLabel: "景點", icon: Compass },
   { id: "flight-hotel", label: "航班住宿", shortLabel: "住行", icon: Building2 },
   { id: "routes", label: "路線導航", shortLabel: "路線", icon: Route },
+  { id: "wishlist", label: "口袋清單", shortLabel: "口袋", icon: BookmarkCheck },
   { id: "checklist", label: "準備清單", shortLabel: "清單", icon: ListChecks },
   { id: "weather", label: "天氣概要", shortLabel: "天氣", icon: CloudSun },
 ];
@@ -36,10 +38,10 @@ export const BottomNav: React.FC<BottomNavProps> = ({
   return (
     <nav
       aria-label="懸浮快速導覽"
-      className="fixed bottom-4 sm:bottom-6 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-1.25rem)] max-w-lg sm:max-w-xl"
+      className="fixed bottom-3 sm:bottom-5 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-1rem)] max-w-xl sm:max-w-2xl"
     >
-      <div className="bg-white/95 backdrop-blur-xl border border-[#ebd8dc] shadow-[0_12px_35px_-8px_rgba(50,30,35,0.14)] rounded-full p-1.5 transition-all">
-        <div className="grid grid-cols-6 gap-1">
+      <div className="bg-white/95 backdrop-blur-xl border border-[#ebd8dc] shadow-[0_12px_35px_-8px_rgba(50,30,35,0.14)] rounded-full p-1 sm:p-1.5 transition-all">
+        <div className="grid grid-cols-7 gap-0.5 sm:gap-1">
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;

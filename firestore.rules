@@ -1,0 +1,53 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default-deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidSavedPlace(data) {
+      return data.keys().hasAll(['url', 'name', 'category', 'userId']) &&
+             data.keys().hasOnly(['url', 'name', 'japaneseName', 'category', 'summary', 'highlight', 'address', 'tips', 'notes', 'isVisited', 'addedByName', 'userId', 'createdAt', 'updatedAt']) &&
+             data.url is string && data.url.size() <= 1000 &&
+             data.name is string && data.name.size() <= 200 &&
+             data.category is string && data.category.size() <= 50 &&
+             data.userId is string && data.userId.size() <= 128 &&
+             (!('japaneseName' in data) || (data.japaneseName is string && data.japaneseName.size() <= 200)) &&
+             (!('summary' in data) || (data.summary is string && data.summary.size() <= 1000)) &&
+             (!('highlight' in data) || (data.highlight is string && data.highlight.size() <= 500)) &&
+             (!('address' in data) || (data.address is string && data.address.size() <= 300)) &&
+             (!('tips' in data) || (data.tips is string && data.tips.size() <= 500)) &&
+             (!('notes' in data) || (data.notes is string && data.notes.size() <= 1000)) &&
+             (!('isVisited' in data) || data.isVisited is bool) &&
+             (!('addedByName' in data) || (data.addedByName is string && data.addedByName.size() <= 100)) &&
+             (!('createdAt' in data) || (data.createdAt is string && data.createdAt.size() <= 50)) &&
+             (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 50));
+    }
+
+    // Collaborative Pocket Wishlist: Travelers can view, add, edit, and delete saved spots
+    match /savedPlaces/{placeId} {
+      allow read: if true;
+      allow create: if isSignedIn() && isValidSavedPlace(incoming()) && incoming().userId == request.auth.uid;
+      allow update: if isSignedIn() && isValidSavedPlace(incoming());
+      allow delete: if isSignedIn();
+    }
+  }
+}
