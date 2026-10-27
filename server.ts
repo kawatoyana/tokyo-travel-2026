@@ -440,9 +440,13 @@ async function startServer() {
         // Ignore URL parsing errors
       }
 
-      // Fallback: If no place name from URL, check rawText
-      if (!placeQueryHint && rawText) {
-        placeQueryHint = rawText.trim();
+      // Fallback: If no place name from URL, check if targetUrl is a raw address/text or check rawText
+      if (!placeQueryHint) {
+        if (targetUrl && !targetUrl.startsWith("http://") && !targetUrl.startsWith("https://")) {
+          placeQueryHint = targetUrl;
+        } else if (rawText) {
+          placeQueryHint = rawText.trim();
+        }
       }
 
       // Generate rich baseline place information using our knowledge base & area synthesis
