@@ -3,6 +3,7 @@ import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
 import path from "path";
+import fs from "fs";
 import { fileURLToPath } from "url";
 
 dotenv.config();
@@ -312,11 +313,46 @@ function generateRichPlaceInfo(resolvedUrl: string, placeQueryHint: string, rawT
   };
 }
 
+function getPort(): number {
+  // 1. Check CLI arguments (e.g. --port 3000)
+  const portArgIndex = process.argv.indexOf("--port");
+  if (portArgIndex !== -1 && process.argv[portArgIndex + 1]) {
+    const parsed = parseInt(process.argv[portArgIndex + 1], 10);
+    if (!isNaN(parsed) && parsed > 0) return parsed;
+  }
+
+  // 2. Check DEFAULT_APP_PORT or APP_PORT env vars
+  if (process.env.DEFAULT_APP_PORT) {
+    const parsed = parseInt(process.env.DEFAULT_APP_PORT, 10);
+    if (!isNaN(parsed) && parsed > 0) return parsed;
+  }
+  if (process.env.APP_PORT) {
+    const parsed = parseInt(process.env.APP_PORT, 10);
+    if (!isNaN(parsed) && parsed > 0) return parsed;
+  }
+
+  // 3. In AI Studio containers, port 8080 is reserved by Nginx reverse proxy.
+  // The app must bind to port 3000 to accept reverse-proxied traffic.
+  if (process.env.PORT) {
+    const parsed = parseInt(process.env.PORT, 10);
+    if (!isNaN(parsed) && parsed > 0 && parsed !== 8080) {
+      return parsed;
+    }
+  }
+
+  return 3000;
+}
+
 async function startServer() {
   const app = express();
-  const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+  const PORT = getPort();
 
   app.use(express.json());
+
+  // Health check endpoints for load balancers and deployment verification
+  app.get(["/health", "/_health", "/api/health"], (_req, res) => {
+    res.status(200).json({ status: "ok", uptime: process.uptime() });
+  });
 
   // API Route: Analyze Google Maps link with Gemini AI
   app.post("/api/analyze-place", async (req, res) => {
@@ -508,11 +544,27 @@ async function startServer() {
     }
   });
 
+  // Global exception and rejection safeguards
+  process.on("unhandledRejection", (reason, promise) => {
+    console.error("Unhandled Rejection at:", promise, "reason:", reason);
+  });
+  process.on("uncaughtException", (error) => {
+    console.error("Uncaught Exception thrown:", error);
+  });
+
   // Serve static files in production or mount Vite middleware in development
-  if (process.env.NODE_ENV === "production") {
-    app.use(express.static(path.resolve(__dirname, "dist")));
+  const isProduction = process.env.NODE_ENV === "production" || process.env.NODE_ENV === "prod";
+  const distPath = path.resolve(__dirname, "dist");
+
+  if (isProduction || (process.env.NODE_ENV !== "development" && fs.existsSync(distPath))) {
+    app.use(express.static(distPath));
     app.get("*", (_req, res) => {
-      res.sendFile(path.resolve(__dirname, "dist", "index.html"));
+      const indexPath = path.resolve(distPath, "index.html");
+      if (fs.existsSync(indexPath)) {
+        res.sendFile(indexPath);
+      } else {
+        res.status(200).send("App is initialized.");
+      }
     });
   } else {
     const vite = await createViteServer({
@@ -522,9 +574,14 @@ async function startServer() {
     app.use(vite.middlewares);
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server listening on http://0.0.0.0:${PORT}`);
+  const server = app.listen(PORT, "0.0.0.0", () => {
+    console.log(`Server listening on http://0.0.0.0:${PORT} (${isProduction ? "production" : "development"} mode)`);
+  });
+
+  server.on("error", (err: any) => {
+    console.error("Server listener error:", err);
   });
 }
 
 startServer();
+
