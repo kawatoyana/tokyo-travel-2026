@@ -370,33 +370,34 @@ async function startServer() {
       let placeQueryHint = "";
 
       // 1. Resolve short Google Maps URL (maps.app.goo.gl or goo.gl/maps)
+      // Using redirect: "manual" captures the 302 Location header directly containing the place name!
       if (
         targetUrl.includes("maps.app.goo.gl") ||
-        targetUrl.includes("goo.gl/maps")
+        targetUrl.includes("goo.gl/maps") ||
+        targetUrl.includes("page.link")
       ) {
         try {
-          const redirectRes = await fetch(targetUrl, {
+          const manualRes = await fetch(targetUrl, {
             method: "GET",
-            redirect: "follow",
-            signal: AbortSignal.timeout(6000),
+            redirect: "manual",
+            signal: AbortSignal.timeout(5000),
             headers: {
               "User-Agent":
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
               "Accept-Language": "zh-TW,zh;q=0.9,ja;q=0.8,en;q=0.7",
             },
           });
-          resolvedUrl = redirectRes.url || targetUrl;
+          const loc = manualRes.headers.get("location");
+          if (loc) {
+            resolvedUrl = loc;
+          }
         } catch (fetchErr) {
-          console.warn("GET redirect failed, trying HEAD:", fetchErr);
+          console.warn("Manual redirect fetch error, trying HEAD:", fetchErr);
           try {
             const headRes = await fetch(targetUrl, {
               method: "HEAD",
               redirect: "manual",
-              signal: AbortSignal.timeout(4000),
-              headers: {
-                "User-Agent":
-                  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-              },
+              signal: AbortSignal.timeout(3000),
             });
             const loc = headRes.headers.get("location");
             if (loc) resolvedUrl = loc;
@@ -404,7 +405,7 @@ async function startServer() {
         }
       }
 
-      // Unpack continue parameter if present (e.g. Google sorry/index redirect)
+      // Unpack continue parameter if Google wrapped it in /sorry/ or similar
       try {
         const u = new URL(resolvedUrl);
         const cont = u.searchParams.get("continue");
@@ -415,10 +416,11 @@ async function startServer() {
         }
       } catch {}
 
-      // Try extracting place name hint from path or query
+      // Extract place name and coordinates from resolved URL
       try {
         const parsed = new URL(resolvedUrl);
-        const placeMatch = parsed.pathname.match(/\/place\/([^/@]+)/);
+        // Pattern 1: /maps/place/<PlaceName>/@<lat>,<lng>
+        const placeMatch = parsed.pathname.match(/\/place\/([^/@?]+)/);
         if (placeMatch && placeMatch[1]) {
           let rawPlace = placeMatch[1].replace(/\+/g, " ");
           try { rawPlace = decodeURIComponent(rawPlace); } catch {}
@@ -429,43 +431,47 @@ async function startServer() {
         } else if (parsed.searchParams.get("q") && !parsed.pathname.includes("/sorry/")) {
           placeQueryHint = decodeURIComponent(parsed.searchParams.get("q") || "");
         }
+
+        // Clean up common suffix noise like "@35.7..."
+        if (placeQueryHint) {
+          placeQueryHint = placeQueryHint.replace(/@.*$/, "").replace(/data=.*$/, "").trim();
+        }
       } catch {
         // Ignore URL parsing errors
       }
 
-      // Generate rich baseline place information using built-in knowledge & area synthesis
+      // Fallback: If no place name from URL, check rawText
+      if (!placeQueryHint && rawText) {
+        placeQueryHint = rawText.trim();
+      }
+
+      // Generate rich baseline place information using our knowledge base & area synthesis
       const richBaseline = generateRichPlaceInfo(resolvedUrl, placeQueryHint, rawText);
 
-      // 2. Call Gemini AI to analyze and enrich place
+      // 2. Call Gemini AI (gemini-3.8-flash) to analyze and enrich place
       let aiResult = richBaseline;
       if (process.env.GEMINI_API_KEY) {
         try {
           const effectiveName = (placeQueryHint || richBaseline.name || rawText || "日本熱門景點").trim();
-          const prompt = `你是一位精通日本東京旅遊、米其林美食、人氣咖啡與特色景點的自由行專家。
-請針對以下 Google Maps 地點資訊進行深度分析與精準辨識：
-- 萃取店名/景點線索：${effectiveName}
-- 原始分享連結：${targetUrl}
+          const prompt = `你是一位精通日本東京自由行的旅遊達人與在地嚮導。
+請針對以下 Google Maps 地點資訊進行專業分析與介紹：
+- 地點名稱：${effectiveName}
+- 原始連結：${targetUrl}
 - 解析後網址與座標：${resolvedUrl}
-- 所在區域判斷：${richBaseline.address}
-- 使用者補充備註：${rawText || "無"}
+- 預估所在區域：${richBaseline.address}
+- 備註：${rawText || "無"}
 
-請以道地繁體中文提供完整且生動的景點/店家資訊：
-1. 店名/景點全名 (name)：繁體中文名稱（若為日本店家可保留通用漢字，如「淺草寺」、「志乃多壽司」）。
-2. 日文原名 (japaneseName)：日文漢字與假名（如「浅草寺」、「志乃多寿司」）。
-3. 分類性質 (category)：嚴格限定為以下 6 種代碼之一：
-   - dining (餐廳美饌、拉麵、燒肉、居酒屋、壽司、正餐、海鮮)
-   - sightseeing (觀光景點、神社、寺院、庭園、歷史古蹟、地標景觀、皇居、城堡、公園)
-   - shopping (購物商場、百貨大樓、伴手禮街、電器城)
-   - cafe (甜點咖啡、下午茶、烘焙麵包、喫茶店)
-   - stay (旅宿飯店、溫泉旅館、青年旅舍)
-   - other (其他探訪、休閒生活)
-4. 中文分類標籤 (categoryLabel)：對應如「餐廳美饌」、「觀光景點」、「購物商場」、「甜點咖啡」、「旅宿飯店」、「其他探訪」。
-5. 特色亮點 (highlight)：一句話核心亮點或招牌特色（30 字以內，如「百年老鋪招牌豆皮壽司與多汁干瓢卷」）。
-6. 詳細介紹 (summary)：2–3 句話（80–120 字）具體介紹該店/景點的歷史背景、招牌餐點或景觀魅力。絕對不可使用「環境特色鮮明，適合安排在東京自由行路線中作為順遊亮點」等空泛制式套話，必須針對該店家的實際特色（如壽司、寺廟、拉麵、咖啡、燒肉、購物商場等）進行真實詳細的介紹！
-7. 所在區域或地址 (address)：如「東京都台東區淺草」、「東京都中央區日本橋」、「江東區有明花園」等。
-8. 旅人貼心建議 (tips)：1–2 句實用建議（如推薦必點料理、排隊預約撇步、交通路線、最佳參訪時段等）。
+請以道地繁體中文提供完整景點/店家資訊，格式必須為合法 JSON：
+1. name: 繁體中文全名（如「志乃多壽司（稻荷壽司）」、「淺草寺」、「皇居」）
+2. japaneseName: 日文原名及假名標音（如「志乃多寿司（しのだずし）」、「浅草寺（せんそうじ）」）
+3. category: 嚴格限定為下列代碼之一：dining, sightseeing, shopping, cafe, stay, other
+4. categoryLabel: 對應中文標籤（如「餐廳美饌」、「觀光景點」、「購物商場」、「甜點咖啡」、「旅宿飯店」、「其他探訪」）
+5. highlight: 一句話招牌亮點（30字內，如「百年名鋪多汁油揚豆腐皮稻荷壽司與甘甜干瓢卷」）
+6. summary: 2至3句話（80至120字）具體介紹該店/景點的招牌必吃、歷史背景或魅力，嚴禁使用空泛套話！
+7. address: 所在區域或地址（如「東京都台東區淺草」）
+8. tips: 1至2句實用建議（如推薦餐點、參拜最佳時段、排隊預約技巧）
 
-請直接以純 JSON 格式回應，不得包含 Markdown 標記或額外字元：
+純 JSON 格式回應，不得包含 Markdown 標記：
 {
   "name": "...",
   "japaneseName": "...",
@@ -477,50 +483,29 @@ async function startServer() {
   "tips": "..."
 }`;
 
-          // Use gemini-3.1-flash-lite as primary model with generous 25s timeout
-          let geminiResponseText = "";
           try {
             const geminiPromise = ai.models.generateContent({
-              model: "gemini-3.1-flash-lite",
+              model: "gemini-3.8-flash",
               contents: prompt,
               config: {
                 responseMimeType: "application/json",
               },
             });
             const timeoutPromise = new Promise((_, reject) =>
-              setTimeout(() => reject(new Error("Gemini API call timed out")), 25000)
+              setTimeout(() => reject(new Error("Gemini API call timed out")), 5000)
             );
             const response = (await Promise.race([geminiPromise, timeoutPromise])) as any;
             if (response && response.text) {
-              geminiResponseText = response.text;
+              const parsed = JSON.parse(response.text);
+              if (parsed && parsed.name && parsed.summary && parsed.summary.length > 10) {
+                aiResult = {
+                  ...richBaseline,
+                  ...parsed,
+                };
+              }
             }
           } catch (modelErr: any) {
-            console.warn("gemini-3.1-flash-lite retry with gemini-flash-latest:", modelErr?.message);
-            // Fallback model attempt
-            try {
-              const fallbackResponse = await ai.models.generateContent({
-                model: "gemini-flash-latest",
-                contents: prompt,
-                config: {
-                  responseMimeType: "application/json",
-                },
-              });
-              if (fallbackResponse && fallbackResponse.text) {
-                geminiResponseText = fallbackResponse.text;
-              }
-            } catch (fallbackErr) {
-              console.warn("Fallback model also failed:", fallbackErr);
-            }
-          }
-
-          if (geminiResponseText) {
-            const parsed = JSON.parse(geminiResponseText);
-            if (parsed && parsed.name && parsed.summary && parsed.summary.length > 10) {
-              aiResult = {
-                ...richBaseline,
-                ...parsed,
-              };
-            }
+            console.warn("Gemini call skipped/timed out, using high-fidelity rich baseline:", modelErr?.message);
           }
         } catch (geminiError) {
           console.warn("Gemini API processing failed, falling back to smart rich baseline:", geminiError);

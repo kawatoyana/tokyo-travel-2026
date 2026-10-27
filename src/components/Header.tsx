@@ -39,15 +39,6 @@ export const Header: React.FC<HeaderProps> = ({ onPrint, onGoHome, activeTab }) 
 
         {/* Right Info: Responsive Date Badge & Discreet Print Icon */}
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-          {activeTab && activeTab !== "home" && onGoHome && (
-            <button
-              type="button"
-              onClick={onGoHome}
-              className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#8e2443] bg-[#fdf2f4] hover:bg-[#fae4e8] border border-[#f3d9de] px-2.5 py-0.5 rounded-full transition-all cursor-pointer shadow-2xs"
-            >
-              <span>← 回首頁</span>
-            </button>
-          )}
 
           {/* Mobile compact date pill */}
           <span className="inline-block sm:hidden text-[11px] font-mono font-medium text-[#6e5d62] bg-[#fbf3f5] px-2 py-0.5 rounded-full border border-[#f2dde2] whitespace-nowrap">

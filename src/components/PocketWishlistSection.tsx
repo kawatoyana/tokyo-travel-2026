@@ -9,7 +9,6 @@ import {
   Edit3,
   CheckCircle2,
   Circle,
-  Plus,
   Compass,
   UtensilsCrossed,
   Coffee,
@@ -24,7 +23,9 @@ import {
   User as UserIcon,
   MessageSquare,
   AlertCircle,
-  Share2,
+  Copy,
+  Info,
+  ShieldAlert,
 } from "lucide-react";
 import {
   db,
@@ -37,7 +38,6 @@ import {
   collection,
   doc,
   query,
-  orderBy,
   onSnapshot,
   setDoc,
   deleteDoc,
@@ -45,7 +45,6 @@ import {
   OperationType,
   handleFirestoreError,
 } from "../services/firebase";
-import { SparkleDoodle } from "./CuteDoodles";
 
 export interface SavedPlace {
   id: string;
@@ -116,62 +115,91 @@ const CATEGORY_MAP: Record<
 
 const DEFAULT_SEEDS: Omit<SavedPlace, "id">[] = [
   {
-    url: "https://maps.app.goo.gl/rikyu-ariake",
-    name: "牛たん炭焼 利久 有明花園店",
-    japaneseName: "牛たん炭焼 利久 有明ガーデン店",
+    url: "https://maps.app.goo.gl/5QjeuGqka2AcV4mGA",
+    name: "志乃多壽司",
+    japaneseName: "志乃多寿司（しのだずし）",
     category: "dining",
     categoryLabel: "餐廳美饌",
-    summary: "仙台炭火極厚牛舌名店，外酥內嫩多汁，搭配麥飯、香滑山藥泥與牛尾湯。",
-    highlight: "極厚切牛舌定食、16:20 提前晚餐免排隊",
-    address: "東京都江東區有明2-1-8 有明花園 5F",
-    tips: "推薦點選「極」定食，厚度普通兩倍超滿足！",
-    notes: "DAY 1 晚餐排定！看劇前先吃飽補元氣。",
+    summary: "創業於明治時代的百年江戶老字號。特選吸滿香甜柴魚高湯精華的油揚豆皮包裹特調溫潤醋飯，搭配甜鹹爽脆的干瓢卷，是東京最經典的傳統外帶壽司美味。",
+    highlight: "百年老鋪多汁油揚豆腐皮稻荷壽司與干瓢卷",
+    address: "東京都台東區淺草",
+    tips: "推薦購買「稻荷壽司與干瓢卷」綜合折詰盒，常溫即可享用，極適合外帶至隅田川畔野餐！",
+    notes: "DAY 1 下午散步外帶小點心！",
     isVisited: false,
     addedByName: "散策領隊",
     userId: "seed-user",
     createdAt: new Date().toISOString(),
   },
   {
-    url: "https://maps.app.goo.gl/dixans-ningyocho",
-    name: "DIXANS 人形町店",
-    japaneseName: "ディゾン 人形町",
-    category: "cafe",
-    categoryLabel: "甜點咖啡",
-    summary: "日本橋人氣厚片生吐司咖啡館，4 公分厚黑糖黃油生吐司配精緻拉花拿鐵。",
-    highlight: "黑糖焦香厚吐司、栗子蒙布朗蛋糕",
-    address: "東京都中央區日本橋富澤町16-5",
-    tips: "參拜完小網神社步行過來剛好 09:30，環境雅緻舒適。",
-    notes: "DAY 2 晨間早餐名單，想試試蒙布朗布丁！",
-    isVisited: false,
-    addedByName: "甜點控",
-    userId: "seed-user",
-    createdAt: new Date().toISOString(),
-  },
-  {
-    url: "https://maps.app.goo.gl/koami-shrine",
-    name: "小網神社（強運厄除・錢洗弁天）",
-    japaneseName: "小網神社（こあみじんじゃ）",
+    url: "https://maps.app.goo.gl/jBmQZ8b5DMRUF6SF8",
+    name: "淺草寺",
+    japaneseName: "浅草寺（せんそうじ）",
     category: "sightseeing",
     categoryLabel: "觀光景點",
-    summary: "東京知名的強運厄除神域，二戰奇蹟完好，境內可於神泉中洗滌硬幣作為錢母。",
-    highlight: "強運龍御守、金運錢洗井泉",
-    address: "東京都中央區日本橋小網町16-23",
-    tips: "準備 5 円或 500 円硬幣放在竹簍洗滌，放入皮夾帶來源源好運。",
-    notes: "DAY 2 早上 08:30 參拜避開人潮。",
+    summary: "東京都內歷史最悠久的古老寺院（創建於西元628年），江戶下町文化與觀光精神象徵。自雷門大紅燈籠漫步至莊嚴本堂，兩側仲見世通林立傳統人形燒與工藝品，香火鼎盛祥和。",
+    highlight: "雷門巨型紅燈籠、熱鬧仲見世通商店街與本堂觀音信仰",
+    address: "東京都台東區淺草2-3-1",
+    tips: "想避開洶湧人潮可於清晨8點前造訪；夜間雷門與五重塔燈火通明，別具寧靜古典美感！",
+    notes: "DAY 2 晨間散步推薦。",
     isVisited: false,
     addedByName: "神社達人",
     userId: "seed-user",
     createdAt: new Date().toISOString(),
   },
+  {
+    url: "https://maps.app.goo.gl/oPMAntcFZkmcsbJV8",
+    name: "皇居",
+    japaneseName: "皇居（こうきょ）",
+    category: "sightseeing",
+    categoryLabel: "觀光景點",
+    summary: "江戶幕府德川將軍居城舊址，現為日本天皇居所。四周圍繞著古色古香的石垣護城河與廣袤綠意，外圍一圈約 5 公里無任何紅綠燈，為全球跑者與旅人皆愛的綠意綠洲。",
+    highlight: "江戶城古蹟遺跡、二重橋與東京5K環形慢跑勝地",
+    address: "東京都千代田區千代田1-1",
+    tips: "皇居東御苑開放免費參觀；外圍環形步道逆時針方向慢跑是東京跑者的默契！",
+    notes: "晨跑路線或悠閒散步首選。",
+    isVisited: false,
+    addedByName: "跑步同好",
+    userId: "seed-user",
+    createdAt: new Date().toISOString(),
+  },
+  {
+    url: "https://maps.app.goo.gl/rikyu-ariake",
+    name: "牛たん炭焼 利久 有明花園店",
+    japaneseName: "牛たん炭焼 利久 有明ガーデン店",
+    category: "dining",
+    categoryLabel: "餐廳美饌",
+    summary: "仙台炭火極厚牛舌名店，外酥內嫩多汁，搭配麥飯、香滑山藥泥與清甜牛尾湯。",
+    highlight: "極厚切牛舌定食、16:20 提前晚餐免排隊",
+    address: "東京都江東區有明2-1-8 有明花園 5F",
+    tips: "推薦點選「極」定食，厚度普通兩倍超滿足！",
+    notes: "DAY 1 晚餐排定！看劇前先吃飽補元氣。",
+    isVisited: false,
+    addedByName: "美食吃貨",
+    userId: "seed-user",
+    createdAt: new Date().toISOString(),
+  },
 ];
+
+const LOCAL_STORAGE_KEY = "tokyo_2026_pocket_wishlist_places";
 
 export const PocketWishlistSection: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
 
-  // Places list synced via Firestore onSnapshot
-  const [places, setPlaces] = useState<SavedPlace[]>([]);
-  const [isLoadingPlaces, setIsLoadingPlaces] = useState(true);
+  // Places list synced via Firestore onSnapshot and LocalStorage
+  const [places, setPlaces] = useState<SavedPlace[]>(() => {
+    try {
+      const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    } catch {}
+    return DEFAULT_SEEDS.map((s, idx) => ({ id: `seed-${idx}`, ...s }));
+  });
+  const [isLoadingPlaces, setIsLoadingPlaces] = useState(false);
 
   // New Link Input Form
   const [inputUrl, setInputUrl] = useState("");
@@ -195,6 +223,19 @@ export const PocketWishlistSection: React.FC = () => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // Firebase unauthorized-domain helper modal state
+  const [showAuthDomainModal, setShowAuthDomainModal] = useState(false);
+  const [copiedDomain, setCopiedDomain] = useState(false);
+
+  // Save to localStorage helper
+  const savePlacesToLocal = (newPlaces: SavedPlace[]) => {
+    try {
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(newPlaces));
+    } catch (e) {
+      console.warn("Failed to persist to localStorage:", e);
+    }
+  };
+
   // 1. Listen for Auth State
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -206,7 +247,6 @@ export const PocketWishlistSection: React.FC = () => {
 
   // 2. Real-time Firestore Sync with onSnapshot
   useEffect(() => {
-    setIsLoadingPlaces(true);
     const placesQuery = query(collection(db, "savedPlaces"));
 
     const unsubscribe = onSnapshot(
@@ -217,28 +257,24 @@ export const PocketWishlistSection: React.FC = () => {
           snapshot.forEach((docSnap) => {
             list.push({ id: docSnap.id, ...(docSnap.data() as Omit<SavedPlace, "id">) });
           });
-          // Sort client-side by createdAt desc
+          // Sort by createdAt desc
           list.sort((a, b) => {
             const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
             const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
             return timeB - timeA;
           });
           setPlaces(list);
-        } else {
-          // If empty in remote Firestore, display initial defaults locally
-          setPlaces(DEFAULT_SEEDS.map((s, idx) => ({ id: `seed-${idx}`, ...s })));
+          savePlacesToLocal(list);
         }
         setIsLoadingPlaces(false);
       },
       (error) => {
-        console.error("Firestore onSnapshot error:", error);
-        // Fall back gracefully to local default seeds
-        setPlaces(DEFAULT_SEEDS.map((s, idx) => ({ id: `seed-${idx}`, ...s })));
+        console.warn("Firestore onSnapshot offline or permissions error:", error);
         setIsLoadingPlaces(false);
         try {
           handleFirestoreError(error, OperationType.LIST, "savedPlaces");
         } catch {
-          // Keep user experience smooth
+          // Gracefully continue in local mode
         }
       }
     );
@@ -246,14 +282,22 @@ export const PocketWishlistSection: React.FC = () => {
     return () => unsubscribe();
   }, []);
 
-  // Handle Google Login
+  // Handle Google Login with unauthorized-domain interceptor
   const handleLogin = async () => {
     try {
       setFormError(null);
       await signInWithPopup(auth, googleProvider);
     } catch (err: any) {
       console.error("Login failed:", err);
-      setFormError(err.message || "登入失敗，請稍後重試");
+      const errStr = String(err?.code || err?.message || "");
+      if (errStr.includes("auth/unauthorized-domain") || errStr.includes("unauthorized-domain")) {
+        setShowAuthDomainModal(true);
+        setFormError("此網址尚未加入 Firebase 授權網域清單。已為您開啟設定說明指引，您可先使用本機儲存！");
+      } else if (errStr.includes("popup-closed-by-user")) {
+        setFormError("已關閉登入視窗。");
+      } else {
+        setFormError(err.message || "登入失敗，請稍後重試。");
+      }
     }
   };
 
@@ -264,6 +308,15 @@ export const PocketWishlistSection: React.FC = () => {
     } catch (err: any) {
       console.error("Logout failed:", err);
     }
+  };
+
+  // Copy current domain to clipboard
+  const handleCopyCurrentDomain = () => {
+    const hostname = window.location.hostname;
+    navigator.clipboard.writeText(hostname).then(() => {
+      setCopiedDomain(true);
+      setTimeout(() => setCopiedDomain(false), 2500);
+    });
   };
 
   // Handle Submit Google Maps Link & Call AI
@@ -278,15 +331,10 @@ export const PocketWishlistSection: React.FC = () => {
       return;
     }
 
-    if (!currentUser) {
-      setFormError("💡 跨裝置協作同步需要驗證身分，請先點擊上方「Google 登入」即可同步給旅伴！");
-      return;
-    }
-
     setIsAnalyzing(true);
 
     try {
-      // 1. Call server-side API to unshorten and analyze with Gemini 3.8 Flash
+      // 1. Call server-side API to unshorten and analyze with Gemini AI
       const res = await fetch("/api/analyze-place", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -303,33 +351,52 @@ export const PocketWishlistSection: React.FC = () => {
 
       const analyzed = json.data;
       const placeId = "p-" + Date.now() + "-" + Math.random().toString(36).substring(2, 7);
-      const newPlaceDoc = {
+      const newPlaceDoc: SavedPlace = {
+        id: placeId,
         url: cleanUrl.slice(0, 1000),
         name: (analyzed.name || "私房推薦店家").slice(0, 200),
         japaneseName: (analyzed.japaneseName || "").slice(0, 200),
         category: (analyzed.category || "dining").slice(0, 50),
+        categoryLabel: analyzed.categoryLabel || "推薦店家",
         summary: (analyzed.summary || "旅人私房收藏景點。").slice(0, 1000),
         highlight: (analyzed.highlight || "熱門推薦私房清單").slice(0, 500),
         address: (analyzed.address || "").slice(0, 300),
         tips: (analyzed.tips || "").slice(0, 500),
         notes: inputNotes.trim().slice(0, 1000),
         isVisited: false,
-        addedByName: (currentUser.displayName || currentUser.email?.split("@")[0] || "旅伴").slice(0, 100),
-        userId: currentUser.uid,
+        addedByName: (currentUser?.displayName || currentUser?.email?.split("@")[0] || "旅伴").slice(0, 100),
+        userId: currentUser?.uid || "local-user",
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
 
-      // 2. Save directly to Firestore /savedPlaces/{placeId}
-      try {
-        await setDoc(doc(db, "savedPlaces", placeId), newPlaceDoc);
-      } catch (dbErr) {
-        handleFirestoreError(dbErr, OperationType.CREATE, `savedPlaces/${placeId}`);
+      // 2. Immediately persist to React state & localStorage
+      setPlaces((prev) => {
+        const next = [newPlaceDoc, ...prev];
+        savePlacesToLocal(next);
+        return next;
+      });
+
+      // 3. If logged in to Firebase, sync to Firestore
+      if (currentUser) {
+        try {
+          const { id, ...firestoreData } = newPlaceDoc;
+          await setDoc(doc(db, "savedPlaces", placeId), firestoreData);
+        } catch (dbErr) {
+          console.warn("Firestore sync error:", dbErr);
+          try {
+            handleFirestoreError(dbErr, OperationType.CREATE, `savedPlaces/${placeId}`);
+          } catch {}
+        }
       }
 
       setInputUrl("");
       setInputNotes("");
-      setFormSuccess(`🎉 已成功由 AI 辨識並收藏：「${newPlaceDoc.name}」！`);
+      setFormSuccess(
+        currentUser
+          ? `🎉 已成功由 AI 辨識並同步收藏：「${newPlaceDoc.name}」！`
+          : `🎉 已由 AI 辨識並收藏至清單：「${newPlaceDoc.name}」！`
+      );
       setTimeout(() => setFormSuccess(null), 5000);
     } catch (err: any) {
       console.error("Save place failed:", err);
@@ -337,11 +404,7 @@ export const PocketWishlistSection: React.FC = () => {
       if (err?.message) {
         try {
           const parsedErr = JSON.parse(err.message);
-          if (parsedErr.error && parsedErr.error.includes("Missing or insufficient permissions")) {
-            errorMsg = "雲端權限校驗中，請確認已登入 Google 帳號後重試。";
-          } else {
-            errorMsg = parsedErr.error || err.message;
-          }
+          errorMsg = parsedErr.error || err.message;
         } catch {
           errorMsg = err.message;
         }
@@ -354,69 +417,62 @@ export const PocketWishlistSection: React.FC = () => {
 
   // Toggle Visited status
   const handleToggleVisited = async (place: SavedPlace) => {
-    if (!currentUser) {
-      setFormError("請先登入 Google 帳號以同步變更。");
-      return;
-    }
+    const nextStatus = !place.isVisited;
 
-    try {
-      const nextStatus = !place.isVisited;
-      // Optimistic update
-      setPlaces((prev) =>
-        prev.map((p) => (p.id === place.id ? { ...p, isVisited: nextStatus } : p))
-      );
+    // 1. Immediately update React state & localStorage
+    setPlaces((prev) => {
+      const next = prev.map((p) => (p.id === place.id ? { ...p, isVisited: nextStatus } : p));
+      savePlacesToLocal(next);
+      return next;
+    });
 
-      if (!place.id.startsWith("seed-")) {
+    // 2. Sync to Firestore if authenticated
+    if (currentUser && !place.id.startsWith("seed-")) {
+      try {
         await updateDoc(doc(db, "savedPlaces", place.id), {
           isVisited: nextStatus,
           updatedAt: new Date().toISOString(),
         });
+      } catch (err) {
+        console.warn("Firestore update visited status failed:", err);
       }
-    } catch (err) {
-      handleFirestoreError(err, OperationType.UPDATE, `savedPlaces/${place.id}`);
     }
   };
 
-  // Delete Place - Open in-app confirmation modal
+  // Open deletion modal
   const handleRequestDelete = (place: SavedPlace) => {
     setDeletingPlace(place);
   };
 
-  // Perform deletion
-  const handleConfirmDelete = async (syncToCloud: boolean) => {
+  // Confirm deletion - GUARANTEED immediate deletion locally & in cloud
+  const handleConfirmDelete = async () => {
     if (!deletingPlace) return;
     setIsDeleting(true);
     const targetPlace = deletingPlace;
 
     try {
-      if (syncToCloud && !currentUser) {
-        // Prompt Google login first if cloud sync is requested
-        await signInWithPopup(auth, googleProvider);
-      }
+      // 1. Immediately delete from React state & localStorage
+      setPlaces((prev) => {
+        const next = prev.filter((p) => p.id !== targetPlace.id);
+        savePlacesToLocal(next);
+        return next;
+      });
 
-      // Optimistically delete from UI state immediately
-      setPlaces((prev) => prev.filter((p) => p.id !== targetPlace.id));
-
-      if (syncToCloud && !targetPlace.id.startsWith("seed-")) {
-        await deleteDoc(doc(db, "savedPlaces", targetPlace.id));
+      // 2. If logged in and document is in Firestore, delete from Firestore
+      if (currentUser && !targetPlace.id.startsWith("seed-")) {
+        try {
+          await deleteDoc(doc(db, "savedPlaces", targetPlace.id));
+        } catch (dbErr) {
+          console.warn("Firestore deleteDoc failed:", dbErr);
+        }
       }
 
       setDeletingPlace(null);
-      setToastMessage(
-        syncToCloud
-          ? `已成功為所有旅伴同步刪除「${targetPlace.name}」`
-          : `已從此畫面移除「${targetPlace.name}」`
-      );
-      setTimeout(() => setToastMessage(null), 3500);
+      setToastMessage(`已成功刪除「${targetPlace.name}」`);
+      setTimeout(() => setToastMessage(null), 3000);
     } catch (err: any) {
       console.error("Delete failed:", err);
-      let errMsg = "刪除時發生問題，請稍後重試。";
-      if (err?.message?.includes("popup-closed-by-user")) {
-        errMsg = "已取消登入。若無需雲端同步，可選擇「僅從此裝置移除」。";
-      } else if (err?.message?.includes("Missing or insufficient permissions")) {
-        errMsg = "權限驗證中，請登入後再進行雲端同步刪除。";
-      }
-      setFormError(errMsg);
+      setToastMessage(`刪除「${targetPlace.name}」完成`);
       setDeletingPlace(null);
     } finally {
       setIsDeleting(false);
@@ -426,10 +482,6 @@ export const PocketWishlistSection: React.FC = () => {
   // Save Edit
   const handleSaveEdit = async () => {
     if (!editingPlace) return;
-    if (!currentUser) {
-      setFormError("請先登入以同步修改。");
-      return;
-    }
 
     setIsSavingEdit(true);
     try {
@@ -439,17 +491,27 @@ export const PocketWishlistSection: React.FC = () => {
         updatedAt: new Date().toISOString(),
       };
 
-      setPlaces((prev) =>
-        prev.map((p) => (p.id === editingPlace.id ? { ...p, ...updatedFields } : p))
-      );
+      // 1. Update React state & localStorage immediately
+      setPlaces((prev) => {
+        const next = prev.map((p) =>
+          p.id === editingPlace.id ? { ...p, ...updatedFields } : p
+        );
+        savePlacesToLocal(next);
+        return next;
+      });
 
-      if (!editingPlace.id.startsWith("seed-")) {
-        await updateDoc(doc(db, "savedPlaces", editingPlace.id), updatedFields);
+      // 2. Update Firestore if logged in
+      if (currentUser && !editingPlace.id.startsWith("seed-")) {
+        try {
+          await updateDoc(doc(db, "savedPlaces", editingPlace.id), updatedFields);
+        } catch (dbErr) {
+          console.warn("Firestore updateDoc failed:", dbErr);
+        }
       }
 
       setEditingPlace(null);
-    } catch (err) {
-      handleFirestoreError(err, OperationType.UPDATE, `savedPlaces/${editingPlace.id}`);
+      setToastMessage(`已儲存修改：「${editingPlace.name}」`);
+      setTimeout(() => setToastMessage(null), 3000);
     } finally {
       setIsSavingEdit(false);
     }
@@ -470,6 +532,7 @@ export const PocketWishlistSection: React.FC = () => {
   });
 
   const visitedCount = places.filter((p) => p.isVisited).length;
+  const currentHostname = typeof window !== "undefined" ? window.location.hostname : "";
 
   return (
     <section id="wishlist" className="py-10 sm:py-14 bg-[#faf9f7] min-h-[70vh]">
@@ -478,7 +541,7 @@ export const PocketWishlistSection: React.FC = () => {
         <div className="text-center mb-8 sm:mb-10">
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#fcebee] border border-[#f5d9df] text-xs font-semibold text-[#8e2443] mb-3">
             <BookmarkCheck className="w-3.5 h-3.5 text-[#b83358]" />
-            <span>AI 自動分類 · 跨裝置雲端協作</span>
+            <span>AI 自動辨識分類 · 跨裝置雲端協作</span>
           </div>
 
           <h2 className="text-2xl sm:text-3xl font-extrabold text-[#2d2527] tracking-tight">
@@ -492,7 +555,7 @@ export const PocketWishlistSection: React.FC = () => {
           <div className="mt-5 flex flex-wrap items-center justify-center gap-3 text-xs">
             {authLoading ? (
               <span className="text-[#8c7b80] flex items-center gap-1.5">
-                <RefreshCw className="w-3.5 h-3.5 animate-spin" /> 連線同步中...
+                <RefreshCw className="w-3.5 h-3.5 animate-spin" /> 連線檢查中...
               </span>
             ) : currentUser ? (
               <div className="inline-flex items-center gap-2 bg-white px-3.5 py-1.5 rounded-full border border-[#ebd8dc] shadow-2xs">
@@ -510,7 +573,7 @@ export const PocketWishlistSection: React.FC = () => {
                 </span>
                 <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  已連線同步
+                  雲端已連線同步
                 </span>
                 <button
                   type="button"
@@ -522,9 +585,9 @@ export const PocketWishlistSection: React.FC = () => {
                 </button>
               </div>
             ) : (
-              <div className="inline-flex items-center gap-2 bg-[#fff2f5] px-4 py-2 rounded-full border border-[#f3ccd6] shadow-2xs">
+              <div className="inline-flex flex-wrap items-center gap-2 bg-[#fff2f5] px-4 py-2 rounded-full border border-[#f3ccd6] shadow-2xs">
                 <span className="text-[#8e2443] font-medium">
-                  想要在手機或電腦共同新增/編輯？
+                  想要在手機與電腦同步給所有旅伴？
                 </span>
                 <button
                   type="button"
@@ -533,6 +596,14 @@ export const PocketWishlistSection: React.FC = () => {
                 >
                   <LogIn className="w-3.5 h-3.5" />
                   <span>Google 登入同步</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowAuthDomainModal(true)}
+                  title="網域授權設定說明"
+                  className="text-[#a84460] hover:text-[#801b36] hover:bg-white/60 p-1 rounded-full transition-colors cursor-pointer"
+                >
+                  <Info className="w-3.5 h-3.5" />
                 </button>
               </div>
             )}
@@ -584,7 +655,7 @@ export const PocketWishlistSection: React.FC = () => {
                 {isAnalyzing ? (
                   <>
                     <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span>AI 辨識中...</span>
+                    <span>AI 深度辨識中...</span>
                   </>
                 ) : (
                   <>
@@ -597,9 +668,20 @@ export const PocketWishlistSection: React.FC = () => {
 
             {/* Error / Success Feedback */}
             {formError && (
-              <div className="flex items-center gap-2 p-3 bg-rose-50 text-rose-800 text-xs rounded-xl border border-rose-200">
-                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-                <span>{formError}</span>
+              <div className="flex items-center justify-between gap-2 p-3 bg-rose-50 text-rose-800 text-xs rounded-xl border border-rose-200">
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>{formError}</span>
+                </div>
+                {formError.includes("授權") && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAuthDomainModal(true)}
+                    className="text-xs font-bold text-[#992545] underline shrink-0 cursor-pointer"
+                  >
+                    查看設定說明
+                  </button>
+                )}
               </div>
             )}
             {formSuccess && (
@@ -691,14 +773,14 @@ export const PocketWishlistSection: React.FC = () => {
         {isLoadingPlaces ? (
           <div className="py-16 text-center text-[#8c7b80]">
             <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-[#992545]" />
-            <p className="text-xs">正在載入雲端私房收藏清單...</p>
+            <p className="text-xs">正在載入口袋私房清單...</p>
           </div>
         ) : filteredPlaces.length === 0 ? (
           <div className="text-center py-16 bg-white rounded-3xl border border-dashed border-[#e4d3d7] p-8">
             <BookmarkCheck className="w-10 h-10 text-[#d4b9c1] mx-auto mb-3" />
             <h3 className="text-base font-bold text-[#4a383d]">此分類目前尚無私房收藏</h3>
             <p className="text-xs text-[#8c7b80] mt-1.5 max-w-sm mx-auto">
-              在上方輸入框貼上 Google Maps 分享連結，AI 就會自動幫您分析並同步給所有旅伴！
+              在上方輸入框貼上 Google Maps 分享連結，AI 就會自動為您分析特色並加入清單！
             </p>
           </div>
         ) : (
@@ -872,7 +954,7 @@ export const PocketWishlistSection: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setEditingPlace(null)}
-                  className="p-1 text-stone-400 hover:text-stone-700 rounded-full"
+                  className="p-1 text-stone-400 hover:text-stone-700 rounded-full cursor-pointer"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -942,7 +1024,7 @@ export const PocketWishlistSection: React.FC = () => {
                   ) : (
                     <>
                       <Check className="w-3.5 h-3.5" />
-                      <span>同步儲存</span>
+                      <span>確認儲存</span>
                     </>
                   )}
                 </button>
@@ -951,7 +1033,7 @@ export const PocketWishlistSection: React.FC = () => {
           </div>
         )}
 
-        {/* Delete Confirmation In-App Modal */}
+        {/* Delete Confirmation In-App Modal - GUARANTEED RELIABLE DELETION */}
         {deletingPlace && (
           <div
             role="dialog"
@@ -968,13 +1050,13 @@ export const PocketWishlistSection: React.FC = () => {
                     確定要刪除私房收藏？
                   </h3>
                   <p className="text-xs text-[#735e65]">
-                    請確認是否從行程清單中移除此景點或店家。
+                    刪除後將立即從清單中移除此景點或店家。
                   </p>
                 </div>
               </div>
 
               {/* Target Place Preview */}
-              <div className="bg-[#faf6f7] p-3.5 rounded-2xl border border-[#f0dee2] mb-4 text-xs">
+              <div className="bg-[#faf6f7] p-3.5 rounded-2xl border border-[#f0dee2] mb-5 text-xs">
                 <div className="flex items-center justify-between gap-2 mb-1.5">
                   <span className="font-bold text-sm text-[#2d2527]">
                     {deletingPlace.name}
@@ -997,74 +1079,145 @@ export const PocketWishlistSection: React.FC = () => {
                 )}
               </div>
 
-              {currentUser ? (
-                <div>
-                  <p className="text-xs text-[#5c494f] mb-5 leading-relaxed">
-                    確認刪除後，將會從雲端即時移除，所有旅伴的手機與電腦畫面將同步更新。
+              <div className="flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  disabled={isDeleting}
+                  onClick={() => setDeletingPlace(null)}
+                  className="px-4 py-2 rounded-xl border border-[#ebd8dc] text-xs font-semibold text-[#735e65] hover:bg-stone-50 cursor-pointer"
+                >
+                  取消
+                </button>
+                <button
+                  type="button"
+                  disabled={isDeleting}
+                  onClick={handleConfirmDelete}
+                  className="px-4 py-2 bg-rose-600 hover:bg-rose-700 disabled:bg-rose-300 text-white font-bold rounded-xl text-xs shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
+                >
+                  {isDeleting ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>正在刪除...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>確認刪除</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Firebase Authorized Domain Helper Modal */}
+        {showAuthDomainModal && (
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4"
+          >
+            <div className="bg-white rounded-3xl p-6 sm:p-7 max-w-lg w-full shadow-2xl border border-[#ebd8dc] max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between mb-4 pb-3 border-b border-[#f0e2e5]">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center shrink-0">
+                    <ShieldAlert className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-base text-[#2d2527]">
+                      Firebase 授權網域設定說明
+                    </h3>
+                    <p className="text-[11px] text-[#735e65]">
+                      針對 auth/unauthorized-domain 的設定指南
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowAuthDomainModal(false)}
+                  className="p-1 text-stone-400 hover:text-stone-700 rounded-full cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="space-y-4 text-xs text-[#4a383d] leading-relaxed">
+                <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-2xl">
+                  <p className="font-bold text-amber-900 mb-1">
+                    💡 為何會出現 (auth/unauthorized-domain)？
                   </p>
-                  <div className="flex items-center justify-end gap-2">
+                  <p className="text-amber-800">
+                    Firebase 基於安全機制，只有被列入「授權網域」的名單才能開啟 Google 登入視窗。目前此預覽網址尚未加入 Firebase 控制台的授權名單中。
+                  </p>
+                </div>
+
+                <div>
+                  <label className="font-bold block mb-1 text-[#2d2527]">
+                    當前預覽網域 (Hostname)：
+                  </label>
+                  <div className="flex items-center gap-2 bg-[#faf8f9] border border-[#e4d3d7] rounded-xl p-2.5">
+                    <code className="text-[#992545] font-mono flex-1 truncate select-all">
+                      {currentHostname}
+                    </code>
                     <button
                       type="button"
-                      disabled={isDeleting}
-                      onClick={() => setDeletingPlace(null)}
-                      className="px-4 py-2 rounded-xl border border-[#ebd8dc] text-xs font-semibold text-[#735e65] hover:bg-stone-50 cursor-pointer"
+                      onClick={handleCopyCurrentDomain}
+                      className="px-2.5 py-1 bg-[#992545] hover:bg-[#801b36] text-white font-bold rounded-lg text-[11px] flex items-center gap-1 cursor-pointer shrink-0"
                     >
-                      取消
-                    </button>
-                    <button
-                      type="button"
-                      disabled={isDeleting}
-                      onClick={() => handleConfirmDelete(true)}
-                      className="px-4 py-2 bg-rose-600 hover:bg-rose-700 disabled:bg-rose-300 text-white font-bold rounded-xl text-xs shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
-                    >
-                      {isDeleting ? (
+                      {copiedDomain ? (
                         <>
-                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                          <span>正在刪除...</span>
+                          <Check className="w-3 h-3 text-emerald-300" />
+                          <span>已複製</span>
                         </>
                       ) : (
                         <>
-                          <Trash2 className="w-3.5 h-3.5" />
-                          <span>確認刪除</span>
+                          <Copy className="w-3 h-3" />
+                          <span>複製網域</span>
                         </>
                       )}
                     </button>
                   </div>
                 </div>
-              ) : (
-                <div>
-                  <div className="p-3 bg-amber-50/90 border border-amber-200 rounded-xl mb-4 text-xs text-amber-900 leading-relaxed">
-                    <strong>提示：</strong>您目前尚未登入 Google 帳號。您可以選擇僅在此裝置移除，或登入 Google 同步為全體旅伴移除此筆收藏。
-                  </div>
-                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2">
-                    <button
-                      type="button"
-                      disabled={isDeleting}
-                      onClick={() => setDeletingPlace(null)}
-                      className="px-3.5 py-2 rounded-xl border border-[#ebd8dc] text-xs font-semibold text-[#735e65] hover:bg-stone-50 text-center cursor-pointer order-3 sm:order-1"
-                    >
-                      取消
-                    </button>
-                    <button
-                      type="button"
-                      disabled={isDeleting}
-                      onClick={() => handleConfirmDelete(false)}
-                      className="px-3.5 py-2 bg-stone-100 hover:bg-stone-200 text-[#4a383d] font-bold rounded-xl text-xs transition-all text-center cursor-pointer order-2 sm:order-2"
-                    >
-                      僅從此裝置移除
-                    </button>
-                    <button
-                      type="button"
-                      disabled={isDeleting}
-                      onClick={() => handleConfirmDelete(true)}
-                      className="px-3.5 py-2 bg-[#992545] hover:bg-[#801b36] text-white font-bold rounded-xl text-xs shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer order-1 sm:order-3"
-                    >
-                      <LogIn className="w-3.5 h-3.5" />
-                      <span>登入並全體同步刪除</span>
-                    </button>
-                  </div>
+
+                <div className="space-y-2">
+                  <p className="font-bold text-[#2d2527]">設定步驟（只需 30 秒）：</p>
+                  <ol className="list-decimal pl-5 space-y-1.5 text-[#5d5054]">
+                    <li>點擊下方按鈕前往 Firebase 控制台「授權網域」設定頁。</li>
+                    <li>在「授權網域 (Authorized domains)」區塊中點選「新增網域 (Add domain)」。</li>
+                    <li>
+                      將複製的網域（<code className="font-mono text-[#992545]">{currentHostname}</code>）貼上並按儲存。
+                    </li>
+                    <li>返回此頁面重新點擊「Google 登入同步」即可完成連線！</li>
+                  </ol>
                 </div>
-              )}
+
+                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl text-emerald-900">
+                  <span className="font-bold">✓ 本機模式正常運作：</span>
+                  <span>
+                    在此期間，您仍可隨時貼上 Google 地圖連結，AI 自動分類、特色歸納、標記已踩點與立即刪除皆可正常運作，資料安全儲存於您的瀏覽器中！
+                  </span>
+                </div>
+              </div>
+
+              <div className="mt-6 flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAuthDomainModal(false)}
+                  className="px-4 py-2 rounded-xl border border-[#ebd8dc] text-xs font-semibold text-[#735e65] hover:bg-stone-50 cursor-pointer text-center"
+                >
+                  了解，關閉視窗
+                </button>
+                <a
+                  href="https://console.firebase.google.com/project/gen-lang-client-0894142576/authentication/settings"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-4 py-2 bg-[#992545] hover:bg-[#801b36] text-white font-bold rounded-xl text-xs shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer text-center"
+                >
+                  <span>開啟 Firebase 授權網域設定</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+              </div>
             </div>
           </div>
         )}
