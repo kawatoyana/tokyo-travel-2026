@@ -188,34 +188,6 @@ export const Hero: React.FC<HeroProps> = ({ onNavigate }) => {
                 <span>宿 VIA INN PRIME 日本橋人形町</span>
               </div>
             </div>
-
-            {/* Quick Feature Portal Links for SPA Navigation */}
-            {onNavigate && (
-              <div className="pt-2">
-                <span className="text-[11px] font-bold text-[#8c7b80] uppercase tracking-wider block mb-2">
-                  快速翻閱手帖章節：
-                </span>
-                <div className="flex flex-wrap gap-2">
-                  {[
-                    { id: "itinerary", label: "每日行程", tag: "DAY 1–2" },
-                    { id: "attractions", label: "景點介紹", tag: "8 大必訪" },
-                    { id: "flight-hotel", label: "航班住宿", tag: "酷航+VIA" },
-                    { id: "routes", label: "路線導航", tag: "10K+地圖" },
-                    { id: "checklist", label: "準備清單", tag: "行前打勾" },
-                    { id: "weather", label: "天氣概要", tag: "即時連線" },
-                  ].map((btn) => (
-                    <button
-                      key={btn.id}
-                      onClick={() => onNavigate(btn.id)}
-                      className="px-3 py-1.5 rounded-full bg-white hover:bg-[#fff0f4] border border-[#ebd8dc] text-xs font-semibold text-[#6e5d62] hover:text-[#992545] shadow-2xs transition-all cursor-pointer flex items-center gap-1"
-                    >
-                      <span>{btn.label}</span>
-                      <span className="text-[10px] text-[#992545] font-mono">({btn.tag})</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Right Column: Visual Magazine Polaroid & Photo Showcase (5 cols) */}
