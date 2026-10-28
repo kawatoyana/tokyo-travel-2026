@@ -340,7 +340,7 @@ export const PocketWishlistSection: React.FC = () => {
       return;
     }
 
-    // Separate URL and any leading/trailing text (e.g. from mobile share: "店名 https://maps.app.goo.gl/xxx")
+    // Separate URL and any leading/trailing text (e.g. from mobile share: "淺草今半 国際通り本店 4.4 ★ (3,281) https://maps.app.goo.gl/xxx")
     let targetUrl = rawInput;
     let urlExtracted = "";
     const matchUrl = rawInput.match(/https?:\/\/[^\s]+/i);
@@ -348,8 +348,46 @@ export const PocketWishlistSection: React.FC = () => {
       urlExtracted = matchUrl[0];
       targetUrl = urlExtracted;
     }
-    const textPart = rawInput.replace(/https?:\/\/[^\s]+/gi, "").trim();
+
+    // Clean text part from mobile share sheet
+    let textPart = rawInput.replace(/https?:\/\/[^\s]+/gi, " ").trim();
+    textPart = textPart.replace(/\([\d,]+[+\s\w\u4e00-\u9fa5]*\)/g, " ");
+    textPart = textPart.replace(/[\d.]+\s*[★☆星]+/g, " ").replace(/[★☆]+/g, " ");
+    textPart = textPart.replace(/(?:\+81[\s-]?)?\b\d{2,4}-\d{2,4}-\d{4}\b/g, " ");
+    textPart = textPart.replace(/〒?\d{3}-\d{4}/g, " ");
+    textPart = textPart.replace(/[·|•‧]/g, " ").replace(/\s+/g, " ").trim();
+
     const effectiveNotes = [textPart, inputNotes.trim()].filter(Boolean).join(" ");
+
+    // Pre-extract place name from targetUrl if it has /place/<Name>
+    let clientExtractedName = "";
+    try {
+      let dec = targetUrl;
+      for (let i = 0; i < 3; i++) {
+        try {
+          const n = decodeURIComponent(dec);
+          if (n === dec) break;
+          dec = n;
+        } catch { break; }
+      }
+      const pm = dec.match(/\/place\/([^/@?&]+)/i);
+      if (pm && pm[1]) {
+        let n = pm[1].replace(/\+/g, " ").trim();
+        n = n.replace(/@.*$/, "").replace(/data=.*$/, "").trim();
+        if (n && !n.startsWith("http") && !n.startsWith("0x")) {
+          clientExtractedName = n;
+        }
+      }
+      if (!clientExtractedName) {
+        const qm = dec.match(/[?&](?:query|q)=([^&]+)/i);
+        if (qm && qm[1]) {
+          let n = qm[1].replace(/\+/g, " ").trim();
+          if (n && !n.startsWith("http") && !n.startsWith("EhA")) {
+            clientExtractedName = n;
+          }
+        }
+      }
+    } catch {}
 
     setIsAnalyzing(true);
 
@@ -364,25 +402,27 @@ export const PocketWishlistSection: React.FC = () => {
           body: JSON.stringify({
             url: targetUrl,
             rawText: effectiveNotes,
+            clientExtractedName: clientExtractedName || textPart,
           }),
         });
 
         // If response is not ok (e.g. warming up or transient hiccup), wait and retry once
         if (!res.ok) {
-          await new Promise((r) => setTimeout(r, 1200));
+          await new Promise((r) => setTimeout(r, 1000));
           res = await fetch("/api/analyze-place", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               url: targetUrl,
               rawText: effectiveNotes,
+              clientExtractedName: clientExtractedName || textPart,
             }),
           });
         }
 
-        const rawText = await res.text();
-        if (rawText && rawText.trim().startsWith("{")) {
-          const json = JSON.parse(rawText);
+        const rawRespText = await res.text();
+        if (rawRespText && rawRespText.trim().startsWith("{")) {
+          const json = JSON.parse(rawRespText);
           if (json && json.success && json.data) {
             analyzed = json.data;
           }
@@ -393,20 +433,9 @@ export const PocketWishlistSection: React.FC = () => {
 
       // 2. High-Fidelity Client-side synthesis fallback (guarantees real place names, categories & tips)
       if (!analyzed) {
-        const combined = (rawInput + " " + targetUrl + " " + effectiveNotes).toLowerCase();
+        const combined = (rawInput + " " + targetUrl + " " + effectiveNotes + " " + clientExtractedName).toLowerCase();
 
-        // Extract place name from URL if possible
-        let detectedName = effectiveNotes || "";
-        try {
-          let toDecode = targetUrl;
-          try { toDecode = decodeURIComponent(toDecode); } catch {}
-          try { toDecode = decodeURIComponent(toDecode); } catch {}
-          const placeMatch = toDecode.match(/\/place\/([^/@?&]+)/i);
-          if (placeMatch && placeMatch[1]) {
-            detectedName = placeMatch[1].replace(/\+/g, " ").trim();
-          }
-        } catch {}
-
+        let detectedName = clientExtractedName || textPart || "";
         let detectedCategory = "dining";
         let detectedLabel = "餐廳美饌";
         let detectedHighlight = "";
@@ -415,15 +444,31 @@ export const PocketWishlistSection: React.FC = () => {
         let detectedAddress = "東京都內";
 
         // Landmark & Keyword Knowledge Base
-        if (combined.includes("5qjeugqka2acv4mga") || combined.includes("志乃多") || combined.includes("shinoda") || combined.includes("稻荷")) {
+        if (combined.includes("志乃多") || combined.includes("shinoda") || (combined.includes("稻荷") && combined.includes("壽司")) || (combined.includes("稲荷") && combined.includes("寿司"))) {
           detectedName = "志乃多壽司";
           detectedCategory = "dining";
           detectedLabel = "餐廳美饌";
-          detectedHighlight = "明治十年老鋪・秘傳多汁油揚豆皮稻荷壽司與干瓢卷";
+          detectedHighlight = "明治十年老鋪・秘傳多汁油揚豆皮稻荷壽司與脆口干瓢卷";
           detectedSummary = "創業於明治時期的東京百年老字號。特選吸滿香甜柴魚昆布高湯的油揚豆皮包裹特調溫潤醋飯，搭配爽脆甘甜的干瓢卷，是東京最經典的傳統外帶壽司美味。";
           detectedAddress = "東京都台東區淺草";
           detectedTips = "推薦購買「稻荷壽司與干瓢卷」綜合折詰盒，常溫即可享用，極適合外帶至隅田川畔野餐！";
-        } else if (combined.includes("jbmqzg") || combined.includes("jbmqz8b5dmruf6sf8") || combined.includes("淺草寺") || combined.includes("浅草寺") || combined.includes("sensoji")) {
+        } else if (combined.includes("今半") || combined.includes("imahan")) {
+          detectedName = "淺草今半（壽喜燒）";
+          detectedCategory = "dining";
+          detectedLabel = "餐廳美饌";
+          detectedHighlight = "明治28年創業・頂級黑毛和牛壽喜燒與傳承秘傳割下醬汁";
+          detectedSummary = "東京百年壽喜燒代表名店，嚴選油脂細膩的日本黑毛和牛，搭配秘傳百年割下高湯醬汁涮煮，入口滑嫩香甜，為自由行必嚐的極上美食饗宴。";
+          detectedAddress = "東京都台東區西淺草3-1-12";
+          detectedTips = "午間時段供應的壽喜燒定食CP值極高，建議提早預約或於開店前30分鐘抵達現場。";
+        } else if (combined.includes("敘敘苑") || combined.includes("叙々苑") || combined.includes("jojoen")) {
+          detectedName = "敘敘苑（燒肉）";
+          detectedCategory = "dining";
+          detectedLabel = "餐廳美饌";
+          detectedHighlight = "極上上等牛五花、招牌秘傳燒肉醬汁與高空景觀用餐體驗";
+          detectedSummary = "日本頂級連鎖燒肉名店，肉質細緻嫩滑、油花豐潤，招牌牛五花與特選牛舌搭配獨家爽口沙拉，深受海內外旅人推崇。";
+          detectedAddress = "東京都精華商圈（晴空街道 / 銀座 / 新宿）";
+          detectedTips = "晴空塔分店具備絕美高空景觀，建議提早於官網預約窗邊景觀座位。";
+        } else if (combined.includes("淺草寺") || combined.includes("浅草寺") || combined.includes("sensoji")) {
           detectedName = "淺草寺";
           detectedCategory = "sightseeing";
           detectedLabel = "觀光景點";
@@ -431,7 +476,7 @@ export const PocketWishlistSection: React.FC = () => {
           detectedSummary = "東京都內歷史最悠久的古老寺院（創建於西元628年），江戶下町文化與觀光精神象徵。自雷門大紅燈籠漫步至莊嚴本堂，兩側仲見世通林立傳統人形燒與工藝品，香火鼎盛祥和。";
           detectedAddress = "東京都台東區淺草2-3-1";
           detectedTips = "想避開洶湧人潮可於清晨8點前造訪；夜間雷門與五重塔燈火通明，別具寧靜古典美感！";
-        } else if (combined.includes("opmantcfzkmcsbjv8") || combined.includes("皇居") || combined.includes("imperial") || combined.includes("二重橋")) {
+        } else if (combined.includes("皇居") || combined.includes("imperial") || combined.includes("二重橋")) {
           detectedName = "皇居";
           detectedCategory = "sightseeing";
           detectedLabel = "觀光景點";
@@ -439,7 +484,7 @@ export const PocketWishlistSection: React.FC = () => {
           detectedSummary = "日本天皇居所，遼闊外苑綠草如茵、歷史石垣護城河圍繞，環境清幽古色古香，外圍一圈約5公里無紅綠燈，為全球跑者與旅人皆愛的綠意綠洲。";
           detectedAddress = "東京都千代田區千代田1-1";
           detectedTips = "皇居東御苑開放免費參觀；外圍環形步道逆時針方向慢跑是東京跑者的默契！";
-        } else if (combined.includes("uoxokqrb5qgs3wxya") || combined.includes("東京鐵塔") || combined.includes("tokyo tower")) {
+        } else if (combined.includes("東京鐵塔") || combined.includes("tokyo tower")) {
           detectedName = "東京鐵塔";
           detectedCategory = "sightseeing";
           detectedLabel = "觀光景點";
@@ -487,22 +532,6 @@ export const PocketWishlistSection: React.FC = () => {
           detectedSummary = "德川綱吉時代修建的和歌主題古典名園，中央大泉水池環繞林蔭山石，秋季楓葉轉紅倒映水面，清幽深遠。";
           detectedAddress = "東京都文京區本駒込6-16-3";
           detectedTips = "漫步一圈約需1小時，吹上茶屋提供抹茶與和菓子可供休憩品嚐。";
-        } else if (combined.includes("workman")) {
-          detectedName = "Workman Colors";
-          detectedCategory = "shopping";
-          detectedLabel = "購物商場";
-          detectedHighlight = "高機能防潑水時尚平價服飾概念店，戶外休閒穿搭必逛";
-          detectedSummary = "日本知名機能服飾 Workman 旗艦潮流新概念店，結合專業防風防雨耐磨機能與日常流行配色，價格親民CP值超高。";
-          detectedAddress = "東京都內商圈";
-          detectedTips = "防風保暖外套與輕量防水鞋為超人氣搶手單品，深受自由行旅人推崇。";
-        } else if (combined.includes("法輪寺")) {
-          detectedName = "法輪寺";
-          detectedCategory = "sightseeing";
-          detectedLabel = "觀光景點";
-          detectedHighlight = "早稻田花手水四季繁花御朱印靈驗寺院";
-          detectedSummary = "坐落早稻田住宅區內的寧靜古刹，以四季鮮花浮盆的「花手水」與精美剪紙藝術御朱印聞名，吸引眾多旅人慕名前來參拜。";
-          detectedAddress = "東京都新宿區西早稻田1-1-15";
-          detectedTips = "參拜前可先至手水舍欣賞當季花手水造景；御朱印款式隨四季更迭。";
         } else {
           // Dynamic classification based on category keywords
           if (combined.includes("coffee") || combined.includes("cafe") || combined.includes("咖啡") || combined.includes("甜點") || combined.includes("喫茶") || combined.includes("吐司") || combined.includes("cake")) {
@@ -533,7 +562,7 @@ export const PocketWishlistSection: React.FC = () => {
             detectedHighlight = `${detectedName} 舒適客房、生活機能優質與交通便捷據點`;
             detectedSummary = `${detectedName} 地理位置優越，提供整潔溫馨的住宿環境與齊全設施服務，讓旅人在充實的行程後獲得充分放鬆與舒眠。`;
             detectedTips = "建議留意飯店入住（Check-in）時間，提早抵達通常可先於櫃台免費寄存行李。";
-          } else if (combined.includes("拉麵") || combined.includes("壽司") || combined.includes("燒肉") || combined.includes("料理") || combined.includes("居酒屋") || combined.includes("食堂") || combined.includes("牛排") || combined.includes("餐")) {
+          } else if (combined.includes("拉麵") || combined.includes("壽司") || combined.includes("燒肉") || combined.includes("壽喜燒") || combined.includes("料理") || combined.includes("居酒屋") || combined.includes("食堂") || combined.includes("牛排") || combined.includes("餐")) {
             detectedCategory = "dining";
             detectedLabel = "餐廳美饌";
             detectedName = detectedName || "在地人氣名店";
@@ -542,10 +571,10 @@ export const PocketWishlistSection: React.FC = () => {
             detectedTips = "熱門用餐時段建議提早前往或離峰造訪，以享舒適品嚐空間。";
           } else {
             // General fallback using extracted name or raw input
-            detectedName = detectedName || (targetUrl.startsWith("http") ? "Google 地圖收藏景點" : targetUrl);
-            detectedCategory = "other";
-            detectedLabel = "其他探訪";
-            detectedHighlight = `${detectedName} 自由行私房特色探訪`;
+            detectedName = detectedName || (targetUrl.startsWith("http") ? "私房推薦探訪地點" : targetUrl);
+            detectedCategory = "dining";
+            detectedLabel = "餐廳美饌";
+            detectedHighlight = `${detectedName} 自由行私房特色推薦`;
             detectedSummary = `${detectedName} 位於東京都內，是在地備受喜愛的私房探訪點。點擊卡片右上角地圖圖示可直接開啟 Google Maps 查看即時街景、最新評價與步行路線。`;
             detectedTips = "前往時可利用 Google 地圖實時步行導航，並可點擊地圖連結確認今日最新營業時間。";
           }
@@ -913,6 +942,30 @@ export const PocketWishlistSection: React.FC = () => {
                   </>
                 )}
               </button>
+            </div>
+
+            {/* Quick Suggestions / Examples */}
+            <div className="flex flex-wrap items-center gap-1.5 pt-1 text-[11px] text-[#786b6f]">
+              <span className="font-semibold text-[#8a7279]">💡 點擊快速帶入測試：</span>
+              {[
+                { label: "淺草今半（壽喜燒）", val: "淺草今半 国際通り本店" },
+                { label: "志乃多壽司（短網址）", val: "https://maps.app.goo.gl/5QjeuGqka2AcV4mGA" },
+                { label: "敘敘苑 晴空塔店", val: "敘敘苑 晴空塔店" },
+                { label: "AFURI 原宿拉麵", val: "AFURI 原宿" },
+                { label: "小網神社（洗錢之井）", val: "小網神社" },
+              ].map((item) => (
+                <button
+                  key={item.label}
+                  type="button"
+                  onClick={() => {
+                    setInputUrl(item.val);
+                    setFormError(null);
+                  }}
+                  className="px-2.5 py-1 bg-[#fbf6f7] hover:bg-[#f5e3e7] text-[#8e2443] border border-[#ecd2d8] rounded-full text-[11px] transition-colors cursor-pointer"
+                >
+                  {item.label}
+                </button>
+              ))}
             </div>
 
             {/* Error / Success Feedback */}

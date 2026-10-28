@@ -21,11 +21,118 @@ const ai = new GoogleGenAI({
   },
 });
 
-// Built-in Knowledge Base & Area Synthesis for high-fidelity place analysis
+// Safe recursive URI decoder (handles up to 4 layers of encoding)
+function safeDecode(str: string): string {
+  let prev = str;
+  for (let i = 0; i < 4; i++) {
+    try {
+      const next = decodeURIComponent(prev);
+      if (next === prev) break;
+      prev = next;
+    } catch {
+      break;
+    }
+  }
+  return prev;
+}
+
+// Clean mobile share text (removes star ratings, review counts, phone numbers, postal codes)
+function cleanSharedText(input: string): string {
+  if (!input) return "";
+  let text = input.replace(/https?:\/\/[^\s]+/gi, " ").trim();
+  // Remove review counts like (2,891), (500+), (12則評論)
+  text = text.replace(/\([\d,]+[+\s\w\u4e00-\u9fa5]*\)/g, " ");
+  // Remove star ratings like 4.3 ★, ★★★★, 4.5星
+  text = text.replace(/[\d.]+\s*[★☆星]+/g, " ").replace(/[★☆]+/g, " ");
+  // Remove phone numbers like 03-3841-1114 or +81-3-3841-1114
+  text = text.replace(/(?:\+81[\s-]?)?\b\d{2,4}-\d{2,4}-\d{4}\b/g, " ");
+  // Remove postal codes like 〒111-0032
+  text = text.replace(/〒?\d{3}-\d{4}/g, " ");
+  // Remove separators like ·, |, •, ‧
+  text = text.replace(/[·|•‧]/g, " ");
+  // Clean redundant whitespace
+  text = text.replace(/\s+/g, " ").trim();
+  return text;
+}
+
+// Extract place name or query from any Google Maps URL (regular, mobile, redirect, or sorry continue)
+function extractPlaceFromUrl(rawUrl: string): { name: string; lat?: number; lng?: number } {
+  if (!rawUrl) return { name: "" };
+
+  const decoded = safeDecode(rawUrl);
+
+  // 1. Extract coordinates if present
+  let lat: number | undefined;
+  let lng: number | undefined;
+  const coordMatch = decoded.match(/@([0-9.]+),([0-9.]+)/);
+  if (coordMatch) {
+    lat = parseFloat(coordMatch[1]);
+    lng = parseFloat(coordMatch[2]);
+  }
+
+  // 2. Look for /maps/place/<PlaceName>/
+  const placeMatch = decoded.match(/\/place\/([^/@?&]+)/i);
+  if (placeMatch && placeMatch[1]) {
+    let raw = placeMatch[1].replace(/\+/g, " ").trim();
+    raw = raw.replace(/@.*$/, "").replace(/data=.*$/, "").trim();
+    if (raw && !raw.startsWith("http") && !raw.startsWith("0x")) {
+      return { name: raw, lat, lng };
+    }
+  }
+
+  // 3. Look for continue= parameter in sorry/index bot redirects
+  const continueMatch = decoded.match(/continue=([^&]+)/i);
+  if (continueMatch && continueMatch[1]) {
+    const contDecoded = safeDecode(continueMatch[1]);
+    const contPlaceMatch = contDecoded.match(/\/place\/([^/@?&]+)/i);
+    if (contPlaceMatch && contPlaceMatch[1]) {
+      let raw = contPlaceMatch[1].replace(/\+/g, " ").trim();
+      raw = raw.replace(/@.*$/, "").replace(/data=.*$/, "").trim();
+      if (raw && !raw.startsWith("http") && !raw.startsWith("0x")) {
+        return { name: raw, lat, lng };
+      }
+    }
+    const contQMatch = contDecoded.match(/[?&](?:query|q)=([^&]+)/i);
+    if (contQMatch && contQMatch[1]) {
+      let raw = contQMatch[1].replace(/\+/g, " ").trim();
+      if (raw && !raw.startsWith("http") && !raw.startsWith("EhA")) {
+        return { name: raw, lat, lng };
+      }
+    }
+  }
+
+  // 4. Look for q= or query=
+  const qMatch = decoded.match(/[?&](?:query|q)=([^&]+)/i);
+  if (qMatch && qMatch[1]) {
+    let raw = qMatch[1].replace(/\+/g, " ").trim();
+    if (raw && !raw.startsWith("http") && !raw.startsWith("EhA")) {
+      return { name: raw, lat, lng };
+    }
+  }
+
+  // 5. Look for /search/<PlaceName>
+  const searchMatch = decoded.match(/\/search\/([^/@?&]+)/i);
+  if (searchMatch && searchMatch[1]) {
+    let raw = searchMatch[1].replace(/\+/g, " ").trim();
+    if (raw && !raw.startsWith("http")) {
+      return { name: raw, lat, lng };
+    }
+  }
+
+  return { name: "", lat, lng };
+}
+
+// Built-in High-Fidelity Knowledge Base & Area Synthesis
 function generateRichPlaceInfo(resolvedUrl: string, placeQueryHint: string, rawText?: string) {
-  let name = (placeQueryHint || rawText || "日本熱門推薦地點").trim();
+  let name = (placeQueryHint || rawText || "").trim();
   // Clean up unwanted noise like coordinates or hashes
   name = name.replace(/@.*$/, "").replace(/data=.*$/, "").replace(/\?.*$/, "").trim();
+
+  // If still no name, derive from URL or safe fallback
+  if (!name || name.startsWith("http")) {
+    const fromUrl = extractPlaceFromUrl(resolvedUrl);
+    name = fromUrl.name || (rawText ? cleanSharedText(rawText) : "東京私房推薦據點");
+  }
 
   let japaneseName = "";
   let category = "dining";
@@ -63,7 +170,7 @@ function generateRichPlaceInfo(resolvedUrl: string, placeQueryHint: string, rawT
   }
 
   // 1. Exact match for popular landmarks and iconic venues
-  if (lower.includes("志乃多") || lower.includes("shinoda") || (lower.includes("稲荷") && lower.includes("寿司"))) {
+  if (lower.includes("志乃多") || lower.includes("shinoda") || (lower.includes("稻荷") && lower.includes("壽司")) || (lower.includes("稲荷") && lower.includes("寿司"))) {
     name = "志乃多壽司（稻荷壽司）";
     japaneseName = "志乃多寿司（しのだずし）";
     category = "dining";
@@ -72,6 +179,24 @@ function generateRichPlaceInfo(resolvedUrl: string, placeQueryHint: string, rawT
     summary = "創業於明治初期的東京百年江戶稻荷壽司名門。嚴選吸飽柴魚昆布甜高湯醬汁的多汁油揚豆腐皮包裹特調醋飯，搭配爽脆甘甜的干瓢卷，是東京最經典的傳統外帶折詰美味。";
     address = area.includes("台東區") ? "東京都台東區淺草" : "東京都千代田區神田 / 台東區淺草";
     tips = "「稻荷壽司與干瓢卷」綜合折詰盒最受歡迎，常溫即可品嚐，極適合外帶至隅田川畔散步或新幹線上享用！";
+  } else if (lower.includes("今半") || lower.includes("imahan")) {
+    name = "淺草今半（壽喜燒・涮涮鍋）";
+    japaneseName = "浅草今半（あさくさいまはん）";
+    category = "dining";
+    categoryLabel = "餐廳美饌";
+    highlight = "明治28年創業、頂級黑毛和牛壽喜燒與傳承秘傳割下醬汁";
+    summary = "東京代表性百年壽喜燒老店。精選日本頂級黑毛和牛，油花細緻如大理石紋，搭配傳承逾百年的獨門割下高湯醬汁，入口即化，鹹甜濃郁，是品味江戶傳統料理的極上殿堂。";
+    address = "東京都台東區西淺草3-1-12";
+    tips = "午間時段推出的黑毛和牛壽喜燒定食與百年牛肉丼CP值極高，建議提早預約或於開店前半小時前往排隊。";
+  } else if (lower.includes("敘敘苑") || lower.includes("叙々苑") || lower.includes("jojoen")) {
+    name = "敘敘苑（燒肉）";
+    japaneseName = "叙々苑（じょじょえん）";
+    category = "dining";
+    categoryLabel = "餐廳美饌";
+    highlight = "極上上等牛五花、招牌秘傳燒肉醬汁與高空景觀用餐體驗";
+    summary = "日本超人氣高級燒肉連鎖代表，肉質細嫩鮮美、油花豐潤，招牌牛五花與特選牛舌搭配獨家爽口沙拉，深受海內外旅人推崇，特定分店如晴空塔店更可飽覽高空絕美市景。";
+    address = area.includes("墨田區") ? "東京都墨田區押上1-1-2 晴空街道30F" : "東京都各大精華商圈";
+    tips = "若安排至晴空塔店建議提前預訂高空景觀窗邊席；午間套餐價格實惠且包含豐富小菜與甜點。";
   } else if (lower.includes("淺草寺") || lower.includes("浅草寺") || lower.includes("senso-ji") || lower.includes("sensoji")) {
     name = "淺草寺（金龍山淺草寺）";
     japaneseName = "浅草寺（せんそうじ）";
@@ -174,7 +299,7 @@ function generateRichPlaceInfo(resolvedUrl: string, placeQueryHint: string, rawT
       category = "dining";
       categoryLabel = "餐廳美饌";
       highlight = "江戶前新鮮魚獲、特製醋飯與職人現做壽司手藝";
-      summary = `${name}為備受歡迎之日式壽司料理店，嚴選當季新鮮漁獲海味，搭配溫潤醋飯，呈現細緻典雅的和食職人美味。`;
+      summary = `${name}為備受歡迎之日式料理店，嚴選當季新鮮漁獲海味，搭配溫潤醋飯，呈現細緻典雅的和食職人美味。`;
       tips = "可搭配店家特選抹茶或清酒享用，建議提前於離峰時段造訪以享有更寬敞的用餐體驗。";
     } else if (
       lower.includes("燒肉") ||
@@ -188,7 +313,18 @@ function generateRichPlaceInfo(resolvedUrl: string, placeQueryHint: string, rawT
       summary = `${name}提供嚴選鮮嫩肉質與炭火直烤風味，油花均勻分布、入口香氣四溢，是聚餐同樂的極致美味享受。`;
       tips = "推薦先點牛舌與牛五花品嚐原味肉香，搭配白飯與泡菜更添多層次風味。";
     } else if (
-      lower.includes("一蘭") ||
+      lower.includes("壽喜燒") ||
+      lower.includes("すき焼き") ||
+      lower.includes("sukiyaki") ||
+      lower.includes("涮涮鍋") ||
+      lower.includes("鍋")
+    ) {
+      category = "dining";
+      categoryLabel = "餐廳美饌";
+      highlight = "頂級和牛、濃郁鹹甜割下醬汁與滑嫩生蛋沾醬";
+      summary = `${name}以道地和牛鍋物聞名，肉質細嫩多汁，吸附香醇秘傳湯汁後沾裹新鮮蛋液享用，口感滑順甘甜，溫暖治癒。`;
+      tips = "肉片建議涮煮至粉嫩狀態即可撈起享用，最後可加入烏龍麵吸收精華湯汁！";
+    } else if (
       lower.includes("拉麵") ||
       lower.includes("ラーメン") ||
       lower.includes("沾麵") ||
@@ -291,11 +427,11 @@ function generateRichPlaceInfo(resolvedUrl: string, placeQueryHint: string, rawT
       summary = `${name}地理位置便利，提供整潔溫馨的住宿環境與貼心設施服務，讓旅人在充實的行程後能獲得充足放鬆與好眠。`;
       tips = "建議留意飯店入住（Check-in）時間，若提早抵達通常可於櫃台寄存行李。";
     } else {
-      category = "other";
-      categoryLabel = "其他探訪";
-      highlight = `${name} 必訪特色與旅人私房推薦`;
-      summary = `${name} 位於${area}，是在地廣受好評的私房探訪推薦。店內環境舒適、極富生活氛圍，值得在自由行旅程中安排前來細細探訪。`;
-      tips = `造訪「${name}」前建議透過地圖確認當日最新營業時間；若為熱門用餐或逛街時段，預留彈性時間更加愜意！`;
+      category = "dining";
+      categoryLabel = "餐廳美饌";
+      highlight = `${name} 在地特色亮點與旅人推薦`;
+      summary = `${name} 位於${area}，是在地廣受歡迎的探訪點。環境充滿舒適生活氛圍，值得在自由行旅程中親臨感受其獨特魅力。`;
+      tips = `造訪「${name}」前建議透過地圖確認最新營業時間與公休日；離峰時段造訪更為愜意！`;
     }
 
     address = area;
@@ -357,9 +493,9 @@ async function startServer() {
   // API Route: Analyze Google Maps link with Gemini AI
   app.post("/api/analyze-place", async (req, res) => {
     try {
-      const { url, rawText } = req.body;
+      const { url, rawText, clientExtractedName } = req.body;
 
-      if (!url && !rawText) {
+      if (!url && !rawText && !clientExtractedName) {
         return res.status(400).json({
           error: "請提供 Google Maps 連結或地點文字",
         });
@@ -372,144 +508,136 @@ async function startServer() {
         extractedUrl = urlMatch[0];
       }
 
-      // Check if user entered text alongside the URL
-      const textWithoutUrl = inputStr.replace(/https?:\/\/[^\s]+/gi, "").trim();
-      const effectiveRawText = (rawText || textWithoutUrl || "").trim();
+      // Clean mobile share text if present
+      const cleanedInputText = cleanSharedText(inputStr);
+      const cleanedRawText = cleanSharedText(rawText || "");
+      const explicitText = [cleanedInputText, cleanedRawText].filter(Boolean).join(" ").trim();
 
       let targetUrl = extractedUrl || inputStr;
       let resolvedUrl = targetUrl;
-      let placeQueryHint = effectiveRawText || "";
+      let placeQueryHint = clientExtractedName || explicitText || "";
 
-      // 1. Resolve short Google Maps URL (maps.app.goo.gl or goo.gl/maps)
+      // 1. Resolve short Google Maps URL using manual redirect to avoid Google bot blocking (429)
       if (
         targetUrl.includes("maps.app.goo.gl") ||
         targetUrl.includes("goo.gl/maps") ||
         targetUrl.includes("page.link")
       ) {
         try {
-          const res = await fetch(targetUrl, {
+          const manualRes = await fetch(targetUrl, {
             method: "GET",
-            redirect: "follow",
-            signal: AbortSignal.timeout(6000),
+            redirect: "manual",
+            signal: AbortSignal.timeout(5000),
             headers: {
               "User-Agent":
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1",
+              "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
               "Accept-Language": "zh-TW,zh;q=0.9,ja;q=0.8,en;q=0.7",
             },
           });
-          if (res.url) {
-            resolvedUrl = res.url;
+
+          const locationHeader = manualRes.headers.get("location");
+          if (locationHeader) {
+            resolvedUrl = locationHeader;
+
+            // If locationHeader is another short link or hop, follow one more manual hop
+            if (
+              locationHeader.includes("maps.app.goo.gl") ||
+              locationHeader.includes("goo.gl/maps") ||
+              locationHeader.includes("page.link")
+            ) {
+              try {
+                const secondHop = await fetch(locationHeader, {
+                  method: "GET",
+                  redirect: "manual",
+                  signal: AbortSignal.timeout(4000),
+                });
+                const loc2 = secondHop.headers.get("location");
+                if (loc2) resolvedUrl = loc2;
+              } catch {}
+            }
           }
         } catch (fetchErr) {
-          console.warn("Follow redirect failed, trying manual redirect:", fetchErr);
+          console.warn("Manual redirect failed, trying follow redirect as fallback:", fetchErr);
           try {
-            const manualRes = await fetch(targetUrl, {
+            const followRes = await fetch(targetUrl, {
               method: "GET",
-              redirect: "manual",
-              signal: AbortSignal.timeout(4000),
+              redirect: "follow",
+              signal: AbortSignal.timeout(5000),
               headers: {
                 "User-Agent":
                   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
               },
             });
-            const loc = manualRes.headers.get("location");
-            if (loc) resolvedUrl = loc;
+            if (followRes.url) resolvedUrl = followRes.url;
           } catch {}
         }
       }
 
-      // 2. Decode resolvedUrl to extract place name (handles multiple URL encodings & continue= wrapper)
-      try {
-        let toDecode = resolvedUrl;
-        try { toDecode = decodeURIComponent(toDecode); } catch {}
-        try { toDecode = decodeURIComponent(toDecode); } catch {}
-        try { toDecode = decodeURIComponent(toDecode); } catch {}
-
-        // Look for continue= parameter
-        const continueMatch = toDecode.match(/continue=([^&]+)/i);
-        if (continueMatch && continueMatch[1]) {
-          let cont = continueMatch[1];
-          try { cont = decodeURIComponent(cont); } catch {}
-          try { cont = decodeURIComponent(cont); } catch {}
-          toDecode = cont;
+      // 2. Extract Place name from resolvedUrl
+      const extractedFromResolved = extractPlaceFromUrl(resolvedUrl);
+      if (extractedFromResolved.name) {
+        placeQueryHint = extractedFromResolved.name;
+      } else if (!placeQueryHint) {
+        const extractedFromTarget = extractPlaceFromUrl(targetUrl);
+        if (extractedFromTarget.name) {
+          placeQueryHint = extractedFromTarget.name;
         }
-
-        // Pattern: /maps/place/<PlaceName>/
-        const placeMatch = toDecode.match(/\/place\/([^/@?&]+)/i);
-        if (placeMatch && placeMatch[1]) {
-          let rawName = placeMatch[1].replace(/\+/g, " ").trim();
-          rawName = rawName.replace(/@.*$/, "").replace(/data=.*$/, "").trim();
-          if (rawName && !rawName.startsWith("http")) {
-            placeQueryHint = rawName;
-          }
-        } else {
-          const qMatch = toDecode.match(/[?&](?:query|q)=([^&]+)/i);
-          if (qMatch && qMatch[1]) {
-            let qName = qMatch[1].replace(/\+/g, " ").trim();
-            if (qName && !qName.startsWith("http") && !qName.startsWith("EhA")) {
-              placeQueryHint = qName;
-            }
-          }
-        }
-      } catch {
-        // Ignore URL parsing errors
       }
 
       // Fallback: If no place name from URL, check raw input if it was not an HTTP link
       if (!placeQueryHint) {
         if (!targetUrl.startsWith("http://") && !targetUrl.startsWith("https://")) {
           placeQueryHint = targetUrl;
+        } else if (explicitText) {
+          placeQueryHint = explicitText;
         }
       }
 
-      // Clean up placeQueryHint
-      if (placeQueryHint) {
-        placeQueryHint = placeQueryHint.replace(/@.*$/, "").replace(/data=.*$/, "").replace(/\?.*$/, "").trim();
-      }
-
       // Generate rich baseline place information using our knowledge base & area synthesis
-      const richBaseline = generateRichPlaceInfo(resolvedUrl, placeQueryHint, effectiveRawText);
+      const richBaseline = generateRichPlaceInfo(resolvedUrl, placeQueryHint, explicitText);
 
-      // 2. Call Gemini AI (gemini-3.5-flash-lite) to analyze and enrich place
+      // 3. Call Gemini AI (gemini-3.1-flash-lite, fallback to gemini-3.8-flash)
       let aiResult = richBaseline;
       if (process.env.GEMINI_API_KEY) {
         try {
-          const effectiveName = (placeQueryHint || richBaseline.name || rawText || "日本熱門景點").trim();
-          const prompt = `你是一位精通日本東京自由行的旅遊達人與在地嚮導。
-請針對以下 Google Maps 地點/地址資訊進行專業深度分析與介紹：
-- 地點或地址：${effectiveName}
+          const effectiveName = (
+            placeQueryHint ||
+            richBaseline.name ||
+            explicitText ||
+            "日本熱門景點"
+          ).trim();
+
+          const prompt = `你是一位精通日本東京旅遊與在地美食的資深自由行嚮導。
+請根據以下地點或店名資訊，為旅人的自由行口袋清單提供深度、精準的繁體中文分析與推薦：
+- 目標地點/店家：${effectiveName}
 - 原始連結或輸入：${targetUrl}
 - 解析後網址：${resolvedUrl}
 - 預估所在區域：${richBaseline.address}
-- 額外備註：${rawText || "無"}
+- 額外備註：${explicitText || "無"}
 
-重要解析指示：
-1. 若輸入的是日本地址（如包含區、町、丁目、番地或郵遞區號），請精確辨識該地址所在的著名景點、商場、百年名店或代表性地標名稱（例如「押上1-1-2」對應東京晴空塔、「千代田1-1」對應皇居、「淺草2-3-1」對應淺草寺；若為一般民宅/商務地址，則給出該街區最具代表性的推薦據點與商圈特色）。
-2. 請以道地繁體中文提供完整景點/店家資訊，格式必須為合法的純 JSON：
-- name: 繁體中文全名（如「東京晴空塔」、「志乃多壽司」、「淺草寺」）
-- japaneseName: 日文原名及假名標音（如「東京スカイツリー」、「志乃多寿司（しのだずし）」、「浅草寺（せんそうじ）」）
-- category: 嚴格限定為下列代碼之一：dining, sightseeing, shopping, cafe, stay, other
-- categoryLabel: 對應中文標籤（餐廳美饌、觀光景點、購物商場、甜點咖啡、旅宿飯店、其他探訪）
-- highlight: 一句話招牌亮點（30字內，如「世界最高自立式電波塔、360度展望台與晴空街道」）
-- summary: 2至3句話（80至130字）具體介紹該地點的招牌必吃、歷史亮點或核心魅力，切忌空泛套話！
-- address: 所在區域或地址（如「東京都墨田區押上1-1-2」）
-- tips: 1至2句自由行旅人實用貼心建議（如最佳拍攝時段、排隊預約技巧或外帶推薦）
-
-純 JSON 格式回應，不得包含 Markdown 標記：
+【嚴格分析指引】：
+1. 若名稱包含具體店家名（如「志乃多壽司」、「淺草今半」、「敘敘苑」、「利久」、「AFURI」等），請提供該店家的招牌必點料理、必吃菜品、歷史源流與特色。
+2. 若名稱為景點或商場（如「淺草寺」、「東京晴空塔」、「小網神社」、「新宿御苑」等），請提供核心看點、最佳拍照視角與參拜/逛街要點。
+3. 若輸入為日本地址（包含區、町、丁目、番地），請精確辨識該地址所在的著名景點或代表性商圈風貌。
+4. 絕對嚴禁使用「東京精選推薦據點」等空泛套話！必須具體寫出該地點的名字與真實招牌特色！
+5. 請嚴格輸出合法的純 JSON（禁止 Markdown 代碼塊標記）：
 {
-  "name": "...",
-  "japaneseName": "...",
-  "category": "sightseeing",
-  "categoryLabel": "觀光景點",
-  "highlight": "...",
-  "summary": "...",
-  "address": "...",
-  "tips": "..."
-}`;
+  "name": "繁體中文全名（如「淺草今半 國際通本店」、「志乃多壽司」）",
+  "japaneseName": "日文原名及假名標音（如「浅草今半 国際通り本店」、「志乃多寿司（しのだずし）」）",
+  "category": "dining",
+  "categoryLabel": "餐廳美饌",
+  "highlight": "一句話招牌亮點（30字內）",
+  "summary": "2至3句話具體介紹該地點的核心招牌菜或歷史特色（80至130字）",
+  "address": "所在區域或具體地址（如「東京都台東區西淺草3-1-12」）",
+  "tips": "1至2句自由行旅人的實用避雷或排隊預約貼士"
+}
+注意：category 欄位嚴格限定為下列代碼之一：dining, sightseeing, shopping, cafe, stay, other
+對應 categoryLabel 為：餐廳美饌, 觀光景點, 購物商場, 甜點咖啡, 旅宿飯店, 其他探訪`;
 
           try {
-            // Prefer fast and responsive gemini-3.5-flash-lite, fallback to gemini-3.8-flash
-            const modelToUse = "gemini-3.5-flash-lite";
+            // gemini-3.1-flash-lite provides fast, dependable JSON structuring
+            const modelToUse = "gemini-3.1-flash-lite";
             const geminiPromise = ai.models.generateContent({
               model: modelToUse,
               contents: prompt,
@@ -518,16 +646,19 @@ async function startServer() {
               },
             });
             const timeoutPromise = new Promise((_, reject) =>
-              setTimeout(() => reject(new Error("Gemini API call timed out")), 7000)
+              setTimeout(() => reject(new Error("Gemini API call timed out")), 6500)
             );
             const response = (await Promise.race([geminiPromise, timeoutPromise])) as any;
             if (response && response.text) {
               const parsed = JSON.parse(response.text);
               if (parsed && parsed.name && parsed.summary && parsed.summary.length > 10) {
-                aiResult = {
-                  ...richBaseline,
-                  ...parsed,
-                };
+                // Prevent generic placeholder leakage
+                if (!parsed.name.includes("東京精選推薦據點")) {
+                  aiResult = {
+                    ...richBaseline,
+                    ...parsed,
+                  };
+                }
               }
             }
           } catch (modelErr: any) {
@@ -542,7 +673,7 @@ async function startServer() {
               });
               if (fallbackResponse && fallbackResponse.text) {
                 const parsed = JSON.parse(fallbackResponse.text);
-                if (parsed && parsed.name && parsed.summary) {
+                if (parsed && parsed.name && parsed.summary && !parsed.name.includes("東京精選推薦據點")) {
                   aiResult = { ...richBaseline, ...parsed };
                 }
               }
