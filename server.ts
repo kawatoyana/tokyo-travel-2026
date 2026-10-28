@@ -365,92 +365,110 @@ async function startServer() {
         });
       }
 
-      let targetUrl = (url || "").trim();
+      const inputStr = (url || "").trim();
+      let extractedUrl = "";
+      const urlMatch = inputStr.match(/https?:\/\/[^\s]+/i);
+      if (urlMatch) {
+        extractedUrl = urlMatch[0];
+      }
+
+      // Check if user entered text alongside the URL
+      const textWithoutUrl = inputStr.replace(/https?:\/\/[^\s]+/gi, "").trim();
+      const effectiveRawText = (rawText || textWithoutUrl || "").trim();
+
+      let targetUrl = extractedUrl || inputStr;
       let resolvedUrl = targetUrl;
-      let placeQueryHint = "";
+      let placeQueryHint = effectiveRawText || "";
 
       // 1. Resolve short Google Maps URL (maps.app.goo.gl or goo.gl/maps)
-      // Using redirect: "manual" captures the 302 Location header directly containing the place name!
       if (
         targetUrl.includes("maps.app.goo.gl") ||
         targetUrl.includes("goo.gl/maps") ||
         targetUrl.includes("page.link")
       ) {
         try {
-          const manualRes = await fetch(targetUrl, {
+          const res = await fetch(targetUrl, {
             method: "GET",
-            redirect: "manual",
-            signal: AbortSignal.timeout(5000),
+            redirect: "follow",
+            signal: AbortSignal.timeout(6000),
             headers: {
               "User-Agent":
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
               "Accept-Language": "zh-TW,zh;q=0.9,ja;q=0.8,en;q=0.7",
             },
           });
-          const loc = manualRes.headers.get("location");
-          if (loc) {
-            resolvedUrl = loc;
+          if (res.url) {
+            resolvedUrl = res.url;
           }
         } catch (fetchErr) {
-          console.warn("Manual redirect fetch error, trying HEAD:", fetchErr);
+          console.warn("Follow redirect failed, trying manual redirect:", fetchErr);
           try {
-            const headRes = await fetch(targetUrl, {
-              method: "HEAD",
+            const manualRes = await fetch(targetUrl, {
+              method: "GET",
               redirect: "manual",
-              signal: AbortSignal.timeout(3000),
+              signal: AbortSignal.timeout(4000),
+              headers: {
+                "User-Agent":
+                  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+              },
             });
-            const loc = headRes.headers.get("location");
+            const loc = manualRes.headers.get("location");
             if (loc) resolvedUrl = loc;
           } catch {}
         }
       }
 
-      // Unpack continue parameter if Google wrapped it in /sorry/ or similar
+      // 2. Decode resolvedUrl to extract place name (handles multiple URL encodings & continue= wrapper)
       try {
-        const u = new URL(resolvedUrl);
-        const cont = u.searchParams.get("continue");
-        if (cont) {
-          resolvedUrl = cont;
-          try { resolvedUrl = decodeURIComponent(resolvedUrl); } catch {}
-          try { resolvedUrl = decodeURIComponent(resolvedUrl); } catch {}
-        }
-      } catch {}
+        let toDecode = resolvedUrl;
+        try { toDecode = decodeURIComponent(toDecode); } catch {}
+        try { toDecode = decodeURIComponent(toDecode); } catch {}
+        try { toDecode = decodeURIComponent(toDecode); } catch {}
 
-      // Extract place name and coordinates from resolved URL
-      try {
-        const parsed = new URL(resolvedUrl);
-        // Pattern 1: /maps/place/<PlaceName>/@<lat>,<lng>
-        const placeMatch = parsed.pathname.match(/\/place\/([^/@?]+)/);
+        // Look for continue= parameter
+        const continueMatch = toDecode.match(/continue=([^&]+)/i);
+        if (continueMatch && continueMatch[1]) {
+          let cont = continueMatch[1];
+          try { cont = decodeURIComponent(cont); } catch {}
+          try { cont = decodeURIComponent(cont); } catch {}
+          toDecode = cont;
+        }
+
+        // Pattern: /maps/place/<PlaceName>/
+        const placeMatch = toDecode.match(/\/place\/([^/@?&]+)/i);
         if (placeMatch && placeMatch[1]) {
-          let rawPlace = placeMatch[1].replace(/\+/g, " ");
-          try { rawPlace = decodeURIComponent(rawPlace); } catch {}
-          try { rawPlace = decodeURIComponent(rawPlace); } catch {}
-          placeQueryHint = rawPlace;
-        } else if (parsed.searchParams.get("query")) {
-          placeQueryHint = decodeURIComponent(parsed.searchParams.get("query") || "");
-        } else if (parsed.searchParams.get("q") && !parsed.pathname.includes("/sorry/")) {
-          placeQueryHint = decodeURIComponent(parsed.searchParams.get("q") || "");
-        }
-
-        // Clean up common suffix noise like "@35.7..."
-        if (placeQueryHint) {
-          placeQueryHint = placeQueryHint.replace(/@.*$/, "").replace(/data=.*$/, "").trim();
+          let rawName = placeMatch[1].replace(/\+/g, " ").trim();
+          rawName = rawName.replace(/@.*$/, "").replace(/data=.*$/, "").trim();
+          if (rawName && !rawName.startsWith("http")) {
+            placeQueryHint = rawName;
+          }
+        } else {
+          const qMatch = toDecode.match(/[?&](?:query|q)=([^&]+)/i);
+          if (qMatch && qMatch[1]) {
+            let qName = qMatch[1].replace(/\+/g, " ").trim();
+            if (qName && !qName.startsWith("http") && !qName.startsWith("EhA")) {
+              placeQueryHint = qName;
+            }
+          }
         }
       } catch {
         // Ignore URL parsing errors
       }
 
-      // Fallback: If no place name from URL, check if targetUrl is a raw address/text or check rawText
+      // Fallback: If no place name from URL, check raw input if it was not an HTTP link
       if (!placeQueryHint) {
-        if (targetUrl && !targetUrl.startsWith("http://") && !targetUrl.startsWith("https://")) {
+        if (!targetUrl.startsWith("http://") && !targetUrl.startsWith("https://")) {
           placeQueryHint = targetUrl;
-        } else if (rawText) {
-          placeQueryHint = rawText.trim();
         }
       }
 
+      // Clean up placeQueryHint
+      if (placeQueryHint) {
+        placeQueryHint = placeQueryHint.replace(/@.*$/, "").replace(/data=.*$/, "").replace(/\?.*$/, "").trim();
+      }
+
       // Generate rich baseline place information using our knowledge base & area synthesis
-      const richBaseline = generateRichPlaceInfo(resolvedUrl, placeQueryHint, rawText);
+      const richBaseline = generateRichPlaceInfo(resolvedUrl, placeQueryHint, effectiveRawText);
 
       // 2. Call Gemini AI (gemini-3.5-flash-lite) to analyze and enrich place
       let aiResult = richBaseline;
