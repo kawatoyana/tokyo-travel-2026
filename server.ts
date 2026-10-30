@@ -533,7 +533,7 @@ async function startServer() {
       if (isShortLink) {
         let currentHopUrl = targetUrl;
         let hops = 0;
-        const maxHops = 5;
+        const maxHops = 3;
 
         while (hops < maxHops) {
           hops++;
@@ -541,7 +541,7 @@ async function startServer() {
             const hopRes = await fetch(currentHopUrl, {
               method: "GET",
               redirect: "manual",
-              signal: AbortSignal.timeout(4500),
+              signal: AbortSignal.timeout(2000),
               headers: {
                 "User-Agent":
                   "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1",
@@ -552,7 +552,6 @@ async function startServer() {
 
             const loc = hopRes.headers.get("location");
             if (loc) {
-              // Resolve relative redirect if needed
               let nextUrl = loc;
               try {
                 nextUrl = new URL(loc, currentHopUrl).href;
@@ -560,7 +559,6 @@ async function startServer() {
               resolvedUrl = nextUrl;
               currentHopUrl = nextUrl;
 
-              // If next hop is still a short link, loop
               if (
                 nextUrl.includes("maps.app.goo.gl") ||
                 nextUrl.includes("goo.gl") ||
@@ -571,10 +569,8 @@ async function startServer() {
               }
               break;
             } else {
-              // No location header; read HTML body to check for /maps/place/ or <title>
               try {
                 const bodyText = await hopRes.text();
-                // Check for embedded place url in HTML
                 const placeMatch = bodyText.match(/\/maps\/place\/([^/?#"&\s]+)/i);
                 if (placeMatch && placeMatch[1]) {
                   const decodedPlace = safeDecode(placeMatch[1]).replace(/\+/g, " ").trim();
@@ -582,7 +578,6 @@ async function startServer() {
                     placeQueryHint = decodedPlace;
                   }
                 }
-                // Check <title> tag
                 const titleMatch = bodyText.match(/<title[^>]*>([^<]+)<\/title>/i);
                 if (titleMatch && titleMatch[1]) {
                   let rawTitle = titleMatch[1].trim();
@@ -600,12 +595,12 @@ async function startServer() {
               break;
             }
           } catch (hopErr) {
-            console.warn(`Redirect hop ${hops} failed:`, hopErr);
+            console.warn(`Redirect hop ${hops} failed or timed out:`, hopErr);
             break;
           }
         }
 
-        // Secondary fallback if resolvedUrl is still short: try standard follow redirect
+        // Secondary quick fallback if resolvedUrl is still short
         if (
           resolvedUrl.includes("maps.app.goo.gl") ||
           resolvedUrl.includes("goo.gl") ||
@@ -615,7 +610,7 @@ async function startServer() {
             const followRes = await fetch(targetUrl, {
               method: "GET",
               redirect: "follow",
-              signal: AbortSignal.timeout(5000),
+              signal: AbortSignal.timeout(2500),
               headers: {
                 "User-Agent":
                   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -659,7 +654,7 @@ async function startServer() {
       // Generate rich baseline place information using our knowledge base & area synthesis
       const richBaseline = generateRichPlaceInfo(resolvedUrl, placeQueryHint, explicitText);
 
-      // 3. Call Gemini AI (gemini-3.1-flash-lite, fallback to gemini-3.8-flash)
+      // 3. Call Gemini AI (gemini-3.1-flash-lite with strict 4.5s race timeout)
       let aiResult = richBaseline;
       if (process.env.GEMINI_API_KEY) {
         try {
@@ -698,23 +693,20 @@ async function startServer() {
 對應 categoryLabel 為：餐廳美饌, 觀光景點, 購物商場, 甜點咖啡, 旅宿飯店, 其他探訪`;
 
           try {
-            // gemini-3.1-flash-lite provides fast, dependable JSON structuring
-            const modelToUse = "gemini-3.1-flash-lite";
             const geminiPromise = ai.models.generateContent({
-              model: modelToUse,
+              model: "gemini-3.1-flash-lite",
               contents: prompt,
               config: {
                 responseMimeType: "application/json",
               },
             });
             const timeoutPromise = new Promise((_, reject) =>
-              setTimeout(() => reject(new Error("Gemini API call timed out")), 6500)
+              setTimeout(() => reject(new Error("Gemini API call timed out")), 4500)
             );
             const response = (await Promise.race([geminiPromise, timeoutPromise])) as any;
             if (response && response.text) {
               const parsed = JSON.parse(response.text);
               if (parsed && parsed.name && parsed.summary && parsed.summary.length > 10) {
-                // Prevent generic placeholder leakage
                 if (!parsed.name.includes("東京精選推薦據點")) {
                   aiResult = {
                     ...richBaseline,
@@ -724,27 +716,11 @@ async function startServer() {
               }
             }
           } catch (modelErr: any) {
-            console.warn("Primary Gemini call failed, attempting fallback model:", modelErr?.message);
-            try {
-              const fallbackResponse = await ai.models.generateContent({
-                model: "gemini-3.8-flash",
-                contents: prompt,
-                config: {
-                  responseMimeType: "application/json",
-                },
-              });
-              if (fallbackResponse && fallbackResponse.text) {
-                const parsed = JSON.parse(fallbackResponse.text);
-                if (parsed && parsed.name && parsed.summary && !parsed.name.includes("東京精選推薦據點")) {
-                  aiResult = { ...richBaseline, ...parsed };
-                }
-              }
-            } catch (fallbackErr: any) {
-              console.warn("Gemini fallback also failed, using rich baseline:", fallbackErr?.message);
-            }
+            console.warn("Gemini call timed out or failed, using rich baseline instantly:", modelErr?.message);
+            // Fall back immediately to richBaseline without stalling
           }
         } catch (geminiError) {
-          console.warn("Gemini API processing failed, falling back to smart rich baseline:", geminiError);
+          console.warn("Gemini API processing error:", geminiError);
         }
       }
 

@@ -399,11 +399,12 @@ export const PocketWishlistSection: React.FC = () => {
     try {
       let analyzed: any = null;
 
-      // 1. Call server-side API analysis with retry
+      // 1. Call server-side API analysis with strict 6s client timeout
       try {
-        let res = await fetch("/api/analyze-place", {
+        const res = await fetch("/api/analyze-place", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          signal: AbortSignal.timeout(6000),
           body: JSON.stringify({
             url: targetUrl,
             rawText: effectiveNotes,
@@ -411,29 +412,14 @@ export const PocketWishlistSection: React.FC = () => {
           }),
         });
 
-        // If response is not ok (e.g. warming up or transient hiccup), wait and retry once
-        if (!res.ok) {
-          await new Promise((r) => setTimeout(r, 1000));
-          res = await fetch("/api/analyze-place", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              url: targetUrl,
-              rawText: effectiveNotes,
-              clientExtractedName: clientExtractedName || textPart,
-            }),
-          });
-        }
-
-        const rawRespText = await res.text();
-        if (rawRespText && rawRespText.trim().startsWith("{")) {
-          const json = JSON.parse(rawRespText);
+        if (res.ok) {
+          const json = await res.json();
           if (json && json.success && json.data) {
             analyzed = json.data;
           }
         }
       } catch (fetchErr) {
-        console.warn("Server API fetch skipped/failed, using client synthesis fallback:", fetchErr);
+        console.warn("Server API fetch timed out or skipped, using instant client synthesis fallback:", fetchErr);
       }
 
       // 2. High-Fidelity Client-side synthesis fallback (guarantees real place names, categories & tips)
@@ -1306,21 +1292,21 @@ export const PocketWishlistSection: React.FC = () => {
           <div
             role="dialog"
             aria-modal="true"
-            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4"
+            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 overflow-hidden"
           >
-            <div className="bg-white rounded-3xl p-5 sm:p-7 max-w-xl w-full shadow-2xl border border-[#ebd8dc] max-h-[92vh] overflow-y-auto">
-              {/* Header */}
-              <div className="flex items-center justify-between mb-4 pb-3 border-b border-[#f0e2e5]">
+            <div className="bg-white rounded-3xl max-w-xl w-full shadow-2xl border border-[#ebd8dc] max-h-[88vh] sm:max-h-[85vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+              {/* 1. Fixed Header (Always visible at top) */}
+              <div className="flex items-center justify-between px-5 py-4 sm:px-6 sm:py-4.5 border-b border-[#f0e2e5] shrink-0 bg-white">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-2xl bg-[#fcebee] text-[#992545] flex items-center justify-center shrink-0">
-                    <Sparkles className="w-5 h-5" />
+                  <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-2xl bg-[#fcebee] text-[#992545] flex items-center justify-center shrink-0">
+                    <Sparkles className="w-4 h-4 sm:w-5 sm:h-5" />
                   </div>
                   <div>
-                    <h3 className="font-bold text-base text-[#2d2527]">
+                    <h3 className="font-bold text-sm sm:text-base text-[#2d2527]">
                       AI 地點分析完成 · 審閱與確認
                     </h3>
-                    <p className="text-xs text-[#735e65]">
-                      可自由微調或增修內容，確認無誤後點擊「確認儲存」
+                    <p className="text-[11px] text-[#735e65]">
+                      可自由微調或增修內容，確認無誤後點擊下方「確認儲存」
                     </p>
                   </div>
                 </div>
@@ -1336,8 +1322,8 @@ export const PocketWishlistSection: React.FC = () => {
                 </button>
               </div>
 
-              {/* Form Content */}
-              <div className="space-y-4 text-xs">
+              {/* 2. Scrollable Body (Form Content with smooth scroll) */}
+              <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-4 text-xs">
                 {/* Name & Japanese Name in 2 columns on tablet/desktop */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
@@ -1501,8 +1487,8 @@ export const PocketWishlistSection: React.FC = () => {
                 </div>
               </div>
 
-              {/* Footer actions */}
-              <div className="mt-6 pt-3 border-t border-[#f0e2e5] flex items-center justify-end gap-2.5">
+              {/* 3. Fixed / Sticky Footer (ALWAYS VISIBLE AT BOTTOM, NEVER BLOCKED!) */}
+              <div className="px-5 py-3.5 sm:px-6 sm:py-4 border-t border-[#f0e2e5] shrink-0 bg-[#faf8f9] flex items-center justify-end gap-2.5 shadow-[0_-4px_12px_rgba(0,0,0,0.03)] z-10">
                 <button
                   type="button"
                   disabled={isSavingCandidate}
@@ -1510,7 +1496,7 @@ export const PocketWishlistSection: React.FC = () => {
                     setIsReviewModalOpen(false);
                     setPendingCandidate(null);
                   }}
-                  className="px-4 py-2 rounded-xl border border-[#ebd8dc] text-xs font-semibold text-[#735e65] hover:bg-stone-50 cursor-pointer"
+                  className="px-4 py-2.5 rounded-xl border border-[#ebd8dc] text-xs font-semibold text-[#735e65] hover:bg-white cursor-pointer transition-colors"
                 >
                   取消
                 </button>
@@ -1518,7 +1504,7 @@ export const PocketWishlistSection: React.FC = () => {
                   type="button"
                   disabled={isSavingCandidate || !pendingCandidate.name.trim()}
                   onClick={handleConfirmSaveCandidate}
-                  className="px-5 py-2 bg-[#992545] hover:bg-[#801b36] disabled:bg-stone-300 text-white font-bold rounded-xl text-xs shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
+                  className="px-5 py-2.5 bg-[#992545] hover:bg-[#801b36] disabled:bg-stone-300 text-white font-bold rounded-xl text-xs shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
                 >
                   {isSavingCandidate ? (
                     <>
