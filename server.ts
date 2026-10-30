@@ -128,22 +128,6 @@ function generateRichPlaceInfo(resolvedUrl: string, placeQueryHint: string, rawT
   // Clean up unwanted noise like coordinates or hashes
   name = name.replace(/@.*$/, "").replace(/data=.*$/, "").replace(/\?.*$/, "").trim();
 
-  // If still no name, derive from URL or safe fallback
-  if (!name || name.startsWith("http")) {
-    const fromUrl = extractPlaceFromUrl(resolvedUrl);
-    name = fromUrl.name || (rawText ? cleanSharedText(rawText) : "東京私房推薦據點");
-  }
-
-  let japaneseName = "";
-  let category = "dining";
-  let categoryLabel = "餐廳美饌";
-  let highlight = "";
-  let summary = "";
-  let address = "東京都內";
-  let tips = "";
-
-  const lower = (name + " " + resolvedUrl + " " + (rawText || "")).toLowerCase();
-
   // District from coordinates if available
   let area = "東京都中心商圈";
   const coordMatch = resolvedUrl.match(/@([0-9.]+),([0-9.]+)/);
@@ -168,6 +152,28 @@ function generateRichPlaceInfo(resolvedUrl: string, placeQueryHint: string, rawT
       area = "東京都墨田區（晴空塔／押上／錦糸町）";
     }
   }
+
+  // If still no name, derive from URL, raw text, or area
+  if (!name || name.startsWith("http")) {
+    const fromUrl = extractPlaceFromUrl(resolvedUrl);
+    if (fromUrl.name) {
+      name = fromUrl.name;
+    } else if (rawText && cleanSharedText(rawText)) {
+      name = cleanSharedText(rawText);
+    } else {
+      name = area.replace("東京都", "").replace(/[（）/]/g, " ").trim() || "日本精選探訪地點";
+    }
+  }
+
+  let japaneseName = "";
+  let category = "dining";
+  let categoryLabel = "餐廳美饌";
+  let highlight = "";
+  let summary = "";
+  let address = "東京都內";
+  let tips = "";
+
+  const lower = (name + " " + resolvedUrl + " " + (rawText || "")).toLowerCase();
 
   // 1. Exact match for popular landmarks and iconic venues
   if (lower.includes("志乃多") || lower.includes("shinoda") || (lower.includes("稻荷") && lower.includes("壽司")) || (lower.includes("稲荷") && lower.includes("寿司"))) {
@@ -517,48 +523,94 @@ async function startServer() {
       let resolvedUrl = targetUrl;
       let placeQueryHint = clientExtractedName || explicitText || "";
 
-      // 1. Resolve short Google Maps URL using manual redirect to avoid Google bot blocking (429)
-      if (
+      // 1. Resolve short Google Maps URL (maps.app.goo.gl, goo.gl/maps, g.co, page.link)
+      const isShortLink =
         targetUrl.includes("maps.app.goo.gl") ||
-        targetUrl.includes("goo.gl/maps") ||
-        targetUrl.includes("page.link")
-      ) {
-        try {
-          const manualRes = await fetch(targetUrl, {
-            method: "GET",
-            redirect: "manual",
-            signal: AbortSignal.timeout(5000),
-            headers: {
-              "User-Agent":
-                "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1",
-              "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-              "Accept-Language": "zh-TW,zh;q=0.9,ja;q=0.8,en;q=0.7",
-            },
-          });
+        targetUrl.includes("goo.gl") ||
+        targetUrl.includes("page.link") ||
+        targetUrl.includes("g.co/");
 
-          const locationHeader = manualRes.headers.get("location");
-          if (locationHeader) {
-            resolvedUrl = locationHeader;
+      if (isShortLink) {
+        let currentHopUrl = targetUrl;
+        let hops = 0;
+        const maxHops = 5;
 
-            // If locationHeader is another short link or hop, follow one more manual hop
-            if (
-              locationHeader.includes("maps.app.goo.gl") ||
-              locationHeader.includes("goo.gl/maps") ||
-              locationHeader.includes("page.link")
-            ) {
+        while (hops < maxHops) {
+          hops++;
+          try {
+            const hopRes = await fetch(currentHopUrl, {
+              method: "GET",
+              redirect: "manual",
+              signal: AbortSignal.timeout(4500),
+              headers: {
+                "User-Agent":
+                  "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "Accept-Language": "zh-TW,zh;q=0.9,ja;q=0.8,en;q=0.7",
+              },
+            });
+
+            const loc = hopRes.headers.get("location");
+            if (loc) {
+              // Resolve relative redirect if needed
+              let nextUrl = loc;
               try {
-                const secondHop = await fetch(locationHeader, {
-                  method: "GET",
-                  redirect: "manual",
-                  signal: AbortSignal.timeout(4000),
-                });
-                const loc2 = secondHop.headers.get("location");
-                if (loc2) resolvedUrl = loc2;
+                nextUrl = new URL(loc, currentHopUrl).href;
               } catch {}
+              resolvedUrl = nextUrl;
+              currentHopUrl = nextUrl;
+
+              // If next hop is still a short link, loop
+              if (
+                nextUrl.includes("maps.app.goo.gl") ||
+                nextUrl.includes("goo.gl") ||
+                nextUrl.includes("page.link") ||
+                nextUrl.includes("g.co/")
+              ) {
+                continue;
+              }
+              break;
+            } else {
+              // No location header; read HTML body to check for /maps/place/ or <title>
+              try {
+                const bodyText = await hopRes.text();
+                // Check for embedded place url in HTML
+                const placeMatch = bodyText.match(/\/maps\/place\/([^/?#"&\s]+)/i);
+                if (placeMatch && placeMatch[1]) {
+                  const decodedPlace = safeDecode(placeMatch[1]).replace(/\+/g, " ").trim();
+                  if (decodedPlace && !decodedPlace.startsWith("http") && !decodedPlace.startsWith("0x")) {
+                    placeQueryHint = decodedPlace;
+                  }
+                }
+                // Check <title> tag
+                const titleMatch = bodyText.match(/<title[^>]*>([^<]+)<\/title>/i);
+                if (titleMatch && titleMatch[1]) {
+                  let rawTitle = titleMatch[1].trim();
+                  if (rawTitle.includes("/maps/place/")) {
+                    const fromTitleUrl = extractPlaceFromUrl(rawTitle);
+                    if (fromTitleUrl.name) placeQueryHint = fromTitleUrl.name;
+                  } else {
+                    rawTitle = rawTitle.replace(/\s*[-·|•]\s*Google\s*(?:Maps|地圖).*/i, "").trim();
+                    if (rawTitle && !rawTitle.toLowerCase().includes("sorry") && !rawTitle.startsWith("http")) {
+                      if (!placeQueryHint) placeQueryHint = rawTitle;
+                    }
+                  }
+                }
+              } catch {}
+              break;
             }
+          } catch (hopErr) {
+            console.warn(`Redirect hop ${hops} failed:`, hopErr);
+            break;
           }
-        } catch (fetchErr) {
-          console.warn("Manual redirect failed, trying follow redirect as fallback:", fetchErr);
+        }
+
+        // Secondary fallback if resolvedUrl is still short: try standard follow redirect
+        if (
+          resolvedUrl.includes("maps.app.goo.gl") ||
+          resolvedUrl.includes("goo.gl") ||
+          resolvedUrl.includes("g.co/")
+        ) {
           try {
             const followRes = await fetch(targetUrl, {
               method: "GET",
@@ -569,7 +621,17 @@ async function startServer() {
                   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
               },
             });
-            if (followRes.url) resolvedUrl = followRes.url;
+            if (followRes.url) {
+              resolvedUrl = followRes.url;
+            }
+            const followText = await followRes.text();
+            const placeMatch = followText.match(/\/maps\/place\/([^/?#"&\s]+)/i);
+            if (placeMatch && placeMatch[1]) {
+              const decodedPlace = safeDecode(placeMatch[1]).replace(/\+/g, " ").trim();
+              if (decodedPlace && !decodedPlace.startsWith("http") && !decodedPlace.startsWith("0x")) {
+                placeQueryHint = decodedPlace;
+              }
+            }
           } catch {}
         }
       }

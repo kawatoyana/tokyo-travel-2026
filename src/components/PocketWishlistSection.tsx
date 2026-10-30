@@ -218,6 +218,11 @@ export const PocketWishlistSection: React.FC = () => {
   const [editCategory, setEditCategory] = useState("");
   const [isSavingEdit, setIsSavingEdit] = useState(false);
 
+  // Pre-save Review Modal state (Human-in-the-loop review before adding)
+  const [pendingCandidate, setPendingCandidate] = useState<SavedPlace | null>(null);
+  const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
+  const [isSavingCandidate, setIsSavingCandidate] = useState(false);
+
   // Deletion modal state
   const [deletingPlace, setDeletingPlace] = useState<SavedPlace | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -627,38 +632,74 @@ export const PocketWishlistSection: React.FC = () => {
         updatedAt: nowIso,
       };
 
-      // 3. Immediately persist to React state & localStorage
+      // 3. Open the Human-in-the-loop Pre-Save Review & Edit modal!
+      // This satisfies the user's requirement to review and adjust place name, category, highlight, summary, address, and notes before committing to list.
+      setPendingCandidate(newPlaceDoc);
+      setIsReviewModalOpen(true);
+      setFormError(null);
+    } catch (err: any) {
+      console.error("Analyze place error:", err);
+      setFormError("地點分析時發生狀況，請檢查網址或直接手動輸入名稱。");
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  // Confirm and persist the reviewed place candidate
+  const handleConfirmSaveCandidate = async () => {
+    if (!pendingCandidate) return;
+    const trimmedName = pendingCandidate.name.trim();
+    if (!trimmedName) {
+      setFormError("地點名稱不能為空，請輸入名稱！");
+      return;
+    }
+
+    setIsSavingCandidate(true);
+    const placeId = pendingCandidate.id || "p-" + Date.now() + "-" + Math.random().toString(36).substring(2, 7);
+    const nowIso = new Date().toISOString();
+
+    const finalizedPlace: SavedPlace = {
+      ...pendingCandidate,
+      id: placeId,
+      name: trimmedName,
+      japaneseName: (pendingCandidate.japaneseName || trimmedName).trim(),
+      category: pendingCandidate.category || "dining",
+      categoryLabel: CATEGORY_MAP[pendingCandidate.category]?.label || "餐廳美饌",
+      summary: (pendingCandidate.summary || "自由行旅人私房推薦據點。").trim(),
+      highlight: (pendingCandidate.highlight || `${trimmedName} 推薦特色`).trim(),
+      address: (pendingCandidate.address || "東京都內").trim(),
+      tips: (pendingCandidate.tips || "前往前建議先確認最新營業動態與公休日。").trim(),
+      notes: (pendingCandidate.notes || "").trim(),
+      updatedAt: nowIso,
+    };
+
+    try {
+      // 1. Immediately persist to React state & localStorage
       setPlaces((prev) => {
-        const next = [newPlaceDoc, ...prev.filter((p) => p.id !== placeId)];
+        const next = [finalizedPlace, ...prev.filter((p) => p.id !== placeId)];
         savePlacesToLocal(next);
         return next;
       });
 
-      // Always reset category and visit filters so the newly added place is guaranteed visible immediately
-      setSelectedCategory("all");
-      setVisitedFilter("all");
-      setRecentlyAddedId(placeId);
-      setTimeout(() => setRecentlyAddedId(null), 10000);
-
-      // 4. If logged in to Firebase, sync to Firestore
+      // 2. If logged in to Firebase, sync to Firestore
       if (currentUser) {
         try {
           const firestoreData = {
-            url: newPlaceDoc.url,
-            name: newPlaceDoc.name,
-            japaneseName: newPlaceDoc.japaneseName || "",
-            category: newPlaceDoc.category,
-            categoryLabel: newPlaceDoc.categoryLabel || "",
-            summary: newPlaceDoc.summary || "",
-            highlight: newPlaceDoc.highlight || "",
-            address: newPlaceDoc.address || "",
-            tips: newPlaceDoc.tips || "",
-            notes: newPlaceDoc.notes || "",
+            url: finalizedPlace.url,
+            name: finalizedPlace.name,
+            japaneseName: finalizedPlace.japaneseName || "",
+            category: finalizedPlace.category,
+            categoryLabel: finalizedPlace.categoryLabel || "",
+            summary: finalizedPlace.summary || "",
+            highlight: finalizedPlace.highlight || "",
+            address: finalizedPlace.address || "",
+            tips: finalizedPlace.tips || "",
+            notes: finalizedPlace.notes || "",
             isVisited: false,
-            addedByName: newPlaceDoc.addedByName || "",
+            addedByName: finalizedPlace.addedByName || "",
             userId: currentUser.uid,
-            createdAt: newPlaceDoc.createdAt || nowIso,
-            updatedAt: newPlaceDoc.updatedAt || nowIso,
+            createdAt: finalizedPlace.createdAt || nowIso,
+            updatedAt: finalizedPlace.updatedAt || nowIso,
           };
           await setDoc(doc(db, "savedPlaces", placeId), firestoreData);
         } catch (dbErr: any) {
@@ -669,27 +710,37 @@ export const PocketWishlistSection: React.FC = () => {
         }
       }
 
+      // 3. Close modal & reset input fields
+      setIsReviewModalOpen(false);
+      setPendingCandidate(null);
       setInputUrl("");
       setInputNotes("");
+
+      // 4. Ensure filters are reset so newly added card is visible
+      setSelectedCategory("all");
+      setVisitedFilter("all");
+      setRecentlyAddedId(placeId);
+      setTimeout(() => setRecentlyAddedId(null), 10000);
+
       setFormSuccess(
         currentUser
-          ? `🎉 已成功辨識並同步收藏：「${newPlaceDoc.name}」！`
-          : `🎉 已成功辨識並收藏至清單：「${newPlaceDoc.name}」！`
+          ? `🎉 已成功審閱並同步收藏：「${finalizedPlace.name}」！`
+          : `🎉 已成功審閱並收藏至清單：「${finalizedPlace.name}」！`
       );
       setTimeout(() => setFormSuccess(null), 6000);
 
-      // Smooth scroll to the newly added item so the user immediately sees it
+      // Smooth scroll to the newly added item
       setTimeout(() => {
         const el = document.getElementById(`place-${placeId}`);
         if (el) {
           el.scrollIntoView({ behavior: "smooth", block: "center" });
         }
       }, 150);
-    } catch (err: any) {
-      console.error("Save place error:", err);
-      setFormError("已為您以在地離線模式加入收藏清單！");
+    } catch (saveErr) {
+      console.error("Save place confirmation error:", saveErr);
+      setFormError("儲存地點時發生狀況，請重試！");
     } finally {
-      setIsAnalyzing(false);
+      setIsSavingCandidate(false);
     }
   };
 
@@ -892,10 +943,10 @@ export const PocketWishlistSection: React.FC = () => {
         <div className="bg-white rounded-3xl p-5 sm:p-7 border border-[#ebd8dc] shadow-[0_10px_30px_rgba(50,30,35,0.06)] mb-8">
           <div className="flex items-center gap-2 font-bold text-[#2d2527] text-base mb-2">
             <Sparkles className="w-4 h-4 text-[#b83358]" />
-            <span>貼上 Google 地圖連結或輸入店家 / 地址，AI 自動歸納</span>
+            <span>貼上 Google 地圖連結或店家 / 地址，AI 分析後審閱確認</span>
           </div>
           <p className="text-xs text-[#786b6f] mb-4">
-            支援手機 Google Maps「分享連結」、電腦版網址，或直接輸入日本店家名稱與地址（如 <code className="text-[#b83358] font-mono">東京都中央區日本橋...</code>）。
+            支援手機 Google Maps「分享連結」、電腦版網址，或輸入日本店家與地址。AI 分析後將開啟<strong>「審閱視窗」</strong>供您人工檢視與編輯內容後再儲存！
           </p>
 
           <form onSubmit={handleAnalyzeAndSave} className="space-y-3">
@@ -938,7 +989,7 @@ export const PocketWishlistSection: React.FC = () => {
                 ) : (
                   <>
                     <Sparkles className="w-4 h-4" />
-                    <span>AI 自動分析收藏</span>
+                    <span>AI 分析並審閱確認</span>
                   </>
                 )}
               </button>
@@ -1247,6 +1298,242 @@ export const PocketWishlistSection: React.FC = () => {
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {/* Pre-Save AI Review & Edit Modal (Human-in-the-loop) */}
+        {isReviewModalOpen && pendingCandidate && (
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4"
+          >
+            <div className="bg-white rounded-3xl p-5 sm:p-7 max-w-xl w-full shadow-2xl border border-[#ebd8dc] max-h-[92vh] overflow-y-auto">
+              {/* Header */}
+              <div className="flex items-center justify-between mb-4 pb-3 border-b border-[#f0e2e5]">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-2xl bg-[#fcebee] text-[#992545] flex items-center justify-center shrink-0">
+                    <Sparkles className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-base text-[#2d2527]">
+                      AI 地點分析完成 · 審閱與確認
+                    </h3>
+                    <p className="text-xs text-[#735e65]">
+                      可自由微調或增修內容，確認無誤後點擊「確認儲存」
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsReviewModalOpen(false);
+                    setPendingCandidate(null);
+                  }}
+                  className="p-1.5 text-stone-400 hover:text-stone-700 rounded-full cursor-pointer hover:bg-stone-100 transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Form Content */}
+              <div className="space-y-4 text-xs">
+                {/* Name & Japanese Name in 2 columns on tablet/desktop */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="font-bold text-[#4a383d] block mb-1">
+                      地點中文名稱 <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={pendingCandidate.name}
+                      onChange={(e) =>
+                        setPendingCandidate({ ...pendingCandidate, name: e.target.value })
+                      }
+                      placeholder="例如：淺草今半 國際通本店"
+                      className="w-full px-3 py-2 bg-[#faf8f9] border border-[#e4d3d7] focus:border-[#992545] focus:bg-white rounded-xl outline-hidden text-xs text-[#2d2527] font-semibold"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-bold text-[#4a383d] block mb-1">
+                      日文原名 / 標音
+                    </label>
+                    <input
+                      type="text"
+                      value={pendingCandidate.japaneseName || ""}
+                      onChange={(e) =>
+                        setPendingCandidate({ ...pendingCandidate, japaneseName: e.target.value })
+                      }
+                      placeholder="例如：浅草今半 国際通り本店"
+                      className="w-full px-3 py-2 bg-[#faf8f9] border border-[#e4d3d7] focus:border-[#992545] focus:bg-white rounded-xl outline-hidden text-xs text-[#2d2527]"
+                    />
+                  </div>
+                </div>
+
+                {/* Category Selection */}
+                <div>
+                  <label className="font-bold text-[#4a383d] block mb-1.5">
+                    分類性質：
+                  </label>
+                  <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
+                    {Object.entries(CATEGORY_MAP).map(([key, cat]) => {
+                      const Icon = cat.icon;
+                      const isSelected = pendingCandidate.category === key;
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() =>
+                            setPendingCandidate({
+                              ...pendingCandidate,
+                              category: key,
+                              categoryLabel: cat.label,
+                            })
+                          }
+                          className={`p-2 rounded-xl border flex flex-col items-center justify-center gap-1 font-semibold transition-all cursor-pointer text-center ${
+                            isSelected
+                              ? "bg-[#992545] text-white border-[#992545] shadow-xs"
+                              : "bg-[#faf8f9] border-[#ebd8dc] text-[#5c494f] hover:bg-[#fff2f5]"
+                          }`}
+                        >
+                          <Icon className="w-3.5 h-3.5" />
+                          <span className="text-[11px]">{cat.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Address & Highlight */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="font-bold text-[#4a383d] block mb-1">
+                      所在區域 / 地址
+                    </label>
+                    <input
+                      type="text"
+                      value={pendingCandidate.address || ""}
+                      onChange={(e) =>
+                        setPendingCandidate({ ...pendingCandidate, address: e.target.value })
+                      }
+                      placeholder="例如：東京都台東區西淺草3-1-12"
+                      className="w-full px-3 py-2 bg-[#faf8f9] border border-[#e4d3d7] focus:border-[#992545] focus:bg-white rounded-xl outline-hidden text-xs text-[#2d2527]"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-bold text-[#4a383d] block mb-1">
+                      招牌亮點一句話
+                    </label>
+                    <input
+                      type="text"
+                      value={pendingCandidate.highlight || ""}
+                      onChange={(e) =>
+                        setPendingCandidate({ ...pendingCandidate, highlight: e.target.value })
+                      }
+                      placeholder="例如：百年秘傳和牛壽喜燒與傳承醬汁"
+                      className="w-full px-3 py-2 bg-[#faf8f9] border border-[#e4d3d7] focus:border-[#992545] focus:bg-white rounded-xl outline-hidden text-xs text-[#2d2527]"
+                    />
+                  </div>
+                </div>
+
+                {/* Summary */}
+                <div>
+                  <label className="font-bold text-[#4a383d] block mb-1">
+                    地點深度介紹
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={pendingCandidate.summary || ""}
+                    onChange={(e) =>
+                      setPendingCandidate({ ...pendingCandidate, summary: e.target.value })
+                    }
+                    placeholder="介紹地點的核心特色、招牌料理或歷史..."
+                    className="w-full p-2.5 bg-[#faf8f9] border border-[#e4d3d7] focus:border-[#992545] focus:bg-white rounded-xl outline-hidden text-xs text-[#2d2527] leading-relaxed"
+                  />
+                </div>
+
+                {/* Tips */}
+                <div>
+                  <label className="font-bold text-[#4a383d] block mb-1">
+                    💡 自由行探訪貼步（排隊、預約、避雷建議）
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={pendingCandidate.tips || ""}
+                    onChange={(e) =>
+                      setPendingCandidate({ ...pendingCandidate, tips: e.target.value })
+                    }
+                    placeholder="例如：午間定食CP值最高，建議提早30分鐘候位..."
+                    className="w-full p-2.5 bg-[#faf8f9] border border-[#e4d3d7] focus:border-[#992545] focus:bg-white rounded-xl outline-hidden text-xs text-[#2d2527] leading-relaxed"
+                  />
+                </div>
+
+                {/* Notes */}
+                <div>
+                  <label className="font-bold text-[#4a383d] block mb-1">
+                    📝 私人備註 / 旅伴筆記
+                  </label>
+                  <input
+                    type="text"
+                    value={pendingCandidate.notes || ""}
+                    onChange={(e) =>
+                      setPendingCandidate({ ...pendingCandidate, notes: e.target.value })
+                    }
+                    placeholder="寫下您想點的料理、同行約定或行程第幾天..."
+                    className="w-full px-3 py-2 bg-[#faf8f9] border border-[#e4d3d7] focus:border-[#992545] focus:bg-white rounded-xl outline-hidden text-xs text-[#2d2527]"
+                  />
+                </div>
+
+                {/* URL preview */}
+                <div className="flex items-center justify-between p-2.5 bg-stone-50 rounded-xl border border-stone-200 text-[11px] text-[#735e65]">
+                  <span className="truncate max-w-[280px] sm:max-w-md font-mono">
+                    {pendingCandidate.url}
+                  </span>
+                  <a
+                    href={pendingCandidate.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-[#992545] hover:underline font-bold shrink-0 ml-2"
+                  >
+                    <span>開啟地圖預覽</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+              </div>
+
+              {/* Footer actions */}
+              <div className="mt-6 pt-3 border-t border-[#f0e2e5] flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  disabled={isSavingCandidate}
+                  onClick={() => {
+                    setIsReviewModalOpen(false);
+                    setPendingCandidate(null);
+                  }}
+                  className="px-4 py-2 rounded-xl border border-[#ebd8dc] text-xs font-semibold text-[#735e65] hover:bg-stone-50 cursor-pointer"
+                >
+                  取消
+                </button>
+                <button
+                  type="button"
+                  disabled={isSavingCandidate || !pendingCandidate.name.trim()}
+                  onClick={handleConfirmSaveCandidate}
+                  className="px-5 py-2 bg-[#992545] hover:bg-[#801b36] disabled:bg-stone-300 text-white font-bold rounded-xl text-xs shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
+                >
+                  {isSavingCandidate ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>正在儲存...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-3.5 h-3.5" />
+                      <span>確認儲存加入清單</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
