@@ -26,7 +26,15 @@ import {
   Copy,
   Info,
   ShieldAlert,
+  Wand2,
 } from "lucide-react";
+import {
+  unshortenGoogleMapsLinkClient,
+  extractPlaceNameFromUrl,
+  synthesizePlaceData,
+  analyzePlaceWithClientGemini,
+  type AnalyzedPlaceData,
+} from "../utils/placeAnalyzer";
 import {
   db,
   auth,
@@ -181,6 +189,7 @@ const DEFAULT_SEEDS: Omit<SavedPlace, "id">[] = [
 ];
 
 const LOCAL_STORAGE_KEY = "tokyo_2026_pocket_wishlist_places";
+const DELETED_IDS_KEY = "tokyo_2026_pocket_wishlist_deleted_ids";
 
 export const PocketWishlistSection: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -189,11 +198,17 @@ export const PocketWishlistSection: React.FC = () => {
   // Places list synced via Firestore onSnapshot and LocalStorage
   const [places, setPlaces] = useState<SavedPlace[]>(() => {
     try {
+      let deletedIds = new Set<string>();
+      try {
+        const rawDel = localStorage.getItem(DELETED_IDS_KEY);
+        if (rawDel) deletedIds = new Set(JSON.parse(rawDel));
+      } catch {}
+
       const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
+          return parsed.filter((p: SavedPlace) => !deletedIds.has(p.id));
         }
       }
     } catch {}
@@ -267,11 +282,22 @@ export const PocketWishlistSection: React.FC = () => {
         });
 
         setPlaces((prevPlaces) => {
-          // Keep local documents that are not yet in remoteList (preserves pending writes and local offline items)
-          const remoteIds = new Set(remoteList.map((p) => p.id));
-          const localOnly = prevPlaces.filter((p) => !remoteIds.has(p.id));
+          let deletedIds = new Set<string>();
+          try {
+            const rawDel = localStorage.getItem(DELETED_IDS_KEY);
+            if (rawDel) deletedIds = new Set(JSON.parse(rawDel));
+          } catch {}
 
-          const combined = [...remoteList, ...localOnly];
+          // Remove explicitly deleted spots
+          const validRemote = remoteList.filter((p) => !deletedIds.has(p.id));
+
+          // Only keep local-only offline items that haven't been deleted
+          const remoteIds = new Set(validRemote.map((p) => p.id));
+          const localOnly = prevPlaces.filter(
+            (p) => !remoteIds.has(p.id) && !deletedIds.has(p.id) && (p.id.startsWith("seed-") || p.userId === "local-user")
+          );
+
+          const combined = [...validRemote, ...localOnly];
           combined.sort((a, b) => {
             const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
             const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
@@ -364,47 +390,21 @@ export const PocketWishlistSection: React.FC = () => {
 
     const effectiveNotes = [textPart, inputNotes.trim()].filter(Boolean).join(" ");
 
-    // Pre-extract place name from targetUrl if it has /place/<Name>
-    let clientExtractedName = "";
-    try {
-      let dec = targetUrl;
-      for (let i = 0; i < 3; i++) {
-        try {
-          const n = decodeURIComponent(dec);
-          if (n === dec) break;
-          dec = n;
-        } catch { break; }
-      }
-      const pm = dec.match(/\/place\/([^/@?&]+)/i);
-      if (pm && pm[1]) {
-        let n = pm[1].replace(/\+/g, " ").trim();
-        n = n.replace(/@.*$/, "").replace(/data=.*$/, "").trim();
-        if (n && !n.startsWith("http") && !n.startsWith("0x")) {
-          clientExtractedName = n;
-        }
-      }
-      if (!clientExtractedName) {
-        const qm = dec.match(/[?&](?:query|q)=([^&]+)/i);
-        if (qm && qm[1]) {
-          let n = qm[1].replace(/\+/g, " ").trim();
-          if (n && !n.startsWith("http") && !n.startsWith("EhA")) {
-            clientExtractedName = n;
-          }
-        }
-      }
-    } catch {}
+    // Pre-extract place name from targetUrl if it has /place/<Name> or q=<Name>
+    let clientExtractedName = extractPlaceNameFromUrl(targetUrl);
 
     setIsAnalyzing(true);
 
     try {
       let analyzed: any = null;
 
-      // 1. Call server-side API analysis with strict 6s client timeout
+      // 1. If backend server is running (AI Studio dev/full-stack), call /api/analyze-place
       try {
         const res = await fetch("/api/analyze-place", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          signal: AbortSignal.timeout(6000),
+          credentials: "include",
+          signal: AbortSignal.timeout(5000),
           body: JSON.stringify({
             url: targetUrl,
             rawText: effectiveNotes,
@@ -412,175 +412,48 @@ export const PocketWishlistSection: React.FC = () => {
           }),
         });
 
-        if (res.ok) {
+        const contentType = res.headers.get("content-type") || "";
+        if (res.ok && contentType.includes("application/json")) {
           const json = await res.json();
           if (json && json.success && json.data) {
             analyzed = json.data;
           }
         }
       } catch (fetchErr) {
-        console.warn("Server API fetch timed out or skipped, using instant client synthesis fallback:", fetchErr);
+        console.warn("Backend API not reachable (running on static host/GitHub Pages), switching to client intelligence:", fetchErr);
       }
 
-      // 2. High-Fidelity Client-side synthesis fallback (guarantees real place names, categories & tips)
+      // 2. High-Fidelity Client-side intelligence pipeline (works 100% on GitHub Pages & static deployments)
       if (!analyzed) {
-        const combined = (rawInput + " " + targetUrl + " " + effectiveNotes + " " + clientExtractedName).toLowerCase();
-
-        let detectedName = clientExtractedName || textPart || "";
-        let detectedCategory = "dining";
-        let detectedLabel = "餐廳美饌";
-        let detectedHighlight = "";
-        let detectedSummary = "";
-        let detectedTips = "出發前可點擊卡片右上角連結，於 Google 地圖再次確認即時營業時間與公休日。";
-        let detectedAddress = "東京都內";
-
-        // Landmark & Keyword Knowledge Base
-        if (combined.includes("志乃多") || combined.includes("shinoda") || (combined.includes("稻荷") && combined.includes("壽司")) || (combined.includes("稲荷") && combined.includes("寿司"))) {
-          detectedName = "志乃多壽司";
-          detectedCategory = "dining";
-          detectedLabel = "餐廳美饌";
-          detectedHighlight = "明治十年老鋪・秘傳多汁油揚豆皮稻荷壽司與脆口干瓢卷";
-          detectedSummary = "創業於明治時期的東京百年老字號。特選吸滿香甜柴魚昆布高湯的油揚豆皮包裹特調溫潤醋飯，搭配爽脆甘甜的干瓢卷，是東京最經典的傳統外帶壽司美味。";
-          detectedAddress = "東京都台東區淺草";
-          detectedTips = "推薦購買「稻荷壽司與干瓢卷」綜合折詰盒，常溫即可享用，極適合外帶至隅田川畔野餐！";
-        } else if (combined.includes("今半") || combined.includes("imahan")) {
-          detectedName = "淺草今半（壽喜燒）";
-          detectedCategory = "dining";
-          detectedLabel = "餐廳美饌";
-          detectedHighlight = "明治28年創業・頂級黑毛和牛壽喜燒與傳承秘傳割下醬汁";
-          detectedSummary = "東京百年壽喜燒代表名店，嚴選油脂細膩的日本黑毛和牛，搭配秘傳百年割下高湯醬汁涮煮，入口滑嫩香甜，為自由行必嚐的極上美食饗宴。";
-          detectedAddress = "東京都台東區西淺草3-1-12";
-          detectedTips = "午間時段供應的壽喜燒定食CP值極高，建議提早預約或於開店前30分鐘抵達現場。";
-        } else if (combined.includes("敘敘苑") || combined.includes("叙々苑") || combined.includes("jojoen")) {
-          detectedName = "敘敘苑（燒肉）";
-          detectedCategory = "dining";
-          detectedLabel = "餐廳美饌";
-          detectedHighlight = "極上上等牛五花、招牌秘傳燒肉醬汁與高空景觀用餐體驗";
-          detectedSummary = "日本頂級連鎖燒肉名店，肉質細緻嫩滑、油花豐潤，招牌牛五花與特選牛舌搭配獨家爽口沙拉，深受海內外旅人推崇。";
-          detectedAddress = "東京都精華商圈（晴空街道 / 銀座 / 新宿）";
-          detectedTips = "晴空塔分店具備絕美高空景觀，建議提早於官網預約窗邊景觀座位。";
-        } else if (combined.includes("淺草寺") || combined.includes("浅草寺") || combined.includes("sensoji")) {
-          detectedName = "淺草寺";
-          detectedCategory = "sightseeing";
-          detectedLabel = "觀光景點";
-          detectedHighlight = "雷門巨型紅燈籠、熱鬧仲見世通商店街與本堂觀音信仰";
-          detectedSummary = "東京都內歷史最悠久的古老寺院（創建於西元628年），江戶下町文化與觀光精神象徵。自雷門大紅燈籠漫步至莊嚴本堂，兩側仲見世通林立傳統人形燒與工藝品，香火鼎盛祥和。";
-          detectedAddress = "東京都台東區淺草2-3-1";
-          detectedTips = "想避開洶湧人潮可於清晨8點前造訪；夜間雷門與五重塔燈火通明，別具寧靜古典美感！";
-        } else if (combined.includes("皇居") || combined.includes("imperial") || combined.includes("二重橋")) {
-          detectedName = "皇居";
-          detectedCategory = "sightseeing";
-          detectedLabel = "觀光景點";
-          detectedHighlight = "江戶城古蹟遺跡、二重橋與東京5K環形慢跑勝地";
-          detectedSummary = "日本天皇居所，遼闊外苑綠草如茵、歷史石垣護城河圍繞，環境清幽古色古香，外圍一圈約5公里無紅綠燈，為全球跑者與旅人皆愛的綠意綠洲。";
-          detectedAddress = "東京都千代田區千代田1-1";
-          detectedTips = "皇居東御苑開放免費參觀；外圍環形步道逆時針方向慢跑是東京跑者的默契！";
-        } else if (combined.includes("東京鐵塔") || combined.includes("tokyo tower")) {
-          detectedName = "東京鐵塔";
-          detectedCategory = "sightseeing";
-          detectedLabel = "觀光景點";
-          detectedHighlight = "經典紅白雙色地標，360度展望台遠眺富士山與港區百萬夜景";
-          detectedSummary = "高達333公尺的東京永恆精神地標，展望台上視野開闊，黃昏與夜晚燈火璀璨，底層FootTown商場集合伴手禮與餐飲，是自由行必訪的浪漫經典。";
-          detectedAddress = "東京都港區芝公園4-2-8";
-          detectedTips = "傍晚時分登塔可同時欣賞金色日落與東京夜景；芝公園是拍攝鐵塔全景的最佳角度。";
-        } else if (combined.includes("晴空塔") || combined.includes("skytree") || combined.includes("押上")) {
-          detectedName = "東京晴空塔";
-          detectedCategory = "sightseeing";
-          detectedLabel = "觀光景點";
-          detectedHighlight = "世界第一高電波塔（634公尺），晴空街道商場與展望台盛景";
-          detectedSummary = "東京現代天際線象徵，350米與450米雙層展望台俯瞰關東平原，下方Solamachi商場匯聚300多家美食餐廳與限定伴手禮店。";
-          detectedAddress = "東京都墨田區押上1-1-2";
-          detectedTips = "建議事先線上預訂門票免排隊；晴空街道退稅服務於1樓與3樓櫃台提供。";
-        } else if (combined.includes("利久") || combined.includes("牛舌") || combined.includes("牛たん")) {
-          detectedName = "牛たん炭焼 利久";
-          detectedCategory = "dining";
-          detectedLabel = "餐廳美饌";
-          detectedHighlight = "仙台炭火極厚牛舌定食、清燉牛尾湯與麥飯山藥泥";
-          detectedSummary = "仙台超人氣厚切炭烤牛舌名店，高溫炭火封存鮮美肉汁，外酥內嫩多汁Q彈，搭配香濃清燉牛尾湯與健康麥飯，是令人滿足的極上肉食盛宴。";
-          detectedAddress = "東京都江東區有明2-1-8 有明花園 5F";
-          detectedTips = "推薦點選「極」厚切牛舌定食，厚度普通兩倍超滿足；傍晚16:30前入座免排隊！";
-        } else if (combined.includes("小網神社")) {
-          detectedName = "小網神社";
-          detectedCategory = "sightseeing";
-          detectedLabel = "觀光景點";
-          detectedHighlight = "東京最強強運厄除神社、洗錢弁天洗錢之井招財名所";
-          detectedSummary = "隱身日本橋人形町巷弄的強運厄除名所，在東京大空襲中奇蹟倖存。社內供奉洗錢弁天，可將硬幣放入竹簍洗淨作為招財錢母。";
-          detectedAddress = "東京都中央區日本橋小網町10-27";
-          detectedTips = "參拜後可求取強運蠶繭御守；平日早晨前往排隊人潮較少。";
-        } else if (combined.includes("新宿御苑")) {
-          detectedName = "新宿御苑";
-          detectedCategory = "sightseeing";
-          detectedLabel = "觀光景點";
-          detectedHighlight = "日法英三式皇家庭園、秋末滿開金黃銀杏與紅楓絕景";
-          detectedSummary = "融合日式庭園、英式風景與法式庭園的皇家綠地，秋末銀杏金黃燦爛、池畔紅楓如畫，繁華新宿旁最寧靜療癒的散策景點。";
-          detectedAddress = "東京都新宿區內藤町11";
-          detectedTips = "入園門票500日圓；園內禁止飲酒與大型球具，適合悠閒散步拍照。";
-        } else if (combined.includes("六義園")) {
-          detectedName = "六義園";
-          detectedCategory = "sightseeing";
-          detectedLabel = "觀光景點";
-          detectedHighlight = "江戶時代大名迴遊式築山泉水庭園，秋季紅葉倒影勝景";
-          detectedSummary = "德川綱吉時代修建的和歌主題古典名園，中央大泉水池環繞林蔭山石，秋季楓葉轉紅倒映水面，清幽深遠。";
-          detectedAddress = "東京都文京區本駒込6-16-3";
-          detectedTips = "漫步一圈約需1小時，吹上茶屋提供抹茶與和菓子可供休憩品嚐。";
-        } else {
-          // Dynamic classification based on category keywords
-          if (combined.includes("coffee") || combined.includes("cafe") || combined.includes("咖啡") || combined.includes("甜點") || combined.includes("喫茶") || combined.includes("吐司") || combined.includes("cake")) {
-            detectedCategory = "cafe";
-            detectedLabel = "甜點咖啡";
-            detectedName = detectedName || "特色人氣咖啡館";
-            detectedHighlight = `${detectedName} 手沖芳醇咖啡與手作精緻甜點`;
-            detectedSummary = `${detectedName} 營造出溫馨愜意的休憩氛圍，提供現煮精品咖啡與每日限定甜品，是旅途散策中品味時光、放鬆小憩的完美據點。`;
-            detectedTips = "推薦點選招牌手沖咖啡或拿鐵，搭配當日手作烘焙點心。";
-          } else if (combined.includes("shrine") || combined.includes("temple") || combined.includes("神社") || combined.includes("寺") || combined.includes("宮") || combined.includes("公園") || combined.includes("庭園")) {
-            detectedCategory = "sightseeing";
-            detectedLabel = "觀光景點";
-            detectedName = detectedName || "知名名勝景點";
-            detectedHighlight = `${detectedName} 古典歷史風華與悠閒散策景致`;
-            detectedSummary = `${detectedName} 環境優雅清幽，富含深厚人文底蘊與四季景致，漫步其間令人心曠神怡，非常適合安排在自由行漫遊路線中。`;
-            detectedTips = "造訪時建議預留彈性時間漫步參觀，欣賞周邊傳統建築風情。";
-          } else if (combined.includes("mall") || combined.includes("market") || combined.includes("商場") || combined.includes("百貨") || combined.includes("購物") || combined.includes("store") || combined.includes("shop")) {
-            detectedCategory = "shopping";
-            detectedLabel = "購物商場";
-            detectedName = detectedName || "熱門購物商場";
-            detectedHighlight = `${detectedName} 精選品牌專櫃、生活雜貨與免稅購物一站滿足`;
-            detectedSummary = `${detectedName} 匯集多元品牌、潮流服飾、在地伴手禮與人氣餐飲，動線寬敞舒適，逛街採買十分便利。`;
-            detectedTips = "外國旅客可至服務櫃台出示護照確認免稅服務（Tax-Free）與外國人專屬優惠券。";
-          } else if (combined.includes("hotel") || combined.includes("旅館") || combined.includes("飯店") || combined.includes("宿") || combined.includes("inn")) {
-            detectedCategory = "stay";
-            detectedLabel = "旅宿飯店";
-            detectedName = detectedName || "精選優質旅宿";
-            detectedHighlight = `${detectedName} 舒適客房、生活機能優質與交通便捷據點`;
-            detectedSummary = `${detectedName} 地理位置優越，提供整潔溫馨的住宿環境與齊全設施服務，讓旅人在充實的行程後獲得充分放鬆與舒眠。`;
-            detectedTips = "建議留意飯店入住（Check-in）時間，提早抵達通常可先於櫃台免費寄存行李。";
-          } else if (combined.includes("拉麵") || combined.includes("壽司") || combined.includes("燒肉") || combined.includes("壽喜燒") || combined.includes("料理") || combined.includes("居酒屋") || combined.includes("食堂") || combined.includes("牛排") || combined.includes("餐")) {
-            detectedCategory = "dining";
-            detectedLabel = "餐廳美饌";
-            detectedName = detectedName || "在地人氣名店";
-            detectedHighlight = `${detectedName} 嚴選道地風味人氣料理與招牌美食`;
-            detectedSummary = `${detectedName} 以道地烹調技藝與新鮮食材聞名，用餐氛圍熱絡溫馨，是旅伴共享美食時光的必嚐首選。`;
-            detectedTips = "熱門用餐時段建議提早前往或離峰造訪，以享舒適品嚐空間。";
-          } else {
-            // General fallback using extracted name or raw input
-            detectedName = detectedName || (targetUrl.startsWith("http") ? "私房推薦探訪地點" : targetUrl);
-            detectedCategory = "dining";
-            detectedLabel = "餐廳美饌";
-            detectedHighlight = `${detectedName} 自由行私房特色推薦`;
-            detectedSummary = `${detectedName} 位於東京都內，是在地備受喜愛的私房探訪點。點擊卡片右上角地圖圖示可直接開啟 Google Maps 查看即時街景、最新評價與步行路線。`;
-            detectedTips = "前往時可利用 Google 地圖實時步行導航，並可點擊地圖連結確認今日最新營業時間。";
+        // If it's a short link and we don't have a place name yet, unshorten client-side via CORS proxies
+        if (!clientExtractedName && (targetUrl.includes("maps.app.goo.gl") || targetUrl.includes("goo.gl") || targetUrl.includes("g.co/"))) {
+          try {
+            const unshortened = await unshortenGoogleMapsLinkClient(targetUrl);
+            if (unshortened.title) {
+              clientExtractedName = unshortened.title;
+            } else if (unshortened.resolvedUrl) {
+              clientExtractedName = extractPlaceNameFromUrl(unshortened.resolvedUrl);
+            }
+          } catch (unErr) {
+            console.warn("Client unshortening failed:", unErr);
           }
         }
 
-        analyzed = {
-          name: detectedName,
-          japaneseName: detectedName,
-          category: detectedCategory,
-          categoryLabel: detectedLabel,
-          highlight: detectedHighlight,
-          summary: detectedSummary,
-          address: detectedAddress,
-          tips: detectedTips,
-        };
+        const effectiveSearchName = clientExtractedName || textPart || inputNotes.trim();
+
+        // 2a. Direct Client Gemini API call if key configured
+        if (effectiveSearchName) {
+          try {
+            analyzed = await analyzePlaceWithClientGemini(effectiveSearchName, targetUrl, effectiveNotes);
+          } catch (gemErr) {
+            console.warn("Client Gemini call skipped:", gemErr);
+          }
+        }
+
+        // 2b. High-Fidelity Client Synthesis Engine (Landmark DB + Deep Tokyo Taxonomy)
+        if (!analyzed) {
+          analyzed = synthesizePlaceData(effectiveSearchName, targetUrl, rawInput, inputNotes);
+        }
       }
 
       // Valid link: format valid Google Maps search URL if not HTTP
@@ -629,6 +502,28 @@ export const PocketWishlistSection: React.FC = () => {
     } finally {
       setIsAnalyzing(false);
     }
+  };
+
+  // Regenerate details dynamically in review modal based on custom name
+  const handleRegenerateFromCandidateName = (customName: string) => {
+    if (!customName.trim() || !pendingCandidate) return;
+    const fresh = synthesizePlaceData(
+      customName.trim(),
+      pendingCandidate.url,
+      customName.trim(),
+      pendingCandidate.notes
+    );
+    setPendingCandidate({
+      ...pendingCandidate,
+      name: fresh.name,
+      japaneseName: fresh.japaneseName,
+      category: fresh.category,
+      categoryLabel: fresh.categoryLabel,
+      highlight: fresh.highlight,
+      summary: fresh.summary,
+      address: fresh.address,
+      tips: fresh.tips,
+    });
   };
 
   // Confirm and persist the reviewed place candidate
@@ -750,6 +645,9 @@ export const PocketWishlistSection: React.FC = () => {
         });
       } catch (err) {
         console.warn("Firestore update visited status failed:", err);
+        try {
+          handleFirestoreError(err, OperationType.UPDATE, `savedPlaces/${place.id}`);
+        } catch {}
       }
     }
   };
@@ -773,12 +671,25 @@ export const PocketWishlistSection: React.FC = () => {
         return next;
       });
 
+      // Record in DELETED_IDS_KEY so onSnapshot will never revive it
+      try {
+        const rawDel = localStorage.getItem(DELETED_IDS_KEY);
+        const set = new Set<string>(rawDel ? JSON.parse(rawDel) : []);
+        set.add(targetPlace.id);
+        localStorage.setItem(DELETED_IDS_KEY, JSON.stringify(Array.from(set)));
+      } catch (e) {
+        console.warn("Failed to record deleted ID:", e);
+      }
+
       // 2. If logged in and document is in Firestore, delete from Firestore
       if (currentUser && !targetPlace.id.startsWith("seed-")) {
         try {
           await deleteDoc(doc(db, "savedPlaces", targetPlace.id));
         } catch (dbErr) {
           console.warn("Firestore deleteDoc failed:", dbErr);
+          try {
+            handleFirestoreError(dbErr, OperationType.DELETE, `savedPlaces/${targetPlace.id}`);
+          } catch {}
         }
       }
 
@@ -800,9 +711,11 @@ export const PocketWishlistSection: React.FC = () => {
 
     setIsSavingEdit(true);
     try {
+      const updatedCatLabel = CATEGORY_MAP[editCategory]?.label || "其他探訪";
       const updatedFields = {
         notes: editNotes.trim().slice(0, 1000),
         category: editCategory.slice(0, 50),
+        categoryLabel: updatedCatLabel,
         updatedAt: new Date().toISOString(),
       };
 
@@ -821,6 +734,9 @@ export const PocketWishlistSection: React.FC = () => {
           await updateDoc(doc(db, "savedPlaces", editingPlace.id), updatedFields);
         } catch (dbErr) {
           console.warn("Firestore updateDoc failed:", dbErr);
+          try {
+            handleFirestoreError(dbErr, OperationType.UPDATE, `savedPlaces/${editingPlace.id}`);
+          } catch {}
         }
       }
 
@@ -1324,12 +1240,38 @@ export const PocketWishlistSection: React.FC = () => {
 
               {/* 2. Scrollable Body (Form Content with smooth scroll) */}
               <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-4 text-xs">
+                {/* Friendly Tip if name seems generic or URL-like */}
+                {(pendingCandidate.name.startsWith("http") ||
+                  pendingCandidate.name === "私房探訪據點" ||
+                  pendingCandidate.name.includes("探訪據點")) && (
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl text-amber-900 text-[11px] flex items-start gap-2">
+                    <Sparkles className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-bold">💡 貼心提醒：</p>
+                      <p className="mt-0.5 text-amber-800 leading-relaxed">
+                        此連結為 Google Maps 簡短縮網址。請在下方確認或輸入店家/景點名稱（如「淺草今半」、「HARBS」、「利久牛舌」），點擊「依店名自動生成」即可一鍵生成道地介紹與避雷貼士！
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 {/* Name & Japanese Name in 2 columns on tablet/desktop */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="font-bold text-[#4a383d] block mb-1">
-                      地點中文名稱 <span className="text-rose-500">*</span>
-                    </label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="font-bold text-[#4a383d] block">
+                        地點中文名稱 <span className="text-rose-500">*</span>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => handleRegenerateFromCandidateName(pendingCandidate.name)}
+                        className="text-[11px] text-[#992545] hover:text-[#801b36] font-bold inline-flex items-center gap-1 cursor-pointer hover:underline"
+                        title="依據輸入的名稱重新生成特色與貼士"
+                      >
+                        <Wand2 className="w-3 h-3 text-[#b83358]" />
+                        <span>依店名自動生成</span>
+                      </button>
+                    </div>
                     <input
                       type="text"
                       value={pendingCandidate.name}
@@ -1339,6 +1281,20 @@ export const PocketWishlistSection: React.FC = () => {
                       placeholder="例如：淺草今半 國際通本店"
                       className="w-full px-3 py-2 bg-[#faf8f9] border border-[#e4d3d7] focus:border-[#992545] focus:bg-white rounded-xl outline-hidden text-xs text-[#2d2527] font-semibold"
                     />
+                    {/* Quick Pick Chips */}
+                    <div className="flex flex-wrap items-center gap-1 mt-1.5 text-[10px]">
+                      <span className="text-[#8c7b80]">常用熱門：</span>
+                      {["淺草今半", "志乃多壽司", "敘敘苑", "HARBS", "AFURI", "SHIBUYA SKY", "利久牛舌", "小網神社"].map((chip) => (
+                        <button
+                          key={chip}
+                          type="button"
+                          onClick={() => handleRegenerateFromCandidateName(chip)}
+                          className="px-1.5 py-0.5 bg-[#fbf6f7] hover:bg-[#f5e3e7] text-[#8e2443] border border-[#ecd2d8] rounded-md transition-colors cursor-pointer"
+                        >
+                          {chip}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                   <div>
                     <label className="font-bold text-[#4a383d] block mb-1">
