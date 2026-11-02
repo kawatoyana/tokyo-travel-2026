@@ -227,10 +227,17 @@ export const PocketWishlistSection: React.FC = () => {
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [visitedFilter, setVisitedFilter] = useState<"all" | "unvisited" | "visited">("all");
 
-  // Editing state
+  // Editing state for full place modification
   const [editingPlace, setEditingPlace] = useState<SavedPlace | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editJapaneseName, setEditJapaneseName] = useState("");
+  const [editCategory, setEditCategory] = useState("dining");
+  const [editAddress, setEditAddress] = useState("");
+  const [editHighlight, setEditHighlight] = useState("");
+  const [editSummary, setEditSummary] = useState("");
+  const [editTips, setEditTips] = useState("");
   const [editNotes, setEditNotes] = useState("");
-  const [editCategory, setEditCategory] = useState("");
+  const [editUrl, setEditUrl] = useState("");
   const [isSavingEdit, setIsSavingEdit] = useState(false);
 
   // Pre-save Review Modal state (Human-in-the-loop review before adding)
@@ -429,17 +436,22 @@ export const PocketWishlistSection: React.FC = () => {
         if (!clientExtractedName && (targetUrl.includes("maps.app.goo.gl") || targetUrl.includes("goo.gl") || targetUrl.includes("g.co/"))) {
           try {
             const unshortened = await unshortenGoogleMapsLinkClient(targetUrl);
-            if (unshortened.title) {
+            if (unshortened.resolvedUrl) {
+              targetUrl = unshortened.resolvedUrl;
+              const nameFromUrl = extractPlaceNameFromUrl(unshortened.resolvedUrl);
+              if (nameFromUrl) {
+                clientExtractedName = nameFromUrl;
+              }
+            }
+            if (!clientExtractedName && unshortened.title) {
               clientExtractedName = unshortened.title;
-            } else if (unshortened.resolvedUrl) {
-              clientExtractedName = extractPlaceNameFromUrl(unshortened.resolvedUrl);
             }
           } catch (unErr) {
             console.warn("Client unshortening failed:", unErr);
           }
         }
 
-        const effectiveSearchName = clientExtractedName || textPart || inputNotes.trim();
+        const effectiveSearchName = (clientExtractedName || textPart || inputNotes.trim() || (!targetUrl.startsWith("http") ? targetUrl : "")).trim();
 
         // 2a. Direct Client Gemini API call if key configured
         if (effectiveSearchName) {
@@ -471,18 +483,23 @@ export const PocketWishlistSection: React.FC = () => {
       }
       const safeCategoryLabel = CATEGORY_MAP[safeCategory]?.label || "其他探訪";
 
+      let candidateName = String(analyzed?.name || "").trim();
+      if (!candidateName || candidateName.startsWith("http")) {
+        candidateName = textPart || inputNotes.trim() || (!targetUrl.startsWith("http") ? targetUrl : "") || "私房探訪據點";
+      }
+
       const nowIso = new Date().toISOString();
       const newPlaceDoc: SavedPlace = {
         id: placeId,
         url: finalUrl.slice(0, 1000),
-        name: String(analyzed?.name || targetUrl).trim().slice(0, 200),
-        japaneseName: String(analyzed?.japaneseName || analyzed?.name || targetUrl).trim().slice(0, 200),
+        name: candidateName.slice(0, 200),
+        japaneseName: String(analyzed?.japaneseName || candidateName).trim().slice(0, 200),
         category: safeCategory.slice(0, 50),
         categoryLabel: safeCategoryLabel.slice(0, 100),
-        summary: String(analyzed?.summary || "旅人私房收藏景點。").trim().slice(0, 1000),
-        highlight: String(analyzed?.highlight || `${analyzed?.name || targetUrl} 推薦特色`).trim().slice(0, 500),
+        summary: String(analyzed?.summary || `${candidateName} 是在地廣受好評的探訪去處，氛圍與特色極具魅力，值得親自造訪體驗。`).trim().slice(0, 1000),
+        highlight: String(analyzed?.highlight || `${candidateName} 人氣特色探訪推薦`).trim().slice(0, 500),
         address: String(analyzed?.address || (targetUrl.startsWith("http") ? "東京都內" : targetUrl)).trim().slice(0, 300),
-        tips: String(analyzed?.tips || "前往前建議先確認最新營業動態與公休日。").trim().slice(0, 500),
+        tips: String(analyzed?.tips || "造訪前可開啟 Google 地圖再次確認即時營業時間與公休日。").trim().slice(0, 500),
         notes: inputNotes.trim().slice(0, 1000),
         isVisited: false,
         addedByName: String(currentUser?.displayName || currentUser?.email?.split("@")[0] || "旅伴").slice(0, 100),
@@ -705,17 +722,45 @@ export const PocketWishlistSection: React.FC = () => {
     }
   };
 
-  // Save Edit
+  // Start editing a place
+  const handleStartEdit = (place: SavedPlace) => {
+    setEditingPlace(place);
+    setEditName(place.name || "");
+    setEditJapaneseName(place.japaneseName || "");
+    setEditCategory(place.category || "dining");
+    setEditAddress(place.address || "");
+    setEditHighlight(place.highlight || "");
+    setEditSummary(place.summary || "");
+    setEditTips(place.tips || "");
+    setEditNotes(place.notes || "");
+    setEditUrl(place.url || "");
+  };
+
+  // Save Edit (Comprehensive all-fields update)
   const handleSaveEdit = async () => {
     if (!editingPlace) return;
+
+    const trimmedName = editName.trim();
+    if (!trimmedName) {
+      setToastMessage("地點名稱不能為空，請輸入名稱！");
+      setTimeout(() => setToastMessage(null), 3000);
+      return;
+    }
 
     setIsSavingEdit(true);
     try {
       const updatedCatLabel = CATEGORY_MAP[editCategory]?.label || "其他探訪";
       const updatedFields = {
-        notes: editNotes.trim().slice(0, 1000),
+        name: trimmedName.slice(0, 200),
+        japaneseName: editJapaneseName.trim().slice(0, 200),
         category: editCategory.slice(0, 50),
         categoryLabel: updatedCatLabel,
+        address: editAddress.trim().slice(0, 300),
+        highlight: editHighlight.trim().slice(0, 500),
+        summary: editSummary.trim().slice(0, 1000),
+        tips: editTips.trim().slice(0, 500),
+        notes: editNotes.trim().slice(0, 1000),
+        url: (editUrl.trim() || editingPlace.url).slice(0, 1000),
         updatedAt: new Date().toISOString(),
       };
 
@@ -741,7 +786,7 @@ export const PocketWishlistSection: React.FC = () => {
       }
 
       setEditingPlace(null);
-      setToastMessage(`已儲存修改：「${editingPlace.name}」`);
+      setToastMessage(`已儲存修改：「${trimmedName}」`);
       setTimeout(() => setToastMessage(null), 3000);
     } finally {
       setIsSavingEdit(false);
@@ -895,30 +940,6 @@ export const PocketWishlistSection: React.FC = () => {
                   </>
                 )}
               </button>
-            </div>
-
-            {/* Quick Suggestions / Examples */}
-            <div className="flex flex-wrap items-center gap-1.5 pt-1 text-[11px] text-[#786b6f]">
-              <span className="font-semibold text-[#8a7279]">💡 點擊快速帶入測試：</span>
-              {[
-                { label: "淺草今半（壽喜燒）", val: "淺草今半 国際通り本店" },
-                { label: "志乃多壽司（短網址）", val: "https://maps.app.goo.gl/5QjeuGqka2AcV4mGA" },
-                { label: "敘敘苑 晴空塔店", val: "敘敘苑 晴空塔店" },
-                { label: "AFURI 原宿拉麵", val: "AFURI 原宿" },
-                { label: "小網神社（洗錢之井）", val: "小網神社" },
-              ].map((item) => (
-                <button
-                  key={item.label}
-                  type="button"
-                  onClick={() => {
-                    setInputUrl(item.val);
-                    setFormError(null);
-                  }}
-                  className="px-2.5 py-1 bg-[#fbf6f7] hover:bg-[#f5e3e7] text-[#8e2443] border border-[#ecd2d8] rounded-full text-[11px] transition-colors cursor-pointer"
-                >
-                  {item.label}
-                </button>
-              ))}
             </div>
 
             {/* Error / Success Feedback */}
@@ -1103,12 +1124,8 @@ export const PocketWishlistSection: React.FC = () => {
                         {/* Edit Place */}
                         <button
                           type="button"
-                          onClick={() => {
-                            setEditingPlace(place);
-                            setEditNotes(place.notes || "");
-                            setEditCategory(place.category);
-                          }}
-                          title="編輯筆記與分類"
+                          onClick={() => handleStartEdit(place)}
+                          title="完整編輯地點內容"
                           className="p-1.5 text-stone-400 hover:text-[#992545] hover:bg-stone-100 rounded-full transition-colors cursor-pointer"
                         >
                           <Edit3 className="w-3.5 h-3.5" />
@@ -1479,34 +1496,74 @@ export const PocketWishlistSection: React.FC = () => {
           </div>
         )}
 
-        {/* Edit Modal */}
+        {/* Full Place Edit Modal */}
         {editingPlace && (
           <div
             role="dialog"
             aria-modal="true"
-            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4"
+            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 overflow-hidden"
           >
-            <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-[#ebd8dc]">
-              <div className="flex items-center justify-between mb-4 pb-3 border-b border-[#f0e2e5]">
-                <h3 className="font-bold text-base text-[#2d2527] flex items-center gap-2">
-                  <Edit3 className="w-4 h-4 text-[#992545]" />
-                  <span>編輯私房收藏：{editingPlace.name}</span>
-                </h3>
+            <div className="bg-white rounded-3xl max-w-xl w-full shadow-2xl border border-[#ebd8dc] max-h-[88vh] sm:max-h-[85vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+              {/* 1. Fixed Header */}
+              <div className="flex items-center justify-between px-5 py-4 sm:px-6 sm:py-4.5 border-b border-[#f0e2e5] shrink-0 bg-white">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-2xl bg-[#fcebee] text-[#992545] flex items-center justify-center shrink-0">
+                    <Edit3 className="w-4 h-4 sm:w-5 sm:h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-sm sm:text-base text-[#2d2527]">
+                      編輯收藏內容 · {editingPlace.name}
+                    </h3>
+                    <p className="text-[11px] text-[#735e65]">
+                      可自由修改地點名稱、分類、地址、亮點、介紹與筆記
+                    </p>
+                  </div>
+                </div>
                 <button
                   type="button"
                   onClick={() => setEditingPlace(null)}
-                  className="p-1 text-stone-400 hover:text-stone-700 rounded-full cursor-pointer"
+                  className="p-1.5 text-stone-400 hover:text-stone-700 rounded-full cursor-pointer hover:bg-stone-100 transition-colors"
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
-              <div className="space-y-4 text-xs">
+              {/* 2. Scrollable Body */}
+              <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-4 text-xs">
+                {/* Name & Japanese Name in 2 columns */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="font-bold text-[#4a383d] block mb-1">
+                      地點中文名稱 <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      placeholder="例如：淺草今半 國際通本店"
+                      className="w-full px-3 py-2 bg-[#faf8f9] border border-[#e4d3d7] focus:border-[#992545] focus:bg-white rounded-xl outline-hidden text-xs text-[#2d2527] font-semibold"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-bold text-[#4a383d] block mb-1">
+                      日文原名 / 標音
+                    </label>
+                    <input
+                      type="text"
+                      value={editJapaneseName}
+                      onChange={(e) => setEditJapaneseName(e.target.value)}
+                      placeholder="例如：浅草今半 国際通り本店"
+                      className="w-full px-3 py-2 bg-[#faf8f9] border border-[#e4d3d7] focus:border-[#992545] focus:bg-white rounded-xl outline-hidden text-xs text-[#2d2527]"
+                    />
+                  </div>
+                </div>
+
+                {/* Category Selection */}
                 <div>
                   <label className="font-bold text-[#4a383d] block mb-1.5">
                     分類性質：
                   </label>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
                     {Object.entries(CATEGORY_MAP).map(([key, cat]) => {
                       const Icon = cat.icon;
                       const isSelected = editCategory === key;
@@ -1515,39 +1572,125 @@ export const PocketWishlistSection: React.FC = () => {
                           key={key}
                           type="button"
                           onClick={() => setEditCategory(key)}
-                          className={`p-2 rounded-xl border flex items-center justify-center gap-1 font-semibold transition-all cursor-pointer ${
+                          className={`p-2 rounded-xl border flex flex-col items-center justify-center gap-1 font-semibold transition-all cursor-pointer text-center ${
                             isSelected
-                              ? "bg-[#992545] text-white border-[#992545]"
-                              : "bg-white border-[#ebd8dc] text-[#5c494f] hover:bg-[#fff2f5]"
+                              ? "bg-[#992545] text-white border-[#992545] shadow-xs"
+                              : "bg-[#faf8f9] border-[#ebd8dc] text-[#5c494f] hover:bg-[#fff2f5]"
                           }`}
                         >
                           <Icon className="w-3.5 h-3.5" />
-                          <span>{cat.label}</span>
+                          <span className="text-[11px]">{cat.label}</span>
                         </button>
                       );
                     })}
                   </div>
                 </div>
 
+                {/* Address & Highlight */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="font-bold text-[#4a383d] block mb-1">
+                      所在區域 / 地址
+                    </label>
+                    <input
+                      type="text"
+                      value={editAddress}
+                      onChange={(e) => setEditAddress(e.target.value)}
+                      placeholder="例如：東京都台東區西淺草3-1-12"
+                      className="w-full px-3 py-2 bg-[#faf8f9] border border-[#e4d3d7] focus:border-[#992545] focus:bg-white rounded-xl outline-hidden text-xs text-[#2d2527]"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-bold text-[#4a383d] block mb-1">
+                      招牌亮點一句話
+                    </label>
+                    <input
+                      type="text"
+                      value={editHighlight}
+                      onChange={(e) => setEditHighlight(e.target.value)}
+                      placeholder="例如：百年秘傳和牛壽喜燒與傳承醬汁"
+                      className="w-full px-3 py-2 bg-[#faf8f9] border border-[#e4d3d7] focus:border-[#992545] focus:bg-white rounded-xl outline-hidden text-xs text-[#2d2527]"
+                    />
+                  </div>
+                </div>
+
+                {/* Summary */}
                 <div>
-                  <label className="font-bold text-[#4a383d] block mb-1.5">
-                    旅伴自訂備註 / 必吃買清單：
+                  <label className="font-bold text-[#4a383d] block mb-1">
+                    地點深度 / 簡易介紹
                   </label>
                   <textarea
                     rows={3}
+                    value={editSummary}
+                    onChange={(e) => setEditSummary(e.target.value)}
+                    placeholder="介紹地點的核心特色、招牌料理或歷史..."
+                    className="w-full p-2.5 bg-[#faf8f9] border border-[#e4d3d7] focus:border-[#992545] focus:bg-white rounded-xl outline-hidden text-xs text-[#2d2527] leading-relaxed"
+                  />
+                </div>
+
+                {/* Tips */}
+                <div>
+                  <label className="font-bold text-[#4a383d] block mb-1">
+                    💡 自由行探訪貼步（排隊、預約、避雷建議）
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={editTips}
+                    onChange={(e) => setEditTips(e.target.value)}
+                    placeholder="例如：午間定食CP值最高，建議提早30分鐘候位..."
+                    className="w-full p-2.5 bg-[#faf8f9] border border-[#e4d3d7] focus:border-[#992545] focus:bg-white rounded-xl outline-hidden text-xs text-[#2d2527] leading-relaxed"
+                  />
+                </div>
+
+                {/* Notes */}
+                <div>
+                  <label className="font-bold text-[#4a383d] block mb-1">
+                    📝 私人備註 / 旅伴筆記
+                  </label>
+                  <input
+                    type="text"
                     value={editNotes}
                     onChange={(e) => setEditNotes(e.target.value)}
-                    placeholder="寫下您或旅伴想探訪的原因、推薦必點料理或約定時間..."
-                    className="w-full p-3 bg-[#faf8f9] border border-[#e4d3d7] focus:border-[#992545] rounded-xl outline-hidden text-xs text-[#2d2527]"
+                    placeholder="寫下您想點的料理、同行約定或行程第幾天..."
+                    className="w-full px-3 py-2 bg-[#faf8f9] border border-[#e4d3d7] focus:border-[#992545] focus:bg-white rounded-xl outline-hidden text-xs text-[#2d2527]"
+                  />
+                </div>
+
+                {/* Google Maps URL */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="font-bold text-[#4a383d] block">
+                      Google Maps 地圖網址
+                    </label>
+                    {editUrl && (
+                      <a
+                        href={editUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-[#992545] hover:underline font-bold text-[11px]"
+                      >
+                        <span>開啟地圖預覽</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    )}
+                  </div>
+                  <input
+                    type="text"
+                    value={editUrl}
+                    onChange={(e) => setEditUrl(e.target.value)}
+                    placeholder="https://maps.app.goo.gl/..."
+                    className="w-full px-3 py-2 bg-[#faf8f9] border border-[#e4d3d7] focus:border-[#992545] focus:bg-white rounded-xl outline-hidden text-xs text-[#2d2527] font-mono"
                   />
                 </div>
               </div>
 
-              <div className="mt-6 flex items-center justify-end gap-2">
+              {/* 3. Sticky Bottom Action Bar */}
+              <div className="flex items-center justify-end gap-2.5 px-5 py-3 sm:px-6 sm:py-3.5 bg-[#faf8f9] border-t border-[#f0e2e5] shrink-0">
                 <button
                   type="button"
                   onClick={() => setEditingPlace(null)}
-                  className="px-4 py-2 rounded-xl border border-[#ebd8dc] text-xs font-semibold text-[#735e65] hover:bg-stone-50 cursor-pointer"
+                  disabled={isSavingEdit}
+                  className="px-4 py-2 rounded-xl border border-[#ebd8dc] text-xs font-semibold text-[#735e65] hover:bg-white cursor-pointer transition-colors"
                 >
                   取消
                 </button>
@@ -1555,17 +1698,17 @@ export const PocketWishlistSection: React.FC = () => {
                   type="button"
                   onClick={handleSaveEdit}
                   disabled={isSavingEdit}
-                  className="px-4 py-2 bg-[#992545] hover:bg-[#801b36] text-white font-bold rounded-xl text-xs shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
+                  className="px-5 py-2 bg-[#992545] hover:bg-[#801b36] disabled:bg-stone-300 text-white font-bold rounded-xl text-xs shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
                 >
                   {isSavingEdit ? (
                     <>
-                      <RefreshCw className="w-3 h-3 animate-spin" />
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
                       <span>儲存中...</span>
                     </>
                   ) : (
                     <>
                       <Check className="w-3.5 h-3.5" />
-                      <span>確認儲存</span>
+                      <span>儲存修改</span>
                     </>
                   )}
                 </button>

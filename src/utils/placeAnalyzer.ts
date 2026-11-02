@@ -252,48 +252,82 @@ const TOKYO_LANDMARKS: Record<string, Partial<AnalyzedPlaceData>> = {
 
 /**
  * Attempt to unshorten Google Maps short link client-side via CORS-friendly proxies
+ * (Works 100% on static hosts like GitHub Pages without backend)
  */
 export async function unshortenGoogleMapsLinkClient(shortUrl: string): Promise<{ resolvedUrl: string; title: string }> {
   let resolvedUrl = "";
   let title = "";
 
-  // 1. Try AllOrigins (fetches page and follows redirects)
+  const cleanShort = shortUrl.trim();
+
+  // 1. Try Jina Reader Proxy (Fast, follows 302 redirects, returns Final URL & Markdown)
   try {
-    const res = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(shortUrl)}`, {
+    const jinaUrl = `https://r.jina.ai/${cleanShort}`;
+    const res = await fetch(jinaUrl, {
       signal: AbortSignal.timeout(3500),
+      headers: {
+        Accept: "text/plain",
+      },
     });
     if (res.ok) {
-      const data = await res.json();
-      if (data?.status?.url) {
-        resolvedUrl = data.status.url;
+      const text = await res.text();
+      const finalUrlMatch = text.match(/Final URL:\s*(https?:\/\/[^\s\n]+)/i);
+      if (finalUrlMatch && finalUrlMatch[1]) {
+        resolvedUrl = finalUrlMatch[1].trim();
       }
-      if (data?.contents && typeof data.contents === "string") {
-        // Extract title tag
-        const titleMatch = data.contents.match(/<title[^>]*>([^<]+)<\/title>/i);
-        if (titleMatch && titleMatch[1]) {
-          let t = titleMatch[1].trim();
-          t = t.replace(/\s*[-–—|]\s*Google\s*(?:Maps|地圖|マップ)?.*$/i, "").trim();
-          t = t.replace(/\s*[-–—|]\s*Google.*$/i, "").trim();
-          if (t && !t.includes("Google") && t !== "Google Maps") {
-            title = t;
-          }
+
+      const titleMatch = text.match(/Title:\s*([^\n\r]+)/i);
+      if (titleMatch && titleMatch[1]) {
+        let t = titleMatch[1].trim();
+        t = t.replace(/\s*[-–—|]\s*Google\s*(?:Maps|地圖|マップ)?.*$/i, "").trim();
+        t = t.replace(/\s*[-–—|]\s*Google.*$/i, "").trim();
+        if (t && !t.includes("Google") && t !== "Google Maps") {
+          title = t;
         }
       }
     }
   } catch (e) {
-    // Ignore and proceed to next proxy
+    // Continue to next fallback
   }
 
   // 2. Try unshorten.me if not resolved yet
   if (!resolvedUrl) {
     try {
-      const unRes = await fetch("https://unshorten.me/json/" + encodeURIComponent(shortUrl), {
+      const unRes = await fetch("https://unshorten.me/json/" + encodeURIComponent(cleanShort), {
         signal: AbortSignal.timeout(2500),
       });
       if (unRes.ok) {
         const uData = await unRes.json();
         if (uData?.resolved_url) {
           resolvedUrl = uData.resolved_url;
+        }
+      }
+    } catch (e) {
+      // Continue
+    }
+  }
+
+  // 3. Try AllOrigins as third fallback
+  if (!resolvedUrl) {
+    try {
+      const res = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(cleanShort)}`, {
+        signal: AbortSignal.timeout(3000),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.status?.url) {
+          resolvedUrl = data.status.url;
+        }
+        if (data?.contents && typeof data.contents === "string") {
+          const titleMatch = data.contents.match(/<title[^>]*>([^<]+)<\/title>/i);
+          if (titleMatch && titleMatch[1]) {
+            let t = titleMatch[1].trim();
+            t = t.replace(/\s*[-–—|]\s*Google\s*(?:Maps|地圖|マップ)?.*$/i, "").trim();
+            t = t.replace(/\s*[-–—|]\s*Google.*$/i, "").trim();
+            if (t && !t.includes("Google") && t !== "Google Maps") {
+              title = t;
+            }
+          }
         }
       }
     } catch (e) {
