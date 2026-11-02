@@ -543,6 +543,32 @@ async function startServer() {
         targetUrl.includes("g.co/");
 
       if (isShortLink) {
+        // Fast Jina reader unshortener (bypasses Google consent & bot detection)
+        try {
+          const jinaRes = await fetch(`https://r.jina.ai/${targetUrl}`, {
+            signal: AbortSignal.timeout(3500),
+            headers: { Accept: "text/plain" },
+          });
+          if (jinaRes.ok) {
+            const jinaText = await jinaRes.text();
+            const finalUrlMatch = jinaText.match(/Final URL:\s*(https?:\/\/[^\s\n]+)/i);
+            if (finalUrlMatch && finalUrlMatch[1]) {
+              resolvedUrl = finalUrlMatch[1].trim();
+              const fromFinal = extractPlaceFromUrl(resolvedUrl);
+              if (fromFinal.name) placeQueryHint = fromFinal.name;
+            }
+            const titleMatch = jinaText.match(/Title:\s*([^\n\r]+)/i);
+            if (titleMatch && titleMatch[1]) {
+              let t = titleMatch[1].trim().replace(/\s*[-–—|•]\s*Google\s*(?:Maps|地圖|マップ)?.*$/i, "").trim();
+              if (t && !t.includes("Google") && t !== "Google Maps") {
+                if (!placeQueryHint) placeQueryHint = t;
+              }
+            }
+          }
+        } catch (jinaErr) {
+          console.warn("Server Jina unshortener skipped:", jinaErr);
+        }
+
         let currentHopUrl = targetUrl;
         let hops = 0;
         const maxHops = 3;
@@ -706,14 +732,14 @@ async function startServer() {
 
           try {
             const geminiPromise = ai.models.generateContent({
-              model: "gemini-3.1-flash-lite",
+              model: "gemini-3.8-flash",
               contents: prompt,
               config: {
                 responseMimeType: "application/json",
               },
             });
             const timeoutPromise = new Promise((_, reject) =>
-              setTimeout(() => reject(new Error("Gemini API call timed out")), 4500)
+              setTimeout(() => reject(new Error("Gemini API call timed out")), 9000)
             );
             const response = (await Promise.race([geminiPromise, timeoutPromise])) as any;
             if (response && response.text) {

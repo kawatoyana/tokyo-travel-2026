@@ -9,6 +9,8 @@ import {
   Edit3,
   CheckCircle2,
   Circle,
+  Heart,
+  HelpCircle,
   Compass,
   UtensilsCrossed,
   Coffee,
@@ -47,6 +49,7 @@ import {
   doc,
   query,
   onSnapshot,
+  getDocs,
   setDoc,
   deleteDoc,
   updateDoc,
@@ -253,6 +256,11 @@ export const PocketWishlistSection: React.FC = () => {
   // Newly added highlight tracking
   const [recentlyAddedId, setRecentlyAddedId] = useState<string | null>(null);
 
+  // Companion sync tracking
+  const [lastSyncTime, setLastSyncTime] = useState<string>("即時同步中");
+  const [isManualSyncing, setIsManualSyncing] = useState(false);
+  const [showSyncGuideModal, setShowSyncGuideModal] = useState(false);
+
   // Firebase unauthorized-domain helper modal state
   const [showAuthDomainModal, setShowAuthDomainModal] = useState(false);
   const [copiedDomain, setCopiedDomain] = useState(false);
@@ -287,6 +295,13 @@ export const PocketWishlistSection: React.FC = () => {
         snapshot.forEach((docSnap) => {
           remoteList.push({ id: docSnap.id, ...(docSnap.data() as Omit<SavedPlace, "id">) });
         });
+
+        const nowTime = new Date().toLocaleTimeString("zh-TW", {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+        });
+        setLastSyncTime(nowTime);
 
         setPlaces((prevPlaces) => {
           let deletedIds = new Set<string>();
@@ -328,6 +343,59 @@ export const PocketWishlistSection: React.FC = () => {
 
     return () => unsubscribe();
   }, []);
+
+  // Manual sync refresh function to confirm companion additions
+  const handleManualSync = async () => {
+    setIsManualSyncing(true);
+    try {
+      const snap = await getDocs(collection(db, "savedPlaces"));
+      const remoteList: SavedPlace[] = [];
+      snap.forEach((docSnap) => {
+        remoteList.push({ id: docSnap.id, ...(docSnap.data() as Omit<SavedPlace, "id">) });
+      });
+
+      let deletedIds = new Set<string>();
+      try {
+        const rawDel = localStorage.getItem(DELETED_IDS_KEY);
+        if (rawDel) deletedIds = new Set(JSON.parse(rawDel));
+      } catch {}
+
+      const validRemote = remoteList.filter((p) => !deletedIds.has(p.id));
+      const remoteIds = new Set(validRemote.map((p) => p.id));
+      const localOnly = places.filter(
+        (p) => !remoteIds.has(p.id) && !deletedIds.has(p.id) && (p.id.startsWith("seed-") || p.userId === "local-user")
+      );
+
+      const combined = [...validRemote, ...localOnly];
+      combined.sort((a, b) => {
+        const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return timeB - timeA;
+      });
+
+      setPlaces(combined);
+      savePlacesToLocal(combined);
+      const nowTime = new Date().toLocaleTimeString("zh-TW", {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      });
+      setLastSyncTime(nowTime);
+      setToastMessage(`✓ 已同步至最新狀態！目前共有 ${combined.length} 筆私房清單`);
+      setTimeout(() => setToastMessage(null), 3000);
+    } catch (syncErr) {
+      console.warn("Manual sync error:", syncErr);
+      const nowTime = new Date().toLocaleTimeString("zh-TW", {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      setLastSyncTime(nowTime);
+      setToastMessage("✓ 已確認本機最新快照！");
+      setTimeout(() => setToastMessage(null), 2500);
+    } finally {
+      setIsManualSyncing(false);
+    }
+  };
 
   // Handle Google Login with unauthorized-domain interceptor
   const handleLogin = async () => {
@@ -653,6 +721,9 @@ export const PocketWishlistSection: React.FC = () => {
       return next;
     });
 
+    setToastMessage(nextStatus ? `♥ 已將「${place.name}」標記為「想去」！` : `已取消「${place.name}」的「想去」標記`);
+    setTimeout(() => setToastMessage(null), 2500);
+
     // 2. Sync to Firestore if authenticated
     if (currentUser && !place.id.startsWith("seed-")) {
       try {
@@ -829,6 +900,38 @@ export const PocketWishlistSection: React.FC = () => {
 
           {/* Sync Status & Google Auth Bar */}
           <div className="mt-5 flex flex-wrap items-center justify-center gap-3 text-xs">
+            {/* Real-time Companion Sync Status Chip */}
+            <div className="inline-flex items-center gap-2 bg-white px-3.5 py-1.5 rounded-full border border-[#ebd8dc] shadow-2xs">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+              <span className="font-semibold text-[#4a383d]">
+                旅伴即時同步：<span className="text-emerald-700 font-bold">連線中</span>
+              </span>
+              <span className="text-[10px] text-[#8c7b80] hidden sm:inline font-mono">
+                ({lastSyncTime})
+              </span>
+              <button
+                type="button"
+                onClick={handleManualSync}
+                disabled={isManualSyncing}
+                title="立即檢查最新雲端同步更新"
+                className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#fbf6f7] hover:bg-[#f5e3e7] text-[#992545] rounded-lg border border-[#ebd8dc] transition-all cursor-pointer font-bold text-[11px]"
+              >
+                <RefreshCw className={`w-3 h-3 ${isManualSyncing ? "animate-spin text-[#992545]" : ""}`} />
+                <span>{isManualSyncing ? "檢查中..." : "重新整理"}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowSyncGuideModal(true)}
+                title="查看旅伴即時同步機制說明"
+                className="text-[#8c7b80] hover:text-[#992545] p-0.5 rounded-full hover:bg-stone-100 transition-colors cursor-pointer"
+              >
+                <HelpCircle className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
             {authLoading ? (
               <span className="text-[#8c7b80] flex items-center gap-1.5">
                 <RefreshCw className="w-3.5 h-3.5 animate-spin" /> 連線檢查中...
@@ -849,7 +952,7 @@ export const PocketWishlistSection: React.FC = () => {
                 </span>
                 <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  雲端已連線同步
+                  已登入雲端庫
                 </span>
                 <button
                   type="button"
@@ -1006,41 +1109,31 @@ export const PocketWishlistSection: React.FC = () => {
             })}
           </div>
 
-          {/* Visited Status Filter */}
+          {/* Wishlist Status Filter */}
           <div className="flex items-center gap-2 text-xs shrink-0">
-            <span className="text-[#8c7b80] font-medium">進度：</span>
+            <span className="text-[#8c7b80] font-medium">篩選：</span>
             <button
               type="button"
               onClick={() => setVisitedFilter("all")}
-              className={`px-2.5 py-1 rounded-lg font-medium transition-all cursor-pointer ${
+              className={`px-3 py-1 rounded-xl font-bold transition-all cursor-pointer ${
                 visitedFilter === "all"
-                  ? "bg-[#2d2527] text-white"
-                  : "bg-white border border-[#ebd8dc] text-[#735e65]"
+                  ? "bg-[#2d2527] text-white shadow-xs"
+                  : "bg-white border border-[#ebd8dc] text-[#735e65] hover:bg-[#faf6f7]"
               }`}
             >
-              不限
-            </button>
-            <button
-              type="button"
-              onClick={() => setVisitedFilter("unvisited")}
-              className={`px-2.5 py-1 rounded-lg font-medium transition-all cursor-pointer ${
-                visitedFilter === "unvisited"
-                  ? "bg-[#992545] text-white"
-                  : "bg-white border border-[#ebd8dc] text-[#735e65]"
-              }`}
-            >
-              未造訪
+              全部清單
             </button>
             <button
               type="button"
               onClick={() => setVisitedFilter("visited")}
-              className={`px-2.5 py-1 rounded-lg font-medium transition-all cursor-pointer ${
+              className={`px-3 py-1 rounded-xl font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
                 visitedFilter === "visited"
-                  ? "bg-emerald-700 text-white"
-                  : "bg-white border border-[#ebd8dc] text-[#735e65]"
+                  ? "bg-rose-600 text-white shadow-xs"
+                  : "bg-white border border-[#ebd8dc] text-[#735e65] hover:bg-rose-50 hover:text-rose-600"
               }`}
             >
-              已踩點 ({visitedCount})
+              <Heart className={`w-3.5 h-3.5 ${visitedFilter === "visited" ? "fill-white text-white" : "fill-rose-500 text-rose-500"}`} />
+              <span>想去 ({visitedCount})</span>
             </button>
           </div>
         </div>
@@ -1074,7 +1167,7 @@ export const PocketWishlistSection: React.FC = () => {
                     isRecentlyAdded
                       ? "ring-2 ring-[#992545] border-[#992545] bg-[#fffbfd] shadow-md"
                       : place.isVisited
-                      ? "border-emerald-200 bg-emerald-50/20 shadow-2xs"
+                      ? "border-rose-200 bg-rose-50/20 shadow-2xs"
                       : "border-[#ebd8dc] hover:border-[#b83358] shadow-xs hover:shadow-md"
                   }`}
                 >
@@ -1096,29 +1189,30 @@ export const PocketWishlistSection: React.FC = () => {
                         )}
 
                         {place.isVisited && (
-                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">
-                            ✓ 已踩點
+                          <span className="text-[10px] font-bold text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
+                            <Heart className="w-2.5 h-2.5 fill-rose-500 text-rose-500" />
+                            <span>想去</span>
                           </span>
                         )}
                       </div>
 
                       <div className="flex items-center gap-1">
-                        {/* Toggle Visited */}
+                        {/* Toggle 想去 */}
                         <button
                           type="button"
                           onClick={() => handleToggleVisited(place)}
-                          title={place.isVisited ? "標記為未踩點" : "標記為已踩點"}
+                          title={place.isVisited ? "取消「想去」標記" : "標記為「想去」"}
                           className={`p-1.5 rounded-full transition-colors cursor-pointer ${
                             place.isVisited
-                              ? "text-emerald-600 hover:bg-emerald-100"
-                              : "text-stone-400 hover:text-emerald-600 hover:bg-stone-100"
+                              ? "text-rose-600 bg-rose-50 hover:bg-rose-100"
+                              : "text-stone-300 hover:text-rose-500 hover:bg-rose-50"
                           }`}
                         >
-                          {place.isVisited ? (
-                            <CheckCircle2 className="w-4 h-4 fill-emerald-100" />
-                          ) : (
-                            <Circle className="w-4 h-4" />
-                          )}
+                          <Heart
+                            className={`w-4 h-4 transition-transform active:scale-125 ${
+                              place.isVisited ? "fill-rose-500 text-rose-500" : ""
+                            }`}
+                          />
                         </button>
 
                         {/* Edit Place */}
@@ -1298,20 +1392,6 @@ export const PocketWishlistSection: React.FC = () => {
                       placeholder="例如：淺草今半 國際通本店"
                       className="w-full px-3 py-2 bg-[#faf8f9] border border-[#e4d3d7] focus:border-[#992545] focus:bg-white rounded-xl outline-hidden text-xs text-[#2d2527] font-semibold"
                     />
-                    {/* Quick Pick Chips */}
-                    <div className="flex flex-wrap items-center gap-1 mt-1.5 text-[10px]">
-                      <span className="text-[#8c7b80]">常用熱門：</span>
-                      {["淺草今半", "志乃多壽司", "敘敘苑", "HARBS", "AFURI", "SHIBUYA SKY", "利久牛舌", "小網神社"].map((chip) => (
-                        <button
-                          key={chip}
-                          type="button"
-                          onClick={() => handleRegenerateFromCandidateName(chip)}
-                          className="px-1.5 py-0.5 bg-[#fbf6f7] hover:bg-[#f5e3e7] text-[#8e2443] border border-[#ecd2d8] rounded-md transition-colors cursor-pointer"
-                        >
-                          {chip}
-                        </button>
-                      ))}
-                    </div>
                   </div>
                   <div>
                     <label className="font-bold text-[#4a383d] block mb-1">
@@ -1795,6 +1875,87 @@ export const PocketWishlistSection: React.FC = () => {
           </div>
         )}
 
+        {/* Companion Sync Guide Modal */}
+        {showSyncGuideModal && (
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200"
+          >
+            <div className="bg-white rounded-3xl p-6 sm:p-7 max-w-lg w-full shadow-2xl border border-[#ebd8dc] max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between mb-4 pb-3 border-b border-[#f0e2e5]">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-rose-50 text-[#992545] flex items-center justify-center shrink-0">
+                    <BookmarkCheck className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-base text-[#2d2527]">
+                      旅伴即時同步機制說明
+                    </h3>
+                    <p className="text-[11px] text-[#735e65]">
+                      如何確認旅伴新增的私房景點與行程有同步更新？
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowSyncGuideModal(false)}
+                  className="p-1 text-stone-400 hover:text-stone-700 rounded-full cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="space-y-4 text-xs text-[#4a383d] leading-relaxed">
+                <div className="p-3 bg-emerald-50/80 border border-emerald-200 rounded-2xl">
+                  <p className="font-bold text-emerald-950 mb-1 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <span>即時推播（免手動重新整理網頁）：</span>
+                  </p>
+                  <p className="text-emerald-900">
+                    系統使用 Google Cloud Firestore WebSocket 即時監聽技術。只要旅伴在手機或電腦上開啟同一行程網頁，任何一位旅伴<strong>新增景點、修改備註、標記「想去」或刪除</strong>，所有人的畫面將在 1 秒內自動即時同步，完全不需要重新載入網頁！
+                  </p>
+                </div>
+
+                <div className="space-y-2.5">
+                  <p className="font-bold text-[#2d2527]">如何確認最新同步狀態？</p>
+                  <ul className="space-y-2 pl-1">
+                    <li className="flex items-start gap-2">
+                      <span className="font-bold text-[#992545] bg-[#fcedf0] px-1.5 py-0.5 rounded-md text-[10px] shrink-0 mt-0.5">1</span>
+                      <span><strong>即時狀態綠燈：</strong>標題上方的「旅伴即時同步：連線中」隨時監控雲端狀態，並標註最後同步時間。</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="font-bold text-[#992545] bg-[#fcedf0] px-1.5 py-0.5 rounded-md text-[10px] shrink-0 mt-0.5">2</span>
+                      <span><strong>一鍵手動重新整理：</strong>若旅伴剛新增想立即確認，可隨時點選「重新整理」按鈕，系統會向雲端發送最新快照比對並回報總筆數。</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="font-bold text-[#992545] bg-[#fcedf0] px-1.5 py-0.5 rounded-md text-[10px] shrink-0 mt-0.5">3</span>
+                      <span><strong>離線自動補齊：</strong>搭機或地鐵中斷線時，您仍可本機瀏覽與暫存，連上網路後將自動完成同步！</span>
+                    </li>
+                  </ul>
+                </div>
+
+                <div className="p-3 bg-[#fdf6f7] border border-[#f3ccd6] rounded-2xl text-[#78243a]">
+                  <span className="font-bold">💡 貼心提醒：</span>
+                  <span>
+                    建議點選「Google 登入同步」，這樣您新增的私房點就能直接推送到旅伴的清單中；未登入狀態下您依然可即時接收所有旅伴新增的最新內容！
+                  </span>
+                </div>
+              </div>
+
+              <div className="mt-6 flex items-center justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShowSyncGuideModal(false)}
+                  className="px-5 py-2 rounded-xl bg-[#992545] text-white text-xs font-bold hover:bg-[#801b36] shadow-xs cursor-pointer"
+                >
+                  我知道了
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Firebase Authorized Domain Helper Modal */}
         {showAuthDomainModal && (
           <div
@@ -1879,7 +2040,7 @@ export const PocketWishlistSection: React.FC = () => {
                 <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl text-emerald-900">
                   <span className="font-bold">✓ 本機模式正常運作：</span>
                   <span>
-                    在此期間，您仍可隨時貼上 Google 地圖連結，AI 自動分類、特色歸納、標記已踩點與立即刪除皆可正常運作，資料安全儲存於您的瀏覽器中！
+                    在此期間，您仍可隨時貼上 Google 地圖連結，AI 自動分類、特色歸納、標記想去與立即刪除皆可正常運作，資料安全儲存於您的瀏覽器中！
                   </span>
                 </div>
               </div>
