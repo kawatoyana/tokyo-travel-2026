@@ -12,6 +12,16 @@ export interface AnalyzedPlaceData {
   summary: string;
   address: string;
   tips: string;
+  // Distinct Dining attributes
+  cuisineType?: string;
+  signatureDishes?: string[];
+  priceRange?: string;
+  diningAtmosphere?: string;
+  // Distinct Sightseeing attributes
+  spotType?: string;
+  mustSeeHighlights?: string[];
+  ticketInfo?: string;
+  bestTimeToVisit?: string;
 }
 
 /**
@@ -27,6 +37,10 @@ const TOKYO_LANDMARKS: Record<string, Partial<AnalyzedPlaceData>> = {
     summary: "創業於明治時代的百年江戶老字號。特選吸滿香甜柴魚高湯精華的油揚豆皮包裹特調溫潤醋飯，搭配甜鹹爽脆的干瓢卷，是東京最經典的傳統外帶壽司美味。",
     address: "東京都台東區淺草1-1-12",
     tips: "推薦購買「稻荷壽司與干瓢卷」綜合折詰盒，常溫即可享用，極適合外帶至隅田川畔野餐！",
+    cuisineType: "江戶前傳統豆皮壽司與干瓢卷",
+    signatureDishes: ["秘傳豆皮稻荷壽司", "甘煮干瓢卷折詰盒"],
+    priceRange: "約 ¥500 - ¥1,500 / 人",
+    diningAtmosphere: "百年傳統外帶老鋪，適合隅田川畔野餐小憩",
   },
   "今半": {
     name: "淺草今半（壽喜燒）",
@@ -37,6 +51,10 @@ const TOKYO_LANDMARKS: Record<string, Partial<AnalyzedPlaceData>> = {
     summary: "東京最具代表性的百年壽喜燒老鋪，嚴選霜降油花極致細膩的日本黑毛和牛，搭配秘傳百年割下高湯醬汁涮煮，入口滑嫩香甜，為自由行必嚐的極上美食饗宴。",
     address: "東京都台東區西淺草3-1-12",
     tips: "午間時段供應的壽喜燒定食CP值極高，建議提早於開店前30分鐘抵達或事先預約！",
+    cuisineType: "百年黑毛和牛壽喜燒・涮涮鍋",
+    signatureDishes: ["特選黑毛和牛壽喜燒定食", "百年秘傳割下和牛御膳"],
+    priceRange: "午間約 ¥4,000 - ¥8,000 / 晚間約 ¥12,000+",
+    diningAtmosphere: "傳統典雅日式榻榻米包廂，具備專業女將桌邊服務",
   },
   "敘敘苑": {
     name: "敘敘苑（燒肉）",
@@ -47,6 +65,10 @@ const TOKYO_LANDMARKS: Record<string, Partial<AnalyzedPlaceData>> = {
     summary: "日本頂級連鎖燒肉名店，肉質細緻嫩滑、油花豐潤，招牌牛五花與特選牛舌搭配獨家爽口沙拉，深受海內外旅人推崇。",
     address: "東京都精華商圈（晴空街道 30F / 銀座 / 新宿）",
     tips: "晴空塔分店具備絕美高空景觀，建議提早於官網預約窗邊景觀座位。",
+    cuisineType: "高級日式燒肉",
+    signatureDishes: ["特選上等牛五花", "招牌蔥花牛舌", "敘敘苑招牌沙拉"],
+    priceRange: "午間約 ¥3,500 - ¥6,000 / 晚間約 ¥10,000+",
+    diningAtmosphere: "尊榮高空景觀席與精緻排煙包廂，極適浪漫約會聚餐",
   },
   "叙々苑": {
     name: "敘敘苑（燒肉）",
@@ -57,6 +79,10 @@ const TOKYO_LANDMARKS: Record<string, Partial<AnalyzedPlaceData>> = {
     summary: "日本頂級連鎖燒肉名店，肉質細緻嫩滑、油花豐潤，招牌牛五花與特選牛舌搭配獨家爽口沙拉，深受海內外旅人推崇。",
     address: "東京都精華商圈（晴空街道 30F / 銀座 / 新宿）",
     tips: "晴空塔分店具備絕美高空景觀，建議提早於官網預約窗邊景觀座位。",
+    cuisineType: "高級日式燒肉",
+    signatureDishes: ["特選上等牛五花", "招牌蔥花牛舌", "敘敘苑招牌沙拉"],
+    priceRange: "午間約 ¥3,500 - ¥6,000 / 晚間約 ¥10,000+",
+    diningAtmosphere: "尊榮高空景觀席與精緻排煙包廂，極適浪漫約會聚餐",
   },
   "利久": {
     name: "牛たん炭焼 利久",
@@ -67,6 +93,10 @@ const TOKYO_LANDMARKS: Record<string, Partial<AnalyzedPlaceData>> = {
     summary: "仙台超人氣厚切炭烤牛舌名店，高溫炭火封存鮮美肉汁，外酥內嫩多汁Q彈，搭配香濃清燉牛尾湯與健康麥飯，是令人滿足的極上肉食盛宴。",
     address: "東京都江東區有明2-1-8 有明花園 5F",
     tips: "推薦點選「極」厚切牛舌定食，厚度普通兩倍超滿足；傍晚16:30前入座免排隊！",
+    cuisineType: "仙台炭火牛舌料理",
+    signatureDishes: ["極厚切牛舌定食", "清燉牛尾湯", "山藥泥麥飯"],
+    priceRange: "約 ¥2,000 - ¥3,500 / 人",
+    diningAtmosphere: "日式連鎖餐廳，適合家庭朋友聚餐",
   },
   "牛たん": {
     name: "牛たん炭焼 利久",
@@ -77,6 +107,10 @@ const TOKYO_LANDMARKS: Record<string, Partial<AnalyzedPlaceData>> = {
     summary: "仙台超人氣厚切炭烤牛舌名店，高溫炭火封存鮮美肉汁，外酥內嫩多汁Q彈，搭配香濃清燉牛尾湯與健康麥飯，是令人滿足的極上肉食盛宴。",
     address: "東京都江東區有明2-1-8 有明花園 5F",
     tips: "推薦點選「極」厚切牛舌定食，厚度普通兩倍超滿足；傍晚16:30前入座免排隊！",
+    cuisineType: "仙台炭火牛舌料理",
+    signatureDishes: ["極厚切牛舌定食", "清燉牛尾湯", "山藥泥麥飯"],
+    priceRange: "約 ¥2,000 - ¥3,500 / 人",
+    diningAtmosphere: "日式連鎖餐廳，適合家庭朋友聚餐",
   },
   "淺草寺": {
     name: "淺草寺（金龍山淺草寺）",
@@ -87,6 +121,10 @@ const TOKYO_LANDMARKS: Record<string, Partial<AnalyzedPlaceData>> = {
     summary: "東京都內歷史最悠久的古老寺院（創建於西元628年），江戶下町文化與觀光精神象徵。自雷門大紅燈籠漫步至莊嚴本堂，兩側仲見世通林立傳統人形燒與工藝品，香火鼎盛祥和。",
     address: "東京都台東區淺草2-3-1",
     tips: "想避開洶湧人潮可於清晨8點前造訪；夜間雷門與五重塔燈火通明，別具寧靜古典美感！",
+    spotType: "歷史古蹟 / 佛教寺院",
+    mustSeeHighlights: ["雷門巨型紅燈籠", "仲見世通商店街", "五重塔夜間點燈"],
+    ticketInfo: "境內全日免費自由參拜",
+    bestTimeToVisit: "清晨 08:00 前避開人潮，或日落後欣賞夜間打燈",
   },
   "皇居": {
     name: "皇居（東京御苑）",
@@ -97,6 +135,10 @@ const TOKYO_LANDMARKS: Record<string, Partial<AnalyzedPlaceData>> = {
     summary: "日本天皇居所，遼闊外苑綠草如茵、歷史石垣護城河圍繞，環境清幽古色古香，外圍一圈約5公里無紅綠燈，為全球跑者與旅人皆愛的綠意綠洲。",
     address: "東京都千代田區千代田1-1",
     tips: "皇居東御苑開放免費參觀；外圍環形步道逆時針方向慢跑是東京跑者的默契！",
+    spotType: "歷史名勝 / 皇室宮苑",
+    mustSeeHighlights: ["皇居二重橋", "東御苑歷史石垣", "5公里無號誌環形慢跑道"],
+    ticketInfo: "外苑與東御苑免費入園",
+    bestTimeToVisit: "清晨或傍晚散策、慢跑時段",
   },
   "東京鐵塔": {
     name: "東京鐵塔（Tokyo Tower）",
@@ -107,6 +149,10 @@ const TOKYO_LANDMARKS: Record<string, Partial<AnalyzedPlaceData>> = {
     summary: "高達333公尺的東京永恆精神地標，展望台上視野開闊，黃昏與夜晚燈火璀璨，底層FootTown商場集合伴手禮與餐飲，是自由行必訪的浪漫經典。",
     address: "東京都港區芝公園4-2-8",
     tips: "傍晚時分登塔可同時欣賞金色日落與東京夜景；芝公園是拍攝鐵塔全景的最佳角度。",
+    spotType: "地標建築 / 高空展望台",
+    mustSeeHighlights: ["Main Deck 360度展望台", "芝公園拍鐵塔全景", "經典夜間紅白點燈"],
+    ticketInfo: "展望台門票成人約 ¥1,200起",
+    bestTimeToVisit: "傍晚 17:00 前入場，同時欣賞日落黃金時刻與絢爛夜景",
   },
   "晴空塔": {
     name: "東京晴空塔（Tokyo Skytree）",
@@ -117,6 +163,10 @@ const TOKYO_LANDMARKS: Record<string, Partial<AnalyzedPlaceData>> = {
     summary: "東京現代天際線象徵，350米與450米雙層展望台俯瞰關東平原，下方Solamachi商場匯聚300多家美食餐廳與限定伴手禮店。",
     address: "東京都墨田區押上1-1-2",
     tips: "建議事先線上預訂門票免排隊；晴空街道退稅服務於1樓與3樓櫃台提供。",
+    spotType: "現代地標 / 超高空展望台",
+    mustSeeHighlights: ["天望甲板(350m)與天望回廊(450m)", "晴空街道商場採買", "隅田川夜景"],
+    ticketInfo: "天望甲板門票約 ¥2,100起，建議事先預訂",
+    bestTimeToVisit: "晴天午後至黃昏，遠眺富士山視野最佳",
   },
   "小網神社": {
     name: "小網神社（強運厄除神社）",
@@ -127,6 +177,10 @@ const TOKYO_LANDMARKS: Record<string, Partial<AnalyzedPlaceData>> = {
     summary: "隱身日本橋人形町巷弄的強運厄除名所，在東京大空襲中奇蹟倖存。社內供奉洗錢弁天，可將硬幣放入竹簍洗淨作為招財錢母。",
     address: "東京都中央區日本橋小網町10-27",
     tips: "參拜後可求取強運蠶繭御守；平日早晨前往排隊人潮較少。",
+    spotType: "神社參拜 / 開運求財名所",
+    mustSeeHighlights: ["洗錢弁天招財之井洗錢母", "強運厄除真繭御守", "神樂殿昇龍彫刻"],
+    ticketInfo: "社境全日免費參拜，洗錢與求御守開放時間約 09:00-17:00",
+    bestTimeToVisit: "平日上午 09:00 前前往，避開排隊人潮",
   },
   "新宿御苑": {
     name: "新宿御苑",
@@ -460,6 +514,14 @@ export function synthesizePlaceData(
         summary: data.summary || `${data.name} 是東京極具口碑的熱門去處，氛圍與特色深受旅人喜愛。`,
         address: data.address || detectDistrict(combined),
         tips: data.tips || "出發前可開啟 Google 地圖再次確認即時營業時間與公休日。",
+        cuisineType: data.cuisineType,
+        signatureDishes: data.signatureDishes,
+        priceRange: data.priceRange,
+        diningAtmosphere: data.diningAtmosphere,
+        spotType: data.spotType,
+        mustSeeHighlights: data.mustSeeHighlights,
+        ticketInfo: data.ticketInfo,
+        bestTimeToVisit: data.bestTimeToVisit,
       };
     }
   }
@@ -493,11 +555,29 @@ export function synthesizePlaceData(
     combined.includes("yakiniku")
   ) {
     let highlight = `${cleanName} 嚴選道地風味人氣料理與招牌美食`;
-    if (combined.includes("拉麵")) highlight = `${cleanName} 濃厚醇郁湯頭與現煮彈牙拉麵`;
-    else if (combined.includes("壽司")) highlight = `${cleanName} 築地直送極鮮魚料與職人握壽司`;
-    else if (combined.includes("燒肉")) highlight = `${cleanName} 極上頂級油花和牛與秘傳炭烤香氣`;
-    else if (combined.includes("牛舌")) highlight = `${cleanName} 極厚切炭烤牛舌、麥飯與清燉牛尾湯`;
-    else if (combined.includes("壽喜燒")) highlight = `${cleanName} 百年秘傳高湯割下與柔嫩黑毛和牛`;
+    let cuisineType = "日式特色料理";
+    let signatureDishes = ["主廚特選料理", "人氣定番菜色"];
+    if (combined.includes("拉麵")) {
+      highlight = `${cleanName} 濃厚醇郁湯頭與現煮彈牙拉麵`;
+      cuisineType = "道地日式拉麵・沾麵";
+      signatureDishes = ["特製招牌拉麵", "炙燒叉燒糖心蛋"];
+    } else if (combined.includes("壽司")) {
+      highlight = `${cleanName} 築地直送極鮮魚料與職人握壽司`;
+      cuisineType = "江戶前壽司・海鮮料理";
+      signatureDishes = ["主廚特選握壽司盛合", "極鮮鮪魚中腹手卷"];
+    } else if (combined.includes("燒肉")) {
+      highlight = `${cleanName} 極上頂級油花和牛與秘傳炭烤香氣`;
+      cuisineType = "日式炭火高級燒肉";
+      signatureDishes = ["特上牛五花", "蔥花極厚牛舌", "招牌拌沙拉"];
+    } else if (combined.includes("牛舌")) {
+      highlight = `${cleanName} 極厚切炭烤牛舌、麥飯與清燉牛尾湯`;
+      cuisineType = "仙台炭火牛舌專門";
+      signatureDishes = ["極厚切牛舌定食", "清燉牛尾湯", "山藥泥麥飯"];
+    } else if (combined.includes("壽喜燒")) {
+      highlight = `${cleanName} 百年秘傳高湯割下與柔嫩黑毛和牛`;
+      cuisineType = "黑毛和牛壽喜燒・涮涮鍋";
+      signatureDishes = ["特選和牛壽喜燒定食", "百年割下和牛御膳"];
+    }
 
     return {
       name: cleanName,
@@ -508,6 +588,10 @@ export function synthesizePlaceData(
       summary: `${cleanName} 位於${district}，以道地烹調技藝與新鮮食材聞名，用餐氛圍熱絡溫馨，是旅伴共享美食時光的必嚐首選。`,
       address: district,
       tips: "熱門用餐時段建議提早前往或離峰造訪，以享舒適品嚐空間；可點選地圖確認最新菜單與公休日。",
+      cuisineType,
+      signatureDishes,
+      priceRange: "約 ¥1,500 - ¥4,000 / 人",
+      diningAtmosphere: "道地溫馨日式食堂與熱絡用餐氛圍",
     };
   }
 
@@ -534,6 +618,10 @@ export function synthesizePlaceData(
       summary: `${cleanName} 營造出溫馨愜意的休憩氛圍，提供現煮精品咖啡與每日限定甜品，是旅途散策中品味時光、放鬆小憩的完美據點。`,
       address: district,
       tips: "推薦點選招牌手沖咖啡或拿鐵，搭配當日手作烘焙點心；下午時段甜點常提早售罄建議提早到訪。",
+      cuisineType: "精品手沖咖啡・法式手作烘焙甜點",
+      signatureDishes: ["招牌手沖精品咖啡", "當季水果千層蛋糕"],
+      priceRange: "約 ¥800 - ¥1,800 / 人",
+      diningAtmosphere: "優雅放鬆文青空間，適合悠閒歇腳與拍照",
     };
   }
 
@@ -553,6 +641,19 @@ export function synthesizePlaceData(
     combined.includes("城") ||
     combined.includes("橋")
   ) {
+    let spotType = "歷史古蹟 / 名勝古剎";
+    let mustSeeHighlights = ["傳統建築工藝", "四季景致庭園"];
+    if (combined.includes("神社") || combined.includes("寺")) {
+      spotType = "古老神社寺院 / 祈福名所";
+      mustSeeHighlights = ["壯麗鳥居與山門", "御守祈福參拜", "境內歷史造景"];
+    } else if (combined.includes("展望台") || combined.includes("塔")) {
+      spotType = "高空展望台 / 都會地標";
+      mustSeeHighlights = ["360度東京天際線俯瞰", "夕陽與璀璨百萬夜景"];
+    } else if (combined.includes("公園") || combined.includes("庭園")) {
+      spotType = "都會綠洲 / 悠閒日式庭園";
+      mustSeeHighlights = ["迴遊式庭園水景", "四季櫻花與紅葉步道"];
+    }
+
     return {
       name: cleanName,
       japaneseName: cleanName,
@@ -562,6 +663,10 @@ export function synthesizePlaceData(
       summary: `${cleanName} 位於${district}，環境優雅清幽，富含深厚人文底蘊與四季景致，漫步其間令人心曠神怡，非常適合安排在自由行漫遊路線中。`,
       address: district,
       tips: "造訪時建議預留彈性時間漫步參觀，欣賞周邊傳統建築風情；晨間造訪人潮最為清幽舒適。",
+      spotType,
+      mustSeeHighlights,
+      ticketInfo: "境內免票或依現場購票規定為準",
+      bestTimeToVisit: "清晨 08:30 前或黃昏日落時段",
     };
   }
 
@@ -656,16 +761,24 @@ export async function analyzePlaceWithClientGemini(
   "highlight": "一句話招牌亮點（30字內）",
   "summary": "2至3句話介紹核心招牌菜或歷史特色（80至130字）",
   "address": "所在區域或具體地址",
-  "tips": "1至2句自由行實用避雷或預約排隊建議"
+  "tips": "1至2句自由行實用避雷或預約排隊建議",
+  "cuisineType": "若為餐飲則填寫料理種類（如：黑毛和牛壽喜燒、仙台炭火牛舌、濃厚豚骨拉麵），非餐飲留空",
+  "signatureDishes": ["招牌菜色1", "招牌菜色2"],
+  "priceRange": "若為餐飲則填人均預估預算（如：約 ¥1,500 - ¥3,000 / 人）",
+  "diningAtmosphere": "若為餐飲填寫用餐特色氛圍（如：景觀高空席、溫馨熱絡食堂、百年老鋪）",
+  "spotType": "若為景點則填寫景點類型（如：歷史名勝、開運求財神社、都會高空展望台），非景點留空",
+  "mustSeeHighlights": ["必看亮點1", "必看亮點2"],
+  "ticketInfo": "若為景點填寫門票或參拜資訊（如：境內免費自由參拜、展望台門票約 ¥2,000起）",
+  "bestTimeToVisit": "若為景點填寫最佳造訪時段（如：清晨08:00前清幽無人、日落黃昏百萬夜景）"
 }
 category 限：dining, sightseeing, shopping, cafe, stay, other
 categoryLabel 對應：餐廳美饌, 觀光景點, 購物商場, 甜點咖啡, 旅宿飯店, 其他探訪`;
 
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey}`;
     const res = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      signal: AbortSignal.timeout(6000),
+      signal: AbortSignal.timeout(10000),
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
         generationConfig: {
@@ -681,6 +794,13 @@ categoryLabel 對應：餐廳美饌, 觀光景點, 購物商場, 甜點咖啡, �
       if (rawText) {
         const parsed = JSON.parse(rawText);
         if (parsed && parsed.name && parsed.summary) {
+          // Hard enforce dining category if name or summary mentions dining terms
+          const combinedStr = `${parsed.name} ${parsed.summary} ${parsed.highlight || ""}`.toLowerCase();
+          const diningTerms = ["燒肉", "壽司", "拉麵", "壽喜燒", "牛舌", "和牛", "居酒屋", "食堂", "鰻魚", "天婦羅", "丼", "串燒", "鍋", "割烹", "料理", "餐廳", "sushi", "ramen", "yakiniku"];
+          if (diningTerms.some((k) => combinedStr.includes(k))) {
+            parsed.category = "dining";
+            parsed.categoryLabel = "餐廳美饌";
+          }
           return parsed as AnalyzedPlaceData;
         }
       }

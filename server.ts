@@ -5,6 +5,7 @@ import dotenv from "dotenv";
 import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
+import { analyzePlaceWithRobustPipeline } from "./server/robustPlaceAnalyzer.ts";
 
 dotenv.config();
 
@@ -511,264 +512,24 @@ async function startServer() {
   // API Route: Analyze Google Maps link with Gemini AI
   app.post("/api/analyze-place", async (req, res) => {
     try {
-      const { url, rawText, clientExtractedName } = req.body;
+      const { url, rawText, clientExtractedName, placeName } = req.body;
 
-      if (!url && !rawText && !clientExtractedName) {
+      if (!url && !rawText && !clientExtractedName && !placeName) {
         return res.status(400).json({
-          error: "請提供 Google Maps 連結或地點文字",
+          error: "請提供 Google Maps 連結或地點店家名稱",
         });
       }
 
-      const inputStr = (url || "").trim();
-      let extractedUrl = "";
-      const urlMatch = inputStr.match(/https?:\/\/[^\s]+/i);
-      if (urlMatch) {
-        extractedUrl = urlMatch[0];
-      }
-
-      // Clean mobile share text if present
-      const cleanedInputText = cleanSharedText(inputStr);
-      const cleanedRawText = cleanSharedText(rawText || "");
-      const explicitText = [cleanedInputText, cleanedRawText].filter(Boolean).join(" ").trim();
-
-      let targetUrl = extractedUrl || inputStr;
-      let resolvedUrl = targetUrl;
-      let placeQueryHint = clientExtractedName || explicitText || "";
-
-      // 1. Resolve short Google Maps URL (maps.app.goo.gl, goo.gl/maps, g.co, page.link)
-      const isShortLink =
-        targetUrl.includes("maps.app.goo.gl") ||
-        targetUrl.includes("goo.gl") ||
-        targetUrl.includes("page.link") ||
-        targetUrl.includes("g.co/");
-
-      if (isShortLink) {
-        // Fast Jina reader unshortener (bypasses Google consent & bot detection)
-        try {
-          const jinaRes = await fetch(`https://r.jina.ai/${targetUrl}`, {
-            signal: AbortSignal.timeout(3500),
-            headers: { Accept: "text/plain" },
-          });
-          if (jinaRes.ok) {
-            const jinaText = await jinaRes.text();
-            const finalUrlMatch = jinaText.match(/Final URL:\s*(https?:\/\/[^\s\n]+)/i);
-            if (finalUrlMatch && finalUrlMatch[1]) {
-              resolvedUrl = finalUrlMatch[1].trim();
-              const fromFinal = extractPlaceFromUrl(resolvedUrl);
-              if (fromFinal.name) placeQueryHint = fromFinal.name;
-            }
-            const titleMatch = jinaText.match(/Title:\s*([^\n\r]+)/i);
-            if (titleMatch && titleMatch[1]) {
-              let t = titleMatch[1].trim().replace(/\s*[-–—|•]\s*Google\s*(?:Maps|地圖|マップ)?.*$/i, "").trim();
-              if (t && !t.includes("Google") && t !== "Google Maps") {
-                if (!placeQueryHint) placeQueryHint = t;
-              }
-            }
-          }
-        } catch (jinaErr) {
-          console.warn("Server Jina unshortener skipped:", jinaErr);
-        }
-
-        let currentHopUrl = targetUrl;
-        let hops = 0;
-        const maxHops = 3;
-
-        while (hops < maxHops) {
-          hops++;
-          try {
-            const hopRes = await fetch(currentHopUrl, {
-              method: "GET",
-              redirect: "manual",
-              signal: AbortSignal.timeout(2000),
-              headers: {
-                "User-Agent":
-                  "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1",
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                "Accept-Language": "zh-TW,zh;q=0.9,ja;q=0.8,en;q=0.7",
-              },
-            });
-
-            const loc = hopRes.headers.get("location");
-            if (loc) {
-              let nextUrl = loc;
-              try {
-                nextUrl = new URL(loc, currentHopUrl).href;
-              } catch {}
-              resolvedUrl = nextUrl;
-              currentHopUrl = nextUrl;
-
-              if (
-                nextUrl.includes("maps.app.goo.gl") ||
-                nextUrl.includes("goo.gl") ||
-                nextUrl.includes("page.link") ||
-                nextUrl.includes("g.co/")
-              ) {
-                continue;
-              }
-              break;
-            } else {
-              try {
-                const bodyText = await hopRes.text();
-                const placeMatch = bodyText.match(/\/maps\/place\/([^/?#"&\s]+)/i);
-                if (placeMatch && placeMatch[1]) {
-                  const decodedPlace = safeDecode(placeMatch[1]).replace(/\+/g, " ").trim();
-                  if (decodedPlace && !decodedPlace.startsWith("http") && !decodedPlace.startsWith("0x")) {
-                    placeQueryHint = decodedPlace;
-                  }
-                }
-                const titleMatch = bodyText.match(/<title[^>]*>([^<]+)<\/title>/i);
-                if (titleMatch && titleMatch[1]) {
-                  let rawTitle = titleMatch[1].trim();
-                  if (rawTitle.includes("/maps/place/")) {
-                    const fromTitleUrl = extractPlaceFromUrl(rawTitle);
-                    if (fromTitleUrl.name) placeQueryHint = fromTitleUrl.name;
-                  } else {
-                    rawTitle = rawTitle.replace(/\s*[-·|•]\s*Google\s*(?:Maps|地圖).*/i, "").trim();
-                    if (rawTitle && !rawTitle.toLowerCase().includes("sorry") && !rawTitle.startsWith("http")) {
-                      if (!placeQueryHint) placeQueryHint = rawTitle;
-                    }
-                  }
-                }
-              } catch {}
-              break;
-            }
-          } catch (hopErr) {
-            console.warn(`Redirect hop ${hops} failed or timed out:`, hopErr);
-            break;
-          }
-        }
-
-        // Secondary quick fallback if resolvedUrl is still short
-        if (
-          resolvedUrl.includes("maps.app.goo.gl") ||
-          resolvedUrl.includes("goo.gl") ||
-          resolvedUrl.includes("g.co/")
-        ) {
-          try {
-            const followRes = await fetch(targetUrl, {
-              method: "GET",
-              redirect: "follow",
-              signal: AbortSignal.timeout(2500),
-              headers: {
-                "User-Agent":
-                  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-              },
-            });
-            if (followRes.url) {
-              resolvedUrl = followRes.url;
-            }
-            const followText = await followRes.text();
-            const placeMatch = followText.match(/\/maps\/place\/([^/?#"&\s]+)/i);
-            if (placeMatch && placeMatch[1]) {
-              const decodedPlace = safeDecode(placeMatch[1]).replace(/\+/g, " ").trim();
-              if (decodedPlace && !decodedPlace.startsWith("http") && !decodedPlace.startsWith("0x")) {
-                placeQueryHint = decodedPlace;
-              }
-            }
-          } catch {}
-        }
-      }
-
-      // 2. Extract Place name from resolvedUrl
-      const extractedFromResolved = extractPlaceFromUrl(resolvedUrl);
-      if (extractedFromResolved.name) {
-        placeQueryHint = extractedFromResolved.name;
-      } else if (!placeQueryHint) {
-        const extractedFromTarget = extractPlaceFromUrl(targetUrl);
-        if (extractedFromTarget.name) {
-          placeQueryHint = extractedFromTarget.name;
-        }
-      }
-
-      // Fallback: If no place name from URL, check raw input if it was not an HTTP link
-      if (!placeQueryHint) {
-        if (!targetUrl.startsWith("http://") && !targetUrl.startsWith("https://")) {
-          placeQueryHint = targetUrl;
-        } else if (explicitText) {
-          placeQueryHint = explicitText;
-        }
-      }
-
-      // Generate rich baseline place information using our knowledge base & area synthesis
-      const richBaseline = generateRichPlaceInfo(resolvedUrl, placeQueryHint, explicitText);
-
-      // 3. Call Gemini AI (gemini-3.1-flash-lite with strict 4.5s race timeout)
-      let aiResult = richBaseline;
-      if (process.env.GEMINI_API_KEY) {
-        try {
-          const effectiveName = (
-            placeQueryHint ||
-            richBaseline.name ||
-            explicitText ||
-            "日本熱門景點"
-          ).trim();
-
-          const prompt = `你是一位精通日本東京旅遊與在地美食的資深自由行嚮導。
-請根據以下地點或店名資訊，為旅人的自由行口袋清單提供深度、精準的繁體中文分析與推薦：
-- 目標地點/店家：${effectiveName}
-- 原始連結或輸入：${targetUrl}
-- 解析後網址：${resolvedUrl}
-- 預估所在區域：${richBaseline.address}
-- 額外備註：${explicitText || "無"}
-
-【嚴格分析指引】：
-1. 若名稱包含具體店家名（如「志乃多壽司」、「淺草今半」、「敘敘苑」、「利久」、「AFURI」等），請提供該店家的招牌必點料理、必吃菜品、歷史源流與特色。
-2. 若名稱為景點或商場（如「淺草寺」、「東京晴空塔」、「小網神社」、「新宿御苑」等），請提供核心看點、最佳拍照視角與參拜/逛街要點。
-3. 若輸入為日本地址（包含區、町、丁目、番地），請精確辨識該地址所在的著名景點或代表性商圈風貌。
-4. 絕對嚴禁使用「東京精選推薦據點」等空泛套話！必須具體寫出該地點的名字與真實招牌特色！
-5. 請嚴格輸出合法的純 JSON（禁止 Markdown 代碼塊標記）：
-{
-  "name": "繁體中文全名（如「淺草今半 國際通本店」、「志乃多壽司」）",
-  "japaneseName": "日文原名及假名標音（如「浅草今半 国際通り本店」、「志乃多寿司（しのだずし）」）",
-  "category": "dining",
-  "categoryLabel": "餐廳美饌",
-  "highlight": "一句話招牌亮點（30字內）",
-  "summary": "2至3句話具體介紹該地點的核心招牌菜或歷史特色（80至130字）",
-  "address": "所在區域或具體地址（如「東京都台東區西淺草3-1-12」）",
-  "tips": "1至2句自由行旅人的實用避雷或排隊預約貼士"
-}
-注意：category 欄位嚴格限定為下列代碼之一：dining, sightseeing, shopping, cafe, stay, other
-對應 categoryLabel 為：餐廳美饌, 觀光景點, 購物商場, 甜點咖啡, 旅宿飯店, 其他探訪`;
-
-          try {
-            const geminiPromise = ai.models.generateContent({
-              model: "gemini-3.8-flash",
-              contents: prompt,
-              config: {
-                responseMimeType: "application/json",
-              },
-            });
-            const timeoutPromise = new Promise((_, reject) =>
-              setTimeout(() => reject(new Error("Gemini API call timed out")), 9000)
-            );
-            const response = (await Promise.race([geminiPromise, timeoutPromise])) as any;
-            if (response && response.text) {
-              const parsed = JSON.parse(response.text);
-              if (parsed && parsed.name && parsed.summary && parsed.summary.length > 10) {
-                if (!parsed.name.includes("東京精選推薦據點")) {
-                  aiResult = {
-                    ...richBaseline,
-                    ...parsed,
-                  };
-                }
-              }
-            }
-          } catch (modelErr: any) {
-            console.warn("Gemini call timed out or failed, using rich baseline instantly:", modelErr?.message);
-            // Fall back immediately to richBaseline without stalling
-          }
-        } catch (geminiError) {
-          console.warn("Gemini API processing error:", geminiError);
-        }
-      }
+      const analyzed = await analyzePlaceWithRobustPipeline({
+        url,
+        placeName,
+        rawText,
+        clientExtractedName,
+      });
 
       return res.json({
         success: true,
-        data: {
-          url: targetUrl || resolvedUrl,
-          resolvedUrl,
-          ...aiResult,
-        },
+        data: analyzed,
       });
     } catch (err: any) {
       console.error("Error in /api/analyze-place:", err);

@@ -74,6 +74,18 @@ export interface SavedPlace {
   userId: string;
   createdAt?: string;
   updatedAt?: string;
+
+  // Distinct Dining attributes
+  cuisineType?: string;
+  signatureDishes?: string[];
+  priceRange?: string;
+  diningAtmosphere?: string;
+
+  // Distinct Sightseeing attributes
+  spotType?: string;
+  mustSeeHighlights?: string[];
+  ticketInfo?: string;
+  bestTimeToVisit?: string;
 }
 
 const CATEGORY_MAP: Record<
@@ -133,13 +145,17 @@ const DEFAULT_SEEDS: Omit<SavedPlace, "id">[] = [
     categoryLabel: "餐廳美饌",
     summary: "創業於明治時代的百年江戶老字號。特選吸滿香甜柴魚高湯精華的油揚豆皮包裹特調溫潤醋飯，搭配甜鹹爽脆的干瓢卷，是東京最經典的傳統外帶壽司美味。",
     highlight: "百年老鋪多汁油揚豆腐皮稻荷壽司與干瓢卷",
-    address: "東京都台東區淺草",
+    address: "東京都台東區淺草1-1-12",
     tips: "推薦購買「稻荷壽司與干瓢卷」綜合折詰盒，常溫即可享用，極適合外帶至隅田川畔野餐！",
     notes: "DAY 1 下午散步外帶小點心！",
     isVisited: false,
     addedByName: "散策領隊",
     userId: "seed-user",
     createdAt: new Date().toISOString(),
+    cuisineType: "江戶前豆皮壽司與干瓢卷老鋪",
+    signatureDishes: ["秘傳豆皮稻荷壽司", "甘煮干瓢卷折詰盒"],
+    priceRange: "約 ¥500 - ¥1,500 / 人",
+    diningAtmosphere: "百年傳統外帶老字號，適合外帶野餐",
   },
   {
     url: "https://maps.app.goo.gl/jBmQZ8b5DMRUF6SF8",
@@ -156,6 +172,10 @@ const DEFAULT_SEEDS: Omit<SavedPlace, "id">[] = [
     addedByName: "神社達人",
     userId: "seed-user",
     createdAt: new Date().toISOString(),
+    spotType: "歷史古蹟 / 佛教寺院",
+    mustSeeHighlights: ["雷門巨型紅燈籠", "仲見世通商店街", "五重塔夜間點燈"],
+    ticketInfo: "境內全日免費自由參拜",
+    bestTimeToVisit: "清晨 08:00 前避開人潮，或日落後欣賞夜間打燈",
   },
   {
     url: "https://maps.app.goo.gl/oPMAntcFZkmcsbJV8",
@@ -172,6 +192,10 @@ const DEFAULT_SEEDS: Omit<SavedPlace, "id">[] = [
     addedByName: "跑步同好",
     userId: "seed-user",
     createdAt: new Date().toISOString(),
+    spotType: "歷史名勝 / 皇室宮苑",
+    mustSeeHighlights: ["皇居二重橋", "東御苑歷史石垣", "5公里無號誌環形慢跑道"],
+    ticketInfo: "外苑與東御苑免費入園",
+    bestTimeToVisit: "清晨或傍晚散策、慢跑時段",
   },
   {
     url: "https://maps.app.goo.gl/rikyu-ariake",
@@ -188,6 +212,10 @@ const DEFAULT_SEEDS: Omit<SavedPlace, "id">[] = [
     addedByName: "美食吃貨",
     userId: "seed-user",
     createdAt: new Date().toISOString(),
+    cuisineType: "仙台炭火牛舌專門料理",
+    signatureDishes: ["極厚切牛舌定食", "清燉牛尾湯", "山藥泥麥飯"],
+    priceRange: "約 ¥2,000 - ¥3,500 / 人",
+    diningAtmosphere: "日式連鎖餐廳，適合家庭朋友聚餐",
   },
 ];
 
@@ -220,6 +248,7 @@ export const PocketWishlistSection: React.FC = () => {
   const [isLoadingPlaces, setIsLoadingPlaces] = useState(false);
 
   // New Link Input Form
+  const [inputPlaceName, setInputPlaceName] = useState("");
   const [inputUrl, setInputUrl] = useState("");
   const [inputNotes, setInputNotes] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -241,6 +270,14 @@ export const PocketWishlistSection: React.FC = () => {
   const [editTips, setEditTips] = useState("");
   const [editNotes, setEditNotes] = useState("");
   const [editUrl, setEditUrl] = useState("");
+  const [editCuisineType, setEditCuisineType] = useState("");
+  const [editSignatureDishes, setEditSignatureDishes] = useState("");
+  const [editPriceRange, setEditPriceRange] = useState("");
+  const [editDiningAtmosphere, setEditDiningAtmosphere] = useState("");
+  const [editSpotType, setEditSpotType] = useState("");
+  const [editMustSeeHighlights, setEditMustSeeHighlights] = useState("");
+  const [editTicketInfo, setEditTicketInfo] = useState("");
+  const [editBestTimeToVisit, setEditBestTimeToVisit] = useState("");
   const [isSavingEdit, setIsSavingEdit] = useState(false);
 
   // Pre-save Review Modal state (Human-in-the-loop review before adding)
@@ -440,33 +477,41 @@ export const PocketWishlistSection: React.FC = () => {
     setFormError(null);
     setFormSuccess(null);
 
-    const rawInput = inputUrl.trim();
-    if (!rawInput) {
-      setFormError("請貼上 Google Maps 分享連結或輸入店家/地址！");
+    const rawUrlInput = inputUrl.trim();
+    const rawPlaceInput = inputPlaceName.trim();
+
+    if (!rawUrlInput && !rawPlaceInput) {
+      setFormError("請輸入店家/景點名稱，或貼上 Google Maps 分享連結！");
       return;
     }
 
     // Separate URL and any leading/trailing text (e.g. from mobile share: "淺草今半 国際通り本店 4.4 ★ (3,281) https://maps.app.goo.gl/xxx")
-    let targetUrl = rawInput;
+    let targetUrl = rawUrlInput;
     let urlExtracted = "";
-    const matchUrl = rawInput.match(/https?:\/\/[^\s]+/i);
+    const matchUrl = rawUrlInput.match(/https?:\/\/[^\s]+/i);
     if (matchUrl) {
       urlExtracted = matchUrl[0];
       targetUrl = urlExtracted;
     }
 
     // Clean text part from mobile share sheet
-    let textPart = rawInput.replace(/https?:\/\/[^\s]+/gi, " ").trim();
+    let textPart = rawUrlInput.replace(/https?:\/\/[^\s]+/gi, " ").trim();
     textPart = textPart.replace(/\([\d,]+[+\s\w\u4e00-\u9fa5]*\)/g, " ");
     textPart = textPart.replace(/[\d.]+\s*[★☆星]+/g, " ").replace(/[★☆]+/g, " ");
     textPart = textPart.replace(/(?:\+81[\s-]?)?\b\d{2,4}-\d{2,4}-\d{4}\b/g, " ");
     textPart = textPart.replace(/〒?\d{3}-\d{4}/g, " ");
     textPart = textPart.replace(/[·|•‧]/g, " ").replace(/\s+/g, " ").trim();
 
-    const effectiveNotes = [textPart, inputNotes.trim()].filter(Boolean).join(" ");
+    // Priority for place name: 1) explicit inputPlaceName, 2) text extracted from share snippet, 3) rawUrlInput if not HTTP
+    const explicitPlaceName = (rawPlaceInput || textPart || (!targetUrl.startsWith("http") ? targetUrl : "")).trim();
 
-    // Pre-extract place name from targetUrl if it has /place/<Name> or q=<Name>
-    let clientExtractedName = extractPlaceNameFromUrl(targetUrl);
+    // Auto-construct Google Maps search URL if targetUrl is not an HTTP URL
+    if (!targetUrl.startsWith("http://") && !targetUrl.startsWith("https://")) {
+      targetUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(explicitPlaceName || targetUrl)}`;
+    }
+
+    const effectiveNotes = [inputNotes.trim()].filter(Boolean).join(" ");
+    let clientExtractedName = explicitPlaceName || extractPlaceNameFromUrl(targetUrl);
 
     setIsAnalyzing(true);
 
@@ -479,11 +524,12 @@ export const PocketWishlistSection: React.FC = () => {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
-          signal: AbortSignal.timeout(5000),
+          signal: AbortSignal.timeout(18000),
           body: JSON.stringify({
             url: targetUrl,
-            rawText: effectiveNotes,
-            clientExtractedName: clientExtractedName || textPart,
+            placeName: explicitPlaceName,
+            rawText: effectiveNotes || explicitPlaceName,
+            clientExtractedName: clientExtractedName,
           }),
         });
 
@@ -495,10 +541,10 @@ export const PocketWishlistSection: React.FC = () => {
           }
         }
       } catch (fetchErr) {
-        console.warn("Backend API not reachable (running on static host/GitHub Pages), switching to client intelligence:", fetchErr);
+        console.warn("Backend API not reachable or timed out, switching to client intelligence:", fetchErr);
       }
 
-      // 2. High-Fidelity Client-side intelligence pipeline (works 100% on GitHub Pages & static deployments)
+      // 2. High-Fidelity Client-side intelligence pipeline
       if (!analyzed) {
         // If it's a short link and we don't have a place name yet, unshorten client-side via CORS proxies
         if (!clientExtractedName && (targetUrl.includes("maps.app.goo.gl") || targetUrl.includes("goo.gl") || targetUrl.includes("g.co/"))) {
@@ -519,28 +565,17 @@ export const PocketWishlistSection: React.FC = () => {
           }
         }
 
-        const effectiveSearchName = (clientExtractedName || textPart || inputNotes.trim() || (!targetUrl.startsWith("http") ? targetUrl : "")).trim();
+        const effectiveSearchName = (explicitPlaceName || clientExtractedName || (!targetUrl.startsWith("http") ? targetUrl : "")).trim();
 
-        // 2a. Direct Client Gemini API call if key configured
-        if (effectiveSearchName) {
-          try {
-            analyzed = await analyzePlaceWithClientGemini(effectiveSearchName, targetUrl, effectiveNotes);
-          } catch (gemErr) {
-            console.warn("Client Gemini call skipped:", gemErr);
-          }
-        }
-
-        // 2b. High-Fidelity Client Synthesis Engine (Landmark DB + Deep Tokyo Taxonomy)
-        if (!analyzed) {
-          analyzed = synthesizePlaceData(effectiveSearchName, targetUrl, rawInput, inputNotes);
-        }
+        // Client Landmark DB + Deep Tokyo Taxonomy
+        analyzed = synthesizePlaceData(effectiveSearchName, targetUrl, rawUrlInput, inputNotes);
       }
 
       // Valid link: format valid Google Maps search URL if not HTTP
       const finalUrl =
         targetUrl.startsWith("http://") || targetUrl.startsWith("https://")
           ? targetUrl
-          : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(targetUrl)}`;
+          : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(explicitPlaceName || targetUrl)}`;
 
       const placeId = "p-" + Date.now() + "-" + Math.random().toString(36).substring(2, 7);
 
@@ -574,6 +609,16 @@ export const PocketWishlistSection: React.FC = () => {
         userId: currentUser?.uid || "local-user",
         createdAt: nowIso,
         updatedAt: nowIso,
+        // Distinct Dining attributes
+        cuisineType: analyzed?.cuisineType || "",
+        signatureDishes: Array.isArray(analyzed?.signatureDishes) ? analyzed.signatureDishes : [],
+        priceRange: analyzed?.priceRange || "",
+        diningAtmosphere: analyzed?.diningAtmosphere || "",
+        // Distinct Sightseeing attributes
+        spotType: analyzed?.spotType || "",
+        mustSeeHighlights: Array.isArray(analyzed?.mustSeeHighlights) ? analyzed.mustSeeHighlights : [],
+        ticketInfo: analyzed?.ticketInfo || "",
+        bestTimeToVisit: analyzed?.bestTimeToVisit || "",
       };
 
       // 3. Open the Human-in-the-loop Pre-Save Review & Edit modal!
@@ -590,12 +635,59 @@ export const PocketWishlistSection: React.FC = () => {
   };
 
   // Regenerate details dynamically in review modal based on custom name
-  const handleRegenerateFromCandidateName = (customName: string) => {
-    if (!customName.trim() || !pendingCandidate) return;
+  const handleRegenerateFromCandidateName = async (customName: string) => {
+    const trimmed = customName.trim();
+    if (!trimmed || !pendingCandidate) return;
+
+    try {
+      // 1. Query server Gemini 3.8 Flash API
+      const res = await fetch("/api/analyze-place", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        signal: AbortSignal.timeout(12000),
+        body: JSON.stringify({
+          placeName: trimmed,
+          url: pendingCandidate.url,
+          rawText: pendingCandidate.notes || trimmed,
+        }),
+      });
+
+      if (res.ok) {
+        const json = await res.json();
+        if (json?.success && json?.data) {
+          const d = json.data;
+          setPendingCandidate({
+            ...pendingCandidate,
+            name: d.name || trimmed,
+            japaneseName: d.japaneseName || trimmed,
+            category: d.category || pendingCandidate.category,
+            categoryLabel: d.categoryLabel || CATEGORY_MAP[d.category]?.label || pendingCandidate.categoryLabel,
+            highlight: d.highlight || pendingCandidate.highlight,
+            summary: d.summary || pendingCandidate.summary,
+            address: d.address || pendingCandidate.address,
+            tips: d.tips || pendingCandidate.tips,
+            cuisineType: d.cuisineType ?? pendingCandidate.cuisineType,
+            signatureDishes: Array.isArray(d.signatureDishes) ? d.signatureDishes : pendingCandidate.signatureDishes,
+            priceRange: d.priceRange ?? pendingCandidate.priceRange,
+            diningAtmosphere: d.diningAtmosphere ?? pendingCandidate.diningAtmosphere,
+            spotType: d.spotType ?? pendingCandidate.spotType,
+            mustSeeHighlights: Array.isArray(d.mustSeeHighlights) ? d.mustSeeHighlights : pendingCandidate.mustSeeHighlights,
+            ticketInfo: d.ticketInfo ?? pendingCandidate.ticketInfo,
+            bestTimeToVisit: d.bestTimeToVisit ?? pendingCandidate.bestTimeToVisit,
+          });
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn("Regenerate via server failed, using local synthesizer:", e);
+    }
+
+    // Fallback: local high-fidelity synthesizer
     const fresh = synthesizePlaceData(
-      customName.trim(),
+      trimmed,
       pendingCandidate.url,
-      customName.trim(),
+      trimmed,
       pendingCandidate.notes
     );
     setPendingCandidate({
@@ -608,6 +700,14 @@ export const PocketWishlistSection: React.FC = () => {
       summary: fresh.summary,
       address: fresh.address,
       tips: fresh.tips,
+      cuisineType: fresh.cuisineType ?? pendingCandidate.cuisineType,
+      signatureDishes: fresh.signatureDishes ?? pendingCandidate.signatureDishes,
+      priceRange: fresh.priceRange ?? pendingCandidate.priceRange,
+      diningAtmosphere: fresh.diningAtmosphere ?? pendingCandidate.diningAtmosphere,
+      spotType: fresh.spotType ?? pendingCandidate.spotType,
+      mustSeeHighlights: fresh.mustSeeHighlights ?? pendingCandidate.mustSeeHighlights,
+      ticketInfo: fresh.ticketInfo ?? pendingCandidate.ticketInfo,
+      bestTimeToVisit: fresh.bestTimeToVisit ?? pendingCandidate.bestTimeToVisit,
     });
   };
 
@@ -636,6 +736,14 @@ export const PocketWishlistSection: React.FC = () => {
       address: (pendingCandidate.address || "東京都內").trim(),
       tips: (pendingCandidate.tips || "前往前建議先確認最新營業動態與公休日。").trim(),
       notes: (pendingCandidate.notes || "").trim(),
+      cuisineType: pendingCandidate.cuisineType || "",
+      signatureDishes: pendingCandidate.signatureDishes || [],
+      priceRange: pendingCandidate.priceRange || "",
+      diningAtmosphere: pendingCandidate.diningAtmosphere || "",
+      spotType: pendingCandidate.spotType || "",
+      mustSeeHighlights: pendingCandidate.mustSeeHighlights || [],
+      ticketInfo: pendingCandidate.ticketInfo || "",
+      bestTimeToVisit: pendingCandidate.bestTimeToVisit || "",
       updatedAt: nowIso,
     };
 
@@ -661,6 +769,14 @@ export const PocketWishlistSection: React.FC = () => {
             address: finalizedPlace.address || "",
             tips: finalizedPlace.tips || "",
             notes: finalizedPlace.notes || "",
+            cuisineType: finalizedPlace.cuisineType || "",
+            signatureDishes: finalizedPlace.signatureDishes || [],
+            priceRange: finalizedPlace.priceRange || "",
+            diningAtmosphere: finalizedPlace.diningAtmosphere || "",
+            spotType: finalizedPlace.spotType || "",
+            mustSeeHighlights: finalizedPlace.mustSeeHighlights || [],
+            ticketInfo: finalizedPlace.ticketInfo || "",
+            bestTimeToVisit: finalizedPlace.bestTimeToVisit || "",
             isVisited: false,
             addedByName: finalizedPlace.addedByName || "",
             userId: currentUser.uid,
@@ -679,6 +795,7 @@ export const PocketWishlistSection: React.FC = () => {
       // 3. Close modal & reset input fields
       setIsReviewModalOpen(false);
       setPendingCandidate(null);
+      setInputPlaceName("");
       setInputUrl("");
       setInputNotes("");
 
@@ -805,6 +922,14 @@ export const PocketWishlistSection: React.FC = () => {
     setEditTips(place.tips || "");
     setEditNotes(place.notes || "");
     setEditUrl(place.url || "");
+    setEditCuisineType(place.cuisineType || "");
+    setEditSignatureDishes((place.signatureDishes || []).join("、"));
+    setEditPriceRange(place.priceRange || "");
+    setEditDiningAtmosphere(place.diningAtmosphere || "");
+    setEditSpotType(place.spotType || "");
+    setEditMustSeeHighlights((place.mustSeeHighlights || []).join("、"));
+    setEditTicketInfo(place.ticketInfo || "");
+    setEditBestTimeToVisit(place.bestTimeToVisit || "");
   };
 
   // Save Edit (Comprehensive all-fields update)
@@ -821,7 +946,7 @@ export const PocketWishlistSection: React.FC = () => {
     setIsSavingEdit(true);
     try {
       const updatedCatLabel = CATEGORY_MAP[editCategory]?.label || "其他探訪";
-      const updatedFields = {
+      const updatedFields: Partial<SavedPlace> = {
         name: trimmedName.slice(0, 200),
         japaneseName: editJapaneseName.trim().slice(0, 200),
         category: editCategory.slice(0, 50),
@@ -832,6 +957,18 @@ export const PocketWishlistSection: React.FC = () => {
         tips: editTips.trim().slice(0, 500),
         notes: editNotes.trim().slice(0, 1000),
         url: (editUrl.trim() || editingPlace.url).slice(0, 1000),
+        cuisineType: editCuisineType.trim().slice(0, 100),
+        signatureDishes: editSignatureDishes
+          ? editSignatureDishes.split(/[、,，\n]+/).map((s) => s.trim()).filter(Boolean)
+          : [],
+        priceRange: editPriceRange.trim().slice(0, 100),
+        diningAtmosphere: editDiningAtmosphere.trim().slice(0, 200),
+        spotType: editSpotType.trim().slice(0, 100),
+        mustSeeHighlights: editMustSeeHighlights
+          ? editMustSeeHighlights.split(/[、,，\n]+/).map((s) => s.trim()).filter(Boolean)
+          : [],
+        ticketInfo: editTicketInfo.trim().slice(0, 200),
+        bestTimeToVisit: editBestTimeToVisit.trim().slice(0, 200),
         updatedAt: new Date().toISOString(),
       };
 
@@ -1000,8 +1137,24 @@ export const PocketWishlistSection: React.FC = () => {
           </p>
 
           <form onSubmit={handleAnalyzeAndSave} className="space-y-3">
-            <div className="flex flex-col sm:flex-row gap-2">
-              <div className="relative flex-1">
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5">
+              {/* Field 1: Place / Restaurant Name (Primary, high-precision) */}
+              <div className="relative md:col-span-5">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#9e8b92]">
+                  <MapPin className="w-4 h-4 text-[#992545]" />
+                </div>
+                <input
+                  type="text"
+                  value={inputPlaceName}
+                  onChange={(e) => setInputPlaceName(e.target.value)}
+                  placeholder="店家或景點名稱 (例如：淺草今半、敘敘苑 晴空塔店、AFURI)"
+                  disabled={isAnalyzing}
+                  className="w-full pl-10 pr-3.5 py-2.5 bg-[#faf8f9] hover:bg-white focus:bg-white border border-[#e4d3d7] focus:border-[#992545] focus:ring-2 focus:ring-[#992545]/20 rounded-2xl text-xs sm:text-sm text-[#2d2527] outline-hidden transition-all font-medium"
+                />
+              </div>
+
+              {/* Field 2: Google Maps Link (Optional, auto-navigation) */}
+              <div className="relative md:col-span-4">
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#9e8b92]">
                   <LinkIcon className="w-4 h-4" />
                 </div>
@@ -1009,27 +1162,37 @@ export const PocketWishlistSection: React.FC = () => {
                   type="text"
                   value={inputUrl}
                   onChange={(e) => setInputUrl(e.target.value)}
-                  placeholder="貼上 Google 地圖分享連結、地址或店家名稱..."
+                  placeholder="Google 地圖分享連結 (選填，可一鍵導航)"
                   disabled={isAnalyzing}
-                  className="w-full pl-10 pr-4 py-2.5 bg-[#faf8f9] hover:bg-white focus:bg-white border border-[#e4d3d7] focus:border-[#992545] focus:ring-2 focus:ring-[#992545]/20 rounded-2xl text-xs sm:text-sm text-[#2d2527] outline-hidden transition-all"
+                  className="w-full pl-10 pr-3.5 py-2.5 bg-[#faf8f9] hover:bg-white focus:bg-white border border-[#e4d3d7] focus:border-[#992545] focus:ring-2 focus:ring-[#992545]/20 rounded-2xl text-xs sm:text-sm text-[#2d2527] outline-hidden transition-all"
                 />
               </div>
 
-              <div className="sm:w-64">
+              {/* Field 3: Notes (Optional) */}
+              <div className="md:col-span-3">
                 <input
                   type="text"
                   value={inputNotes}
                   onChange={(e) => setInputNotes(e.target.value)}
-                  placeholder="備註 / 必吃想買什麼 (選填)"
+                  placeholder="旅伴備註 / 必吃想買 (選填)"
                   disabled={isAnalyzing}
                   className="w-full px-3.5 py-2.5 bg-[#faf8f9] hover:bg-white focus:bg-white border border-[#e4d3d7] focus:border-[#992545] focus:ring-2 focus:ring-[#992545]/20 rounded-2xl text-xs sm:text-sm text-[#2d2527] outline-hidden transition-all"
                 />
               </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-1">
+              <div className="text-[11px] text-[#7a6269] flex items-center gap-1.5 bg-[#fbf6f7] px-3.5 py-1.5 rounded-xl border border-[#f1dde1]">
+                <Sparkles className="w-3.5 h-3.5 text-[#992545] shrink-0" />
+                <span>
+                  💡 <strong>精確辨識小撇步：</strong>可直接輸入店家名稱（如「敘敘苑 晴空塔店」），AI 能 100% 精確識別為燒肉美食並推薦招牌菜！
+                </span>
+              </div>
 
               <button
                 type="submit"
-                disabled={isAnalyzing || !inputUrl.trim()}
-                className="px-5 py-2.5 bg-[#992545] hover:bg-[#801b36] disabled:bg-stone-300 text-white font-bold rounded-2xl transition-all shadow-xs flex items-center justify-center gap-2 text-xs sm:text-sm cursor-pointer disabled:cursor-not-allowed shrink-0"
+                disabled={isAnalyzing || (!inputPlaceName.trim() && !inputUrl.trim())}
+                className="px-6 py-2.5 bg-[#992545] hover:bg-[#801b36] disabled:bg-stone-300 text-white font-bold rounded-2xl transition-all shadow-xs flex items-center justify-center gap-2 text-xs sm:text-sm cursor-pointer disabled:cursor-not-allowed shrink-0"
               >
                 {isAnalyzing ? (
                   <>
@@ -1272,6 +1435,84 @@ export const PocketWishlistSection: React.FC = () => {
                       </p>
                     )}
 
+                    {/* Dedicated Dining Attributes Block */}
+                    {(place.cuisineType || (place.signatureDishes && place.signatureDishes.length > 0) || place.priceRange || place.diningAtmosphere) && (
+                      <div className="bg-amber-50/70 border border-amber-200/80 rounded-2xl p-2.5 sm:p-3 mb-3 text-xs space-y-1.5">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {place.cuisineType && (
+                            <span className="inline-flex items-center gap-1 font-bold text-amber-900 bg-white px-2 py-0.5 rounded-lg border border-amber-200 shadow-2xs text-[11px]">
+                              <span>🍲</span>
+                              <span>{place.cuisineType}</span>
+                            </span>
+                          )}
+                          {place.priceRange && (
+                            <span className="inline-flex items-center gap-1 font-medium text-amber-800 bg-white/80 px-2 py-0.5 rounded-lg border border-amber-200/60 text-[11px]">
+                              <span>💰</span>
+                              <span>{place.priceRange}</span>
+                            </span>
+                          )}
+                          {place.diningAtmosphere && (
+                            <span className="inline-flex items-center gap-1 text-[11px] text-amber-700 bg-white/60 px-2 py-0.5 rounded-lg">
+                              <span>✨</span>
+                              <span>{place.diningAtmosphere}</span>
+                            </span>
+                          )}
+                        </div>
+                        {place.signatureDishes && place.signatureDishes.length > 0 && (
+                          <div className="flex items-center gap-1 flex-wrap pt-1 border-t border-amber-200/50">
+                            <span className="text-[11px] font-bold text-amber-900 shrink-0">招牌必點：</span>
+                            {place.signatureDishes.map((dish, idx) => (
+                              <span
+                                key={idx}
+                                className="text-[10.5px] bg-amber-100/80 text-amber-900 font-medium px-2 py-0.5 rounded-md"
+                              >
+                                {dish}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Dedicated Sightseeing Attributes Block */}
+                    {(place.spotType || (place.mustSeeHighlights && place.mustSeeHighlights.length > 0) || place.ticketInfo || place.bestTimeToVisit) && (
+                      <div className="bg-emerald-50/70 border border-emerald-200/80 rounded-2xl p-2.5 sm:p-3 mb-3 text-xs space-y-1.5">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {place.spotType && (
+                            <span className="inline-flex items-center gap-1 font-bold text-emerald-900 bg-white px-2 py-0.5 rounded-lg border border-emerald-200 shadow-2xs text-[11px]">
+                              <span>⛩️</span>
+                              <span>{place.spotType}</span>
+                            </span>
+                          )}
+                          {place.ticketInfo && (
+                            <span className="inline-flex items-center gap-1 font-medium text-emerald-800 bg-white/80 px-2 py-0.5 rounded-lg border border-emerald-200/60 text-[11px]">
+                              <span>🎫</span>
+                              <span>{place.ticketInfo}</span>
+                            </span>
+                          )}
+                          {place.bestTimeToVisit && (
+                            <span className="inline-flex items-center gap-1 text-[11px] text-emerald-700 bg-white/60 px-2 py-0.5 rounded-lg">
+                              <span>⏰</span>
+                              <span>{place.bestTimeToVisit}</span>
+                            </span>
+                          )}
+                        </div>
+                        {place.mustSeeHighlights && place.mustSeeHighlights.length > 0 && (
+                          <div className="flex items-center gap-1 flex-wrap pt-1 border-t border-emerald-200/50">
+                            <span className="text-[11px] font-bold text-emerald-900 shrink-0">必看亮點：</span>
+                            {place.mustSeeHighlights.map((hl, idx) => (
+                              <span
+                                key={idx}
+                                className="text-[10.5px] bg-emerald-100/80 text-emerald-900 font-medium px-2 py-0.5 rounded-md"
+                              >
+                                {hl}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     {/* Practical Tips */}
                     {place.tips && (
                       <div className="text-[11px] text-[#7a646c] bg-[#faf6f7] p-2.5 rounded-xl border border-[#f3e4e7] mb-3">
@@ -1442,6 +1683,143 @@ export const PocketWishlistSection: React.FC = () => {
                     })}
                   </div>
                 </div>
+
+                {/* Category-Specific Dynamic Attributes Section (Dining vs Sightseeing) */}
+                {(pendingCandidate.category === "dining" || pendingCandidate.category === "cafe") && (
+                  <div className="p-3.5 bg-amber-50/70 border border-amber-200/90 rounded-2xl space-y-2.5">
+                    <div className="flex items-center gap-1.5 font-bold text-amber-900 text-xs">
+                      <UtensilsCrossed className="w-3.5 h-3.5 text-amber-700" />
+                      <span>餐飲特色屬性（料理種類 / 招牌菜 / 預算）</span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <div>
+                        <label className="font-semibold text-amber-900 block mb-1 text-[11px]">
+                          料理種類 / 風味
+                        </label>
+                        <input
+                          type="text"
+                          value={pendingCandidate.cuisineType || ""}
+                          onChange={(e) =>
+                            setPendingCandidate({ ...pendingCandidate, cuisineType: e.target.value })
+                          }
+                          placeholder="例如：黑毛和牛壽喜燒・涮涮鍋"
+                          className="w-full px-2.5 py-1.5 bg-white border border-amber-200 focus:border-amber-600 rounded-xl outline-hidden text-xs text-[#2d2527]"
+                        />
+                      </div>
+                      <div>
+                        <label className="font-semibold text-amber-900 block mb-1 text-[11px]">
+                          人均預估預算
+                        </label>
+                        <input
+                          type="text"
+                          value={pendingCandidate.priceRange || ""}
+                          onChange={(e) =>
+                            setPendingCandidate({ ...pendingCandidate, priceRange: e.target.value })
+                          }
+                          placeholder="例如：約 ¥3,500 - ¥6,000 / 人"
+                          className="w-full px-2.5 py-1.5 bg-white border border-amber-200 focus:border-amber-600 rounded-xl outline-hidden text-xs text-[#2d2527]"
+                        />
+                      </div>
+                      <div>
+                        <label className="font-semibold text-amber-900 block mb-1 text-[11px]">
+                          招牌必點菜色（以頓號或逗號分隔）
+                        </label>
+                        <input
+                          type="text"
+                          value={(pendingCandidate.signatureDishes || []).join("、")}
+                          onChange={(e) => {
+                            const arr = e.target.value.split(/[、,，\n]+/).map((s) => s.trim()).filter(Boolean);
+                            setPendingCandidate({ ...pendingCandidate, signatureDishes: arr });
+                          }}
+                          placeholder="例如：特選上等牛五花、蔥花牛舌、招牌沙拉"
+                          className="w-full px-2.5 py-1.5 bg-white border border-amber-200 focus:border-amber-600 rounded-xl outline-hidden text-xs text-[#2d2527]"
+                        />
+                      </div>
+                      <div>
+                        <label className="font-semibold text-amber-900 block mb-1 text-[11px]">
+                          用餐氛圍 / 特色
+                        </label>
+                        <input
+                          type="text"
+                          value={pendingCandidate.diningAtmosphere || ""}
+                          onChange={(e) =>
+                            setPendingCandidate({ ...pendingCandidate, diningAtmosphere: e.target.value })
+                          }
+                          placeholder="例如：高空景觀席、百年老鋪包廂"
+                          className="w-full px-2.5 py-1.5 bg-white border border-amber-200 focus:border-amber-600 rounded-xl outline-hidden text-xs text-[#2d2527]"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {pendingCandidate.category === "sightseeing" && (
+                  <div className="p-3.5 bg-emerald-50/70 border border-emerald-200/90 rounded-2xl space-y-2.5">
+                    <div className="flex items-center gap-1.5 font-bold text-emerald-900 text-xs">
+                      <Compass className="w-3.5 h-3.5 text-emerald-700" />
+                      <span>景點特色屬性（景點類型 / 門票 / 必看亮點）</span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <div>
+                        <label className="font-semibold text-emerald-900 block mb-1 text-[11px]">
+                          景點類型 / 名勝特色
+                        </label>
+                        <input
+                          type="text"
+                          value={pendingCandidate.spotType || ""}
+                          onChange={(e) =>
+                            setPendingCandidate({ ...pendingCandidate, spotType: e.target.value })
+                          }
+                          placeholder="例如：古蹟寺院、開運求財名所、都會展望台"
+                          className="w-full px-2.5 py-1.5 bg-white border border-emerald-200 focus:border-emerald-600 rounded-xl outline-hidden text-xs text-[#2d2527]"
+                        />
+                      </div>
+                      <div>
+                        <label className="font-semibold text-emerald-900 block mb-1 text-[11px]">
+                          門票 / 參拜資訊
+                        </label>
+                        <input
+                          type="text"
+                          value={pendingCandidate.ticketInfo || ""}
+                          onChange={(e) =>
+                            setPendingCandidate({ ...pendingCandidate, ticketInfo: e.target.value })
+                          }
+                          placeholder="例如：境內免費自由參拜、展望台約 ¥2,000"
+                          className="w-full px-2.5 py-1.5 bg-white border border-emerald-200 focus:border-emerald-600 rounded-xl outline-hidden text-xs text-[#2d2527]"
+                        />
+                      </div>
+                      <div>
+                        <label className="font-semibold text-emerald-900 block mb-1 text-[11px]">
+                          必看亮點（以頓號或逗號分隔）
+                        </label>
+                        <input
+                          type="text"
+                          value={(pendingCandidate.mustSeeHighlights || []).join("、")}
+                          onChange={(e) => {
+                            const arr = e.target.value.split(/[、,，\n]+/).map((s) => s.trim()).filter(Boolean);
+                            setPendingCandidate({ ...pendingCandidate, mustSeeHighlights: arr });
+                          }}
+                          placeholder="例如：雷門大燈籠、仲見世通、洗錢之井"
+                          className="w-full px-2.5 py-1.5 bg-white border border-emerald-200 focus:border-emerald-600 rounded-xl outline-hidden text-xs text-[#2d2527]"
+                        />
+                      </div>
+                      <div>
+                        <label className="font-semibold text-emerald-900 block mb-1 text-[11px]">
+                          最佳造訪時段
+                        </label>
+                        <input
+                          type="text"
+                          value={pendingCandidate.bestTimeToVisit || ""}
+                          onChange={(e) =>
+                            setPendingCandidate({ ...pendingCandidate, bestTimeToVisit: e.target.value })
+                          }
+                          placeholder="例如：清晨 08:00 前避開人潮、黃昏夜景"
+                          className="w-full px-2.5 py-1.5 bg-white border border-emerald-200 focus:border-emerald-600 rounded-xl outline-hidden text-xs text-[#2d2527]"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Address & Highlight */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1665,6 +2043,125 @@ export const PocketWishlistSection: React.FC = () => {
                     })}
                   </div>
                 </div>
+
+                {/* Category-Specific Dynamic Attributes Section (Dining vs Sightseeing) */}
+                {(editCategory === "dining" || editCategory === "cafe") && (
+                  <div className="p-3.5 bg-amber-50/70 border border-amber-200/90 rounded-2xl space-y-2.5">
+                    <div className="flex items-center gap-1.5 font-bold text-amber-900 text-xs">
+                      <UtensilsCrossed className="w-3.5 h-3.5 text-amber-700" />
+                      <span>餐飲特色屬性（料理種類 / 招牌菜 / 預算）</span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <div>
+                        <label className="font-semibold text-amber-900 block mb-1 text-[11px]">
+                          料理種類 / 風味
+                        </label>
+                        <input
+                          type="text"
+                          value={editCuisineType}
+                          onChange={(e) => setEditCuisineType(e.target.value)}
+                          placeholder="例如：黑毛和牛壽喜燒・涮涮鍋"
+                          className="w-full px-2.5 py-1.5 bg-white border border-amber-200 focus:border-amber-600 rounded-xl outline-hidden text-xs text-[#2d2527]"
+                        />
+                      </div>
+                      <div>
+                        <label className="font-semibold text-amber-900 block mb-1 text-[11px]">
+                          人均預估預算
+                        </label>
+                        <input
+                          type="text"
+                          value={editPriceRange}
+                          onChange={(e) => setEditPriceRange(e.target.value)}
+                          placeholder="例如：約 ¥3,500 - ¥6,000 / 人"
+                          className="w-full px-2.5 py-1.5 bg-white border border-amber-200 focus:border-amber-600 rounded-xl outline-hidden text-xs text-[#2d2527]"
+                        />
+                      </div>
+                      <div>
+                        <label className="font-semibold text-amber-900 block mb-1 text-[11px]">
+                          招牌必點菜色（以頓號或逗號分隔）
+                        </label>
+                        <input
+                          type="text"
+                          value={editSignatureDishes}
+                          onChange={(e) => setEditSignatureDishes(e.target.value)}
+                          placeholder="例如：特選上等牛五花、蔥花牛舌、招牌沙拉"
+                          className="w-full px-2.5 py-1.5 bg-white border border-amber-200 focus:border-amber-600 rounded-xl outline-hidden text-xs text-[#2d2527]"
+                        />
+                      </div>
+                      <div>
+                        <label className="font-semibold text-amber-900 block mb-1 text-[11px]">
+                          用餐氛圍 / 特色
+                        </label>
+                        <input
+                          type="text"
+                          value={editDiningAtmosphere}
+                          onChange={(e) => setEditDiningAtmosphere(e.target.value)}
+                          placeholder="例如：高空景觀席、百年老鋪包廂"
+                          className="w-full px-2.5 py-1.5 bg-white border border-amber-200 focus:border-amber-600 rounded-xl outline-hidden text-xs text-[#2d2527]"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {editCategory === "sightseeing" && (
+                  <div className="p-3.5 bg-emerald-50/70 border border-emerald-200/90 rounded-2xl space-y-2.5">
+                    <div className="flex items-center gap-1.5 font-bold text-emerald-900 text-xs">
+                      <Compass className="w-3.5 h-3.5 text-emerald-700" />
+                      <span>景點特色屬性（景點類型 / 門票 / 必看亮點）</span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <div>
+                        <label className="font-semibold text-emerald-900 block mb-1 text-[11px]">
+                          景點類型 / 名勝特色
+                        </label>
+                        <input
+                          type="text"
+                          value={editSpotType}
+                          onChange={(e) => setEditSpotType(e.target.value)}
+                          placeholder="例如：古蹟寺院、開運求財名所、都會展望台"
+                          className="w-full px-2.5 py-1.5 bg-white border border-emerald-200 focus:border-emerald-600 rounded-xl outline-hidden text-xs text-[#2d2527]"
+                        />
+                      </div>
+                      <div>
+                        <label className="font-semibold text-emerald-900 block mb-1 text-[11px]">
+                          門票 / 參拜資訊
+                        </label>
+                        <input
+                          type="text"
+                          value={editTicketInfo}
+                          onChange={(e) => setEditTicketInfo(e.target.value)}
+                          placeholder="例如：境內免費自由參拜、展望台約 ¥2,000"
+                          className="w-full px-2.5 py-1.5 bg-white border border-emerald-200 focus:border-emerald-600 rounded-xl outline-hidden text-xs text-[#2d2527]"
+                        />
+                      </div>
+                      <div>
+                        <label className="font-semibold text-emerald-900 block mb-1 text-[11px]">
+                          必看亮點（以頓號或逗號分隔）
+                        </label>
+                        <input
+                          type="text"
+                          value={editMustSeeHighlights}
+                          onChange={(e) => setEditMustSeeHighlights(e.target.value)}
+                          placeholder="例如：雷門大燈籠、仲見世通、洗錢之井"
+                          className="w-full px-2.5 py-1.5 bg-white border border-emerald-200 focus:border-emerald-600 rounded-xl outline-hidden text-xs text-[#2d2527]"
+                        />
+                      </div>
+                      <div>
+                        <label className="font-semibold text-emerald-900 block mb-1 text-[11px]">
+                          最佳造訪時段
+                        </label>
+                        <input
+                          type="text"
+                          value={editBestTimeToVisit}
+                          onChange={(e) => setEditBestTimeToVisit(e.target.value)}
+                          placeholder="例如：清晨 08:00 前避開人潮、黃昏夜景"
+                          className="w-full px-2.5 py-1.5 bg-white border border-emerald-200 focus:border-emerald-600 rounded-xl outline-hidden text-xs text-[#2d2527]"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Address & Highlight */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
