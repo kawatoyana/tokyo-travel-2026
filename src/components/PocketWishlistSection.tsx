@@ -61,19 +61,27 @@ export interface SavedPlace {
   id: string;
   url: string;
   name: string;
+  spotName?: string;
   japaneseName?: string;
   category: "dining" | "sightseeing" | "shopping" | "cafe" | "stay" | "other" | string;
   categoryLabel?: string;
+  tag?: string;
+  desc?: string;
+  recommendation?: string;
+  suggestedTime?: string;
+  mapUrl?: string;
   summary?: string;
   highlight?: string;
   address?: string;
   tips?: string;
   notes?: string;
   isVisited?: boolean;
+  visited?: boolean;
+  isWishlist?: boolean;
   addedByName?: string;
   userId: string;
   createdAt?: string;
-  updatedAt?: string;
+  updatedAt?: string | number;
 
   // Distinct Dining attributes
   cuisineType?: string;
@@ -221,6 +229,55 @@ const DEFAULT_SEEDS: Omit<SavedPlace, "id">[] = [
 
 const LOCAL_STORAGE_KEY = "tokyo_2026_pocket_wishlist_places";
 const DELETED_IDS_KEY = "tokyo_2026_pocket_wishlist_deleted_ids";
+const DEFAULT_GAS_URL = "https://script.google.com/macros/s/AKfycbx2bMD95eKkVZpsYc1hn6VsUpx7WxvB4sJaPDA7olXuC5oUDahk2IQUu01Sid1FC8ZBqA/exec";
+const GAS_URL_STORAGE_KEY = "tokyo_2026_pocket_wishlist_gas_url";
+
+function normalizeGasSpotToSavedPlace(spot: any): SavedPlace {
+  const name = String(spot.spotName || spot.name || "日本精選景點").trim();
+  const catLabel = String(spot.categoryLabel || "私房推薦探訪").trim();
+  const desc = String(spot.desc || spot.summary || "").trim();
+  const rec = String(spot.recommendation || spot.tips || "").trim();
+  const textCheck = `${name} ${catLabel} ${desc} ${spot.tag || ""}`.toLowerCase();
+
+  let category = "other";
+  if (/(壽喜燒|燒肉|壽司|拉麵|牛舌|和牛|炸豬排|天婦羅|居酒屋|串燒|火鍋|食堂|洋食|丼飯|今半|敘敘苑|叙々苑|利久|afuri|restaurant|sushi|ramen)/i.test(textCheck)) {
+    category = "dining";
+  } else if (/(甜點|蛋糕|抹茶|咖啡|喫茶|生吐司|千層|布丁|可麗露|冰淇淋|下午茶|鬆餅|HARBS|cafe|bakery)/i.test(textCheck)) {
+    category = "cafe";
+  } else if (/(神社|寺|宮|公園|庭園|展望台|塔|城|水族館|美術館|博物館|觀光|景點|shrine|temple|sky)/i.test(textCheck)) {
+    category = "sightseeing";
+  } else if (/(購物|百貨|商店街|藥妝|唐吉訶德|大丸|Bic|免稅|商場|mall)/i.test(textCheck)) {
+    category = "shopping";
+  } else if (/(飯店|旅館|民宿|溫泉宿|hotel|inn)/i.test(textCheck)) {
+    category = "stay";
+  }
+
+  return {
+    id: String(spot.id || `gas-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`),
+    url: spot.mapUrl || spot.url || (name ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(name)}` : ""),
+    name,
+    spotName: spot.spotName || name,
+    japaneseName: spot.japaneseName || "",
+    category,
+    categoryLabel: catLabel,
+    tag: spot.tag || "",
+    desc: desc,
+    summary: desc,
+    recommendation: rec,
+    highlight: spot.highlight || "",
+    tips: rec,
+    suggestedTime: spot.suggestedTime || "",
+    mapUrl: spot.mapUrl || spot.url || "",
+    isVisited: !!spot.visited || !!spot.isWishlist,
+    visited: !!spot.visited,
+    isWishlist: !!spot.isWishlist,
+    notes: spot.notes || "",
+    userId: "gas-sync",
+    addedByName: spot.addedByName || "GAS 雲端同步",
+    createdAt: spot.updatedAt ? new Date(Number(spot.updatedAt) || Date.now()).toISOString() : new Date().toISOString(),
+    updatedAt: spot.updatedAt || Date.now(),
+  };
+}
 
 export const PocketWishlistSection: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -297,10 +354,74 @@ export const PocketWishlistSection: React.FC = () => {
   const [lastSyncTime, setLastSyncTime] = useState<string>("即時同步中");
   const [isManualSyncing, setIsManualSyncing] = useState(false);
   const [showSyncGuideModal, setShowSyncGuideModal] = useState(false);
-
-  // Firebase unauthorized-domain helper modal state
   const [showAuthDomainModal, setShowAuthDomainModal] = useState(false);
   const [copiedDomain, setCopiedDomain] = useState(false);
+
+  const [editTag, setEditTag] = useState("");
+  const [editSuggestedTime, setEditSuggestedTime] = useState("");
+
+  // Google Apps Script Cloud Sync State
+  const [gasUrl, setGasUrl] = useState<string>(() => {
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const qGas = urlParams.get("gasUrl");
+      if (qGas) {
+        localStorage.setItem(GAS_URL_STORAGE_KEY, qGas);
+        return qGas;
+      }
+      const hash = window.location.hash;
+      if (hash.includes("gasUrl=")) {
+        const match = hash.match(/gasUrl=([^&]+)/);
+        if (match && match[1]) {
+          const decoded = decodeURIComponent(match[1]);
+          localStorage.setItem(GAS_URL_STORAGE_KEY, decoded);
+          return decoded;
+        }
+      }
+      const stored = localStorage.getItem(GAS_URL_STORAGE_KEY);
+      if (stored) return stored;
+    } catch {}
+    return DEFAULT_GAS_URL;
+  });
+  const [gasSyncStatus, setGasSyncStatus] = useState<"idle" | "syncing" | "synced" | "error">("idle");
+  const [showGasModal, setShowGasModal] = useState(false);
+  const [tempGasInput, setTempGasInput] = useState("");
+
+  const syncPushToGas = (placesToPush: SavedPlace[]) => {
+    if (!gasUrl) return;
+    try {
+      const spotsForGas = placesToPush.map((p) => ({
+        id: p.id,
+        name: p.name,
+        spotName: p.spotName || p.name,
+        categoryLabel: p.categoryLabel || CATEGORY_MAP[p.category]?.label || "探訪據點",
+        tag: p.tag || "",
+        desc: p.desc || p.summary || "",
+        recommendation: p.recommendation || p.tips || "",
+        suggestedTime: p.suggestedTime || p.bestTimeToVisit || "",
+        mapUrl: p.url || p.mapUrl || "",
+        visited: !!p.isVisited || !!p.visited,
+        isWishlist: !!p.isVisited || !!p.isWishlist,
+        updatedAt: typeof p.updatedAt === "number" ? p.updatedAt : Date.now(),
+      }));
+
+      fetch("/api/sync/gas-proxy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          gasUrl,
+          action: "post",
+          payload: {
+            spots: spotsForGas,
+            updatedAt: new Date().toISOString(),
+            sourceDevice: "Web Journal",
+          },
+        }),
+      }).catch((e) => console.warn("Background GAS push notice:", e));
+    } catch (e) {
+      console.warn("syncPushToGas error:", e);
+    }
+  };
 
   // Save to localStorage helper
   const savePlacesToLocal = (newPlaces: SavedPlace[]) => {
@@ -381,29 +502,117 @@ export const PocketWishlistSection: React.FC = () => {
     return () => unsubscribe();
   }, []);
 
+  // 3. Automatic GAS sync on mount and when gasUrl changes
+  useEffect(() => {
+    let isMounted = true;
+    async function initGasSync() {
+      if (!gasUrl) return;
+      setGasSyncStatus("syncing");
+      try {
+        const resp = await fetch("/api/sync/gas-proxy", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ gasUrl, action: "get" }),
+        });
+        if (resp.ok) {
+          const json = await resp.json();
+          const rawSpots = json.spots || json.data?.spots;
+          if (Array.isArray(rawSpots) && isMounted) {
+            let deletedIds = new Set<string>();
+            try {
+              const rawDel = localStorage.getItem(DELETED_IDS_KEY);
+              if (rawDel) deletedIds = new Set(JSON.parse(rawDel));
+            } catch {}
+
+            const gasPlaces = rawSpots
+              .filter((s) => s && s.id && !deletedIds.has(s.id))
+              .map(normalizeGasSpotToSavedPlace);
+
+            if (gasPlaces.length > 0) {
+              setPlaces((prev) => {
+                const gasIds = new Set(gasPlaces.map((p) => p.id));
+                const localOnly = prev.filter((p) => !gasIds.has(p.id) && !deletedIds.has(p.id));
+                const merged = [...gasPlaces, ...localOnly];
+                savePlacesToLocal(merged);
+                return merged;
+              });
+            }
+            setGasSyncStatus("synced");
+            const nowTime = new Date().toLocaleTimeString("zh-TW", {
+              hour: "2-digit",
+              minute: "2-digit",
+              second: "2-digit",
+            });
+            setLastSyncTime(nowTime);
+          }
+        } else {
+          setGasSyncStatus("error");
+        }
+      } catch (err) {
+        console.warn("Auto GAS sync notice:", err);
+        setGasSyncStatus("idle");
+      }
+    }
+
+    initGasSync();
+    return () => {
+      isMounted = false;
+    };
+  }, [gasUrl]);
+
   // Manual sync refresh function to confirm companion additions
   const handleManualSync = async () => {
     setIsManualSyncing(true);
+    setGasSyncStatus("syncing");
     try {
-      const snap = await getDocs(collection(db, "savedPlaces"));
-      const remoteList: SavedPlace[] = [];
-      snap.forEach((docSnap) => {
-        remoteList.push({ id: docSnap.id, ...(docSnap.data() as Omit<SavedPlace, "id">) });
-      });
-
       let deletedIds = new Set<string>();
       try {
         const rawDel = localStorage.getItem(DELETED_IDS_KEY);
         if (rawDel) deletedIds = new Set(JSON.parse(rawDel));
       } catch {}
 
-      const validRemote = remoteList.filter((p) => !deletedIds.has(p.id));
-      const remoteIds = new Set(validRemote.map((p) => p.id));
+      const remoteList: SavedPlace[] = [];
+
+      // 1. Fetch from GAS proxy if gasUrl is set
+      if (gasUrl) {
+        try {
+          const gasRes = await fetch("/api/sync/gas-proxy", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ gasUrl, action: "get" }),
+          });
+          if (gasRes.ok) {
+            const gasJson = await gasRes.json();
+            const gasSpots = gasJson.spots || gasJson.data?.spots;
+            if (Array.isArray(gasSpots)) {
+              gasSpots.forEach((s) => {
+                if (s && s.id && !deletedIds.has(s.id)) {
+                  remoteList.push(normalizeGasSpotToSavedPlace(s));
+                }
+              });
+            }
+          }
+        } catch (gErr) {
+          console.warn("GAS manual sync notice:", gErr);
+        }
+      }
+
+      // 2. Fetch from Firestore if logged in or available
+      try {
+        const snap = await getDocs(collection(db, "savedPlaces"));
+        snap.forEach((docSnap) => {
+          if (!deletedIds.has(docSnap.id)) {
+            remoteList.push({ id: docSnap.id, ...(docSnap.data() as Omit<SavedPlace, "id">) });
+          }
+        });
+      } catch {}
+
+      const remoteIds = new Set(remoteList.map((p) => p.id));
       const localOnly = places.filter(
         (p) => !remoteIds.has(p.id) && !deletedIds.has(p.id) && (p.id.startsWith("seed-") || p.userId === "local-user")
       );
 
-      const combined = [...validRemote, ...localOnly];
+      const combined = [...remoteList, ...localOnly];
       combined.sort((a, b) => {
         const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
         const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
@@ -412,13 +621,15 @@ export const PocketWishlistSection: React.FC = () => {
 
       setPlaces(combined);
       savePlacesToLocal(combined);
+      setGasSyncStatus("synced");
+
       const nowTime = new Date().toLocaleTimeString("zh-TW", {
         hour: "2-digit",
         minute: "2-digit",
         second: "2-digit",
       });
       setLastSyncTime(nowTime);
-      setToastMessage(`✓ 已同步至最新狀態！目前共有 ${combined.length} 筆私房清單`);
+      setToastMessage(`✓ 已成功同步最新狀態！共 ${combined.length} 處私房探訪清單`);
       setTimeout(() => setToastMessage(null), 3000);
     } catch (syncErr) {
       console.warn("Manual sync error:", syncErr);
@@ -518,33 +729,60 @@ export const PocketWishlistSection: React.FC = () => {
     try {
       let analyzed: any = null;
 
-      // 1. If backend server is running (AI Studio dev/full-stack), call /api/analyze-place
+      // 1. First try /api/gemini/spot-enrich (Osaka-trip-2027 standard pipeline)
       try {
-        const res = await fetch("/api/analyze-place", {
+        const enrichRes = await fetch("/api/gemini/spot-enrich", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
           signal: AbortSignal.timeout(18000),
           body: JSON.stringify({
-            url: targetUrl,
-            placeName: explicitPlaceName,
-            rawText: effectiveNotes || explicitPlaceName,
-            clientExtractedName: clientExtractedName,
+            rawInput: targetUrl || rawUrlInput,
+            spotName: explicitPlaceName || clientExtractedName,
+            mapsUrl: targetUrl.startsWith("http") ? targetUrl : "",
+            cityOrArea: "東京",
           }),
         });
 
-        const contentType = res.headers.get("content-type") || "";
-        if (res.ok && contentType.includes("application/json")) {
-          const json = await res.json();
-          if (json && json.success && json.data) {
-            analyzed = json.data;
+        if (enrichRes.ok) {
+          const enrichJson = await enrichRes.json();
+          if (enrichJson?.success && enrichJson?.data) {
+            analyzed = enrichJson.data;
           }
         }
-      } catch (fetchErr) {
-        console.warn("Backend API not reachable or timed out, switching to client intelligence:", fetchErr);
+      } catch (enrichErr) {
+        console.warn("spot-enrich fetch skipped:", enrichErr);
       }
 
-      // 2. High-Fidelity Client-side intelligence pipeline
+      // 2. If not obtained, call /api/analyze-place
+      if (!analyzed) {
+        try {
+          const res = await fetch("/api/analyze-place", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            signal: AbortSignal.timeout(18000),
+            body: JSON.stringify({
+              url: targetUrl,
+              placeName: explicitPlaceName,
+              rawText: effectiveNotes || explicitPlaceName,
+              clientExtractedName: clientExtractedName,
+            }),
+          });
+
+          const contentType = res.headers.get("content-type") || "";
+          if (res.ok && contentType.includes("application/json")) {
+            const json = await res.json();
+            if (json && json.success && json.data) {
+              analyzed = json.data;
+            }
+          }
+        } catch (fetchErr) {
+          console.warn("Backend API not reachable or timed out, switching to client intelligence:", fetchErr);
+        }
+      }
+
+      // 3. High-Fidelity Client-side intelligence pipeline
       if (!analyzed) {
         // If it's a short link and we don't have a place name yet, unshorten client-side via CORS proxies
         if (!clientExtractedName && (targetUrl.includes("maps.app.goo.gl") || targetUrl.includes("goo.gl") || targetUrl.includes("g.co/"))) {
@@ -581,48 +819,69 @@ export const PocketWishlistSection: React.FC = () => {
 
       // Determine canonical category
       let safeCategory = (analyzed?.category || "other").toLowerCase().trim();
-      if (!CATEGORY_MAP[safeCategory]) {
-        safeCategory = "other";
+      const categoryCheckText = `${analyzed?.category || ""} ${analyzed?.categoryLabel || ""} ${analyzed?.spotName || analyzed?.name || ""} ${analyzed?.desc || analyzed?.summary || ""} ${analyzed?.tag || ""}`;
+      if (/(壽喜燒|燒肉|壽司|拉麵|牛舌|和牛|炸豬排|天婦羅|居酒屋|串燒|火鍋|食堂|洋食|丼飯|今半|敘敘苑|叙々苑|利久|afuri|restaurant|sushi|ramen)/i.test(categoryCheckText)) {
+        safeCategory = "dining";
+      } else if (/(甜點|蛋糕|抹茶|咖啡|喫茶|生吐司|千層|布丁|可麗露|冰淇淋|下午茶|鬆餅|HARBS|cafe|bakery)/i.test(categoryCheckText)) {
+        safeCategory = "cafe";
+      } else if (/(神社|寺|宮|公園|庭園|展望台|塔|城|水族館|美術館|博物館|觀光|景點|shrine|temple|sky)/i.test(categoryCheckText)) {
+        safeCategory = "sightseeing";
+      } else if (/(購物|百貨|商店街|藥妝|唐吉訶德|大丸|Bic|免稅|商場|mall)/i.test(categoryCheckText)) {
+        safeCategory = "shopping";
+      } else if (/(飯店|旅館|民宿|溫泉宿|hotel|inn)/i.test(categoryCheckText)) {
+        safeCategory = "stay";
       }
-      const safeCategoryLabel = CATEGORY_MAP[safeCategory]?.label || "其他探訪";
 
-      let candidateName = String(analyzed?.name || "").trim();
+      const safeCategoryLabel = analyzed?.categoryLabel || CATEGORY_MAP[safeCategory]?.label || "其他探訪";
+
+      let candidateName = String(analyzed?.spotName || analyzed?.name || "").trim();
       if (!candidateName || candidateName.startsWith("http")) {
         candidateName = textPart || inputNotes.trim() || (!targetUrl.startsWith("http") ? targetUrl : "") || "私房探訪據點";
       }
+
+      const descVal = String(analyzed?.desc || analyzed?.summary || `${candidateName} 是在地廣受好評的探訪去處，氛圍與特色極具魅力，值得親自造訪體驗。`).trim();
+      const recVal = String(analyzed?.recommendation || analyzed?.tips || "造訪前可開啟 Google 地圖再次確認即時營業時間與公休日。").trim();
+      const tagVal = String(analyzed?.tag || "東京散策、自由行私房推薦").trim();
+      const suggestedTimeVal = String(analyzed?.suggestedTime || analyzed?.bestTimeToVisit || "午後散策時段").trim();
 
       const nowIso = new Date().toISOString();
       const newPlaceDoc: SavedPlace = {
         id: placeId,
         url: finalUrl.slice(0, 1000),
         name: candidateName.slice(0, 200),
+        spotName: String(analyzed?.spotName || candidateName).trim().slice(0, 200),
         japaneseName: String(analyzed?.japaneseName || candidateName).trim().slice(0, 200),
         category: safeCategory.slice(0, 50),
         categoryLabel: safeCategoryLabel.slice(0, 100),
-        summary: String(analyzed?.summary || `${candidateName} 是在地廣受好評的探訪去處，氛圍與特色極具魅力，值得親自造訪體驗。`).trim().slice(0, 1000),
-        highlight: String(analyzed?.highlight || `${candidateName} 人氣特色探訪推薦`).trim().slice(0, 500),
+        desc: descVal.slice(0, 1000),
+        summary: descVal.slice(0, 1000),
+        recommendation: recVal.slice(0, 500),
+        highlight: String(analyzed?.highlight || recVal.split("。")[0] || `${candidateName} 人氣特色探訪推薦`).trim().slice(0, 500),
+        tag: tagVal.slice(0, 200),
+        suggestedTime: suggestedTimeVal.slice(0, 100),
         address: String(analyzed?.address || (targetUrl.startsWith("http") ? "東京都內" : targetUrl)).trim().slice(0, 300),
-        tips: String(analyzed?.tips || "造訪前可開啟 Google 地圖再次確認即時營業時間與公休日。").trim().slice(0, 500),
+        tips: recVal.slice(0, 500),
         notes: inputNotes.trim().slice(0, 1000),
         isVisited: false,
+        visited: false,
+        isWishlist: false,
         addedByName: String(currentUser?.displayName || currentUser?.email?.split("@")[0] || "旅伴").slice(0, 100),
         userId: currentUser?.uid || "local-user",
         createdAt: nowIso,
-        updatedAt: nowIso,
+        updatedAt: Date.now(),
         // Distinct Dining attributes
-        cuisineType: analyzed?.cuisineType || "",
+        cuisineType: analyzed?.cuisineType || (safeCategory === "dining" ? safeCategoryLabel : ""),
         signatureDishes: Array.isArray(analyzed?.signatureDishes) ? analyzed.signatureDishes : [],
         priceRange: analyzed?.priceRange || "",
         diningAtmosphere: analyzed?.diningAtmosphere || "",
         // Distinct Sightseeing attributes
-        spotType: analyzed?.spotType || "",
+        spotType: analyzed?.spotType || (safeCategory === "sightseeing" ? safeCategoryLabel : ""),
         mustSeeHighlights: Array.isArray(analyzed?.mustSeeHighlights) ? analyzed.mustSeeHighlights : [],
         ticketInfo: analyzed?.ticketInfo || "",
-        bestTimeToVisit: analyzed?.bestTimeToVisit || "",
+        bestTimeToVisit: analyzed?.bestTimeToVisit || suggestedTimeVal,
       };
 
-      // 3. Open the Human-in-the-loop Pre-Save Review & Edit modal!
-      // This satisfies the user's requirement to review and adjust place name, category, highlight, summary, address, and notes before committing to list.
+      // 4. Open the Human-in-the-loop Pre-Save Review & Edit modal!
       setPendingCandidate(newPlaceDoc);
       setIsReviewModalOpen(true);
       setFormError(null);
@@ -640,16 +899,16 @@ export const PocketWishlistSection: React.FC = () => {
     if (!trimmed || !pendingCandidate) return;
 
     try {
-      // 1. Query server Gemini 3.8 Flash API
-      const res = await fetch("/api/analyze-place", {
+      // 1. Query server spot-enrich API
+      const res = await fetch("/api/gemini/spot-enrich", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         signal: AbortSignal.timeout(12000),
         body: JSON.stringify({
-          placeName: trimmed,
-          url: pendingCandidate.url,
-          rawText: pendingCandidate.notes || trimmed,
+          spotName: trimmed,
+          rawInput: pendingCandidate.url,
+          cityOrArea: "東京",
         }),
       });
 
@@ -657,24 +916,20 @@ export const PocketWishlistSection: React.FC = () => {
         const json = await res.json();
         if (json?.success && json?.data) {
           const d = json.data;
+          const descVal = d.desc || d.summary || pendingCandidate.desc;
+          const recVal = d.recommendation || d.tips || pendingCandidate.recommendation;
           setPendingCandidate({
             ...pendingCandidate,
-            name: d.name || trimmed,
-            japaneseName: d.japaneseName || trimmed,
-            category: d.category || pendingCandidate.category,
-            categoryLabel: d.categoryLabel || CATEGORY_MAP[d.category]?.label || pendingCandidate.categoryLabel,
-            highlight: d.highlight || pendingCandidate.highlight,
-            summary: d.summary || pendingCandidate.summary,
-            address: d.address || pendingCandidate.address,
-            tips: d.tips || pendingCandidate.tips,
-            cuisineType: d.cuisineType ?? pendingCandidate.cuisineType,
-            signatureDishes: Array.isArray(d.signatureDishes) ? d.signatureDishes : pendingCandidate.signatureDishes,
-            priceRange: d.priceRange ?? pendingCandidate.priceRange,
-            diningAtmosphere: d.diningAtmosphere ?? pendingCandidate.diningAtmosphere,
-            spotType: d.spotType ?? pendingCandidate.spotType,
-            mustSeeHighlights: Array.isArray(d.mustSeeHighlights) ? d.mustSeeHighlights : pendingCandidate.mustSeeHighlights,
-            ticketInfo: d.ticketInfo ?? pendingCandidate.ticketInfo,
-            bestTimeToVisit: d.bestTimeToVisit ?? pendingCandidate.bestTimeToVisit,
+            name: d.spotName || trimmed,
+            spotName: d.spotName || trimmed,
+            categoryLabel: d.categoryLabel || pendingCandidate.categoryLabel,
+            tag: d.tag || pendingCandidate.tag,
+            desc: descVal,
+            summary: descVal,
+            recommendation: recVal,
+            tips: recVal,
+            highlight: recVal.split("。")[0] || pendingCandidate.highlight,
+            suggestedTime: d.suggestedTime || pendingCandidate.suggestedTime,
           });
           return;
         }
@@ -728,13 +983,13 @@ export const PocketWishlistSection: React.FC = () => {
       ...pendingCandidate,
       id: placeId,
       name: trimmedName,
-      japaneseName: (pendingCandidate.japaneseName || trimmedName).trim(),
+      japaneseName: (pendingCandidate.japaneseName || "").trim(),
       category: pendingCandidate.category || "dining",
       categoryLabel: CATEGORY_MAP[pendingCandidate.category]?.label || "餐廳美饌",
       summary: (pendingCandidate.summary || "自由行旅人私房推薦據點。").trim(),
-      highlight: (pendingCandidate.highlight || `${trimmedName} 推薦特色`).trim(),
+      highlight: (pendingCandidate.highlight || "").trim(),
       address: (pendingCandidate.address || "東京都內").trim(),
-      tips: (pendingCandidate.tips || "前往前建議先確認最新營業動態與公休日。").trim(),
+      tips: (pendingCandidate.tips || "").trim(),
       notes: (pendingCandidate.notes || "").trim(),
       cuisineType: pendingCandidate.cuisineType || "",
       signatureDishes: pendingCandidate.signatureDishes || [],
@@ -752,6 +1007,7 @@ export const PocketWishlistSection: React.FC = () => {
       setPlaces((prev) => {
         const next = [finalizedPlace, ...prev.filter((p) => p.id !== placeId)];
         savePlacesToLocal(next);
+        syncPushToGas(next);
         return next;
       });
 
@@ -761,11 +1017,16 @@ export const PocketWishlistSection: React.FC = () => {
           const firestoreData = {
             url: finalizedPlace.url,
             name: finalizedPlace.name,
+            spotName: finalizedPlace.spotName || finalizedPlace.name,
             japaneseName: finalizedPlace.japaneseName || "",
             category: finalizedPlace.category,
             categoryLabel: finalizedPlace.categoryLabel || "",
+            tag: finalizedPlace.tag || "",
+            desc: finalizedPlace.desc || finalizedPlace.summary || "",
             summary: finalizedPlace.summary || "",
+            recommendation: finalizedPlace.recommendation || finalizedPlace.tips || "",
             highlight: finalizedPlace.highlight || "",
+            suggestedTime: finalizedPlace.suggestedTime || "",
             address: finalizedPlace.address || "",
             tips: finalizedPlace.tips || "",
             notes: finalizedPlace.notes || "",
@@ -778,6 +1039,8 @@ export const PocketWishlistSection: React.FC = () => {
             ticketInfo: finalizedPlace.ticketInfo || "",
             bestTimeToVisit: finalizedPlace.bestTimeToVisit || "",
             isVisited: false,
+            visited: false,
+            isWishlist: false,
             addedByName: finalizedPlace.addedByName || "",
             userId: currentUser.uid,
             createdAt: finalizedPlace.createdAt || nowIso,
@@ -827,14 +1090,17 @@ export const PocketWishlistSection: React.FC = () => {
     }
   };
 
-  // Toggle Visited status
+  // Toggle Visited status (想去)
   const handleToggleVisited = async (place: SavedPlace) => {
     const nextStatus = !place.isVisited;
 
     // 1. Immediately update React state & localStorage
     setPlaces((prev) => {
-      const next = prev.map((p) => (p.id === place.id ? { ...p, isVisited: nextStatus } : p));
+      const next = prev.map((p) =>
+        p.id === place.id ? { ...p, isVisited: nextStatus, visited: nextStatus, isWishlist: nextStatus } : p
+      );
       savePlacesToLocal(next);
+      syncPushToGas(next);
       return next;
     });
 
@@ -846,6 +1112,8 @@ export const PocketWishlistSection: React.FC = () => {
       try {
         await updateDoc(doc(db, "savedPlaces", place.id), {
           isVisited: nextStatus,
+          visited: nextStatus,
+          isWishlist: nextStatus,
           updatedAt: new Date().toISOString(),
         });
       } catch (err) {
@@ -873,6 +1141,7 @@ export const PocketWishlistSection: React.FC = () => {
       setPlaces((prev) => {
         const next = prev.filter((p) => p.id !== targetPlace.id);
         savePlacesToLocal(next);
+        syncPushToGas(next);
         return next;
       });
 
@@ -918,8 +1187,10 @@ export const PocketWishlistSection: React.FC = () => {
     setEditCategory(place.category || "dining");
     setEditAddress(place.address || "");
     setEditHighlight(place.highlight || "");
-    setEditSummary(place.summary || "");
-    setEditTips(place.tips || "");
+    setEditSummary(place.desc || place.summary || "");
+    setEditTips(place.recommendation || place.tips || "");
+    setEditTag(place.tag || "");
+    setEditSuggestedTime(place.suggestedTime || place.bestTimeToVisit || "");
     setEditNotes(place.notes || "");
     setEditUrl(place.url || "");
     setEditCuisineType(place.cuisineType || "");
@@ -929,7 +1200,7 @@ export const PocketWishlistSection: React.FC = () => {
     setEditSpotType(place.spotType || "");
     setEditMustSeeHighlights((place.mustSeeHighlights || []).join("、"));
     setEditTicketInfo(place.ticketInfo || "");
-    setEditBestTimeToVisit(place.bestTimeToVisit || "");
+    setEditBestTimeToVisit(place.bestTimeToVisit || place.suggestedTime || "");
   };
 
   // Save Edit (Comprehensive all-fields update)
@@ -946,15 +1217,23 @@ export const PocketWishlistSection: React.FC = () => {
     setIsSavingEdit(true);
     try {
       const updatedCatLabel = CATEGORY_MAP[editCategory]?.label || "其他探訪";
+      const updatedDesc = editSummary.trim().slice(0, 1000);
+      const updatedRec = editTips.trim().slice(0, 500);
+
       const updatedFields: Partial<SavedPlace> = {
         name: trimmedName.slice(0, 200),
+        spotName: trimmedName.slice(0, 200),
         japaneseName: editJapaneseName.trim().slice(0, 200),
         category: editCategory.slice(0, 50),
         categoryLabel: updatedCatLabel,
         address: editAddress.trim().slice(0, 300),
         highlight: editHighlight.trim().slice(0, 500),
-        summary: editSummary.trim().slice(0, 1000),
-        tips: editTips.trim().slice(0, 500),
+        desc: updatedDesc,
+        summary: updatedDesc,
+        recommendation: updatedRec,
+        tips: updatedRec,
+        tag: editTag.trim().slice(0, 200),
+        suggestedTime: editSuggestedTime.trim().slice(0, 100),
         notes: editNotes.trim().slice(0, 1000),
         url: (editUrl.trim() || editingPlace.url).slice(0, 1000),
         cuisineType: editCuisineType.trim().slice(0, 100),
@@ -968,8 +1247,8 @@ export const PocketWishlistSection: React.FC = () => {
           ? editMustSeeHighlights.split(/[、,，\n]+/).map((s) => s.trim()).filter(Boolean)
           : [],
         ticketInfo: editTicketInfo.trim().slice(0, 200),
-        bestTimeToVisit: editBestTimeToVisit.trim().slice(0, 200),
-        updatedAt: new Date().toISOString(),
+        bestTimeToVisit: (editBestTimeToVisit.trim() || editSuggestedTime.trim()).slice(0, 200),
+        updatedAt: Date.now(),
       };
 
       // 1. Update React state & localStorage immediately
@@ -978,6 +1257,7 @@ export const PocketWishlistSection: React.FC = () => {
           p.id === editingPlace.id ? { ...p, ...updatedFields } : p
         );
         savePlacesToLocal(next);
+        syncPushToGas(next);
         return next;
       });
 
@@ -1058,6 +1338,18 @@ export const PocketWishlistSection: React.FC = () => {
               >
                 <RefreshCw className={`w-3 h-3 ${isManualSyncing ? "animate-spin text-[#992545]" : ""}`} />
                 <span>{isManualSyncing ? "檢查中..." : "重新整理"}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setTempGasInput(gasUrl || DEFAULT_GAS_URL);
+                  setShowGasModal(true);
+                }}
+                title="設定 Google 試算表 (GAS) 雙向同步"
+                className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-lg border border-emerald-200 transition-all cursor-pointer font-bold text-[11px]"
+              >
+                <LinkIcon className="w-3 h-3 text-emerald-600" />
+                <span>GAS 同步</span>
               </button>
               <button
                 type="button"
@@ -1342,8 +1634,14 @@ export const PocketWishlistSection: React.FC = () => {
                           className={`inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full ${catConfig.bg} ${catConfig.color} border ${catConfig.border}`}
                         >
                           <CatIcon className="w-3 h-3" />
-                          <span>{catConfig.label}</span>
+                          <span>{place.categoryLabel || catConfig.label}</span>
                         </span>
+
+                        {place.suggestedTime && (
+                          <span className="text-[10px] font-semibold text-stone-600 bg-stone-100 border border-stone-200 px-2 py-0.5 rounded-full">
+                            ⏱ {place.suggestedTime}
+                          </span>
+                        )}
 
                         {isRecentlyAdded && (
                           <span className="text-[10px] font-extrabold text-white bg-[#992545] px-2 py-0.5 rounded-full animate-pulse shadow-xs">
@@ -1403,13 +1701,24 @@ export const PocketWishlistSection: React.FC = () => {
                     {/* Place Title */}
                     <div className="mb-2">
                       <h3 className="text-base font-bold text-[#2d2527] group-hover:text-[#992545] transition-colors flex items-baseline gap-1.5 flex-wrap">
-                        <span>{place.name}</span>
-                        {place.japaneseName && (
-                          <span className="text-xs font-normal text-[#8c7b80]">
-                            ({place.japaneseName})
-                          </span>
-                        )}
+                        <span>{place.spotName || place.name}</span>
                       </h3>
+
+                      {place.tag && (
+                        <div className="flex flex-wrap items-center gap-1 mt-1 mb-1.5">
+                          {place.tag
+                            .split(/[、,，\s]+/)
+                            .filter(Boolean)
+                            .map((t, idx) => (
+                              <span
+                                key={idx}
+                                className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-[#faf4f6] text-[#992545] border border-[#f5dde3]"
+                              >
+                                #{t}
+                              </span>
+                            ))}
+                        </div>
+                      )}
 
                       {place.address && (
                         <div className="flex items-center gap-1 text-[11px] text-[#735e65] mt-0.5">
@@ -1419,20 +1728,24 @@ export const PocketWishlistSection: React.FC = () => {
                       )}
                     </div>
 
-                    {/* AI Highlight Tag */}
-                    {place.highlight && (
-                      <div className="mb-2.5">
-                        <span className="inline-block text-[11px] font-semibold text-[#8e2443] bg-[#fdf2f4] border border-[#f5d9df] px-2.5 py-0.5 rounded-lg">
-                          ★ 亮點：{place.highlight}
-                        </span>
-                      </div>
+                    {/* Literary "旅の手帖" Description / Summary */}
+                    {(place.desc || place.summary) && (
+                      <p className="text-xs text-[#44383c] leading-relaxed mb-3 font-normal tracking-wide bg-[#fffdfa] p-3 rounded-2xl border border-[#f3eee9]">
+                        {place.desc || place.summary}
+                      </p>
                     )}
 
-                    {/* AI Summary */}
-                    {place.summary && (
-                      <p className="text-xs text-[#5d5054] leading-relaxed mb-3">
-                        {place.summary}
-                      </p>
+                    {/* osaka-trip-2027 Signature Recommendation Block */}
+                    {(place.recommendation || place.tips) && (
+                      <div className="bg-amber-50/70 border-l-3 border-amber-500 rounded-r-2xl p-2.5 sm:p-3 mb-3 text-xs space-y-1">
+                        <div className="flex items-center gap-1.5 font-bold text-amber-950 text-[11px]">
+                          <Sparkles className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                          <span>招牌推薦與造訪指引</span>
+                        </div>
+                        <p className="text-amber-900 leading-relaxed text-[11px]">
+                          {place.recommendation || place.tips}
+                        </p>
+                      </div>
                     )}
 
                     {/* Dedicated Dining Attributes Block */}
@@ -1510,14 +1823,6 @@ export const PocketWishlistSection: React.FC = () => {
                             ))}
                           </div>
                         )}
-                      </div>
-                    )}
-
-                    {/* Practical Tips */}
-                    {place.tips && (
-                      <div className="text-[11px] text-[#7a646c] bg-[#faf6f7] p-2.5 rounded-xl border border-[#f3e4e7] mb-3">
-                        <span className="font-bold text-[#992545]">💡 探訪貼步：</span>
-                        <span>{place.tips}</span>
                       </div>
                     )}
 
@@ -1821,66 +2126,90 @@ export const PocketWishlistSection: React.FC = () => {
                   </div>
                 )}
 
-                {/* Address & Highlight */}
+                {/* Address */}
+                <div>
+                  <label className="font-bold text-[#4a383d] block mb-1">
+                    所在區域 / 地址
+                  </label>
+                  <input
+                    type="text"
+                    value={pendingCandidate.address || ""}
+                    onChange={(e) =>
+                      setPendingCandidate({ ...pendingCandidate, address: e.target.value })
+                    }
+                    placeholder="例如：東京都台東區西淺草3-1-12"
+                    className="w-full px-3 py-2 bg-[#faf8f9] border border-[#e4d3d7] focus:border-[#992545] focus:bg-white rounded-xl outline-hidden text-xs text-[#2d2527]"
+                  />
+                </div>
+
+                {/* Tag & Suggested Time in 2 columns */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="font-bold text-[#4a383d] block mb-1">
-                      所在區域 / 地址
+                      特色標籤（以頓號或逗號分隔）
                     </label>
                     <input
                       type="text"
-                      value={pendingCandidate.address || ""}
+                      value={pendingCandidate.tag || ""}
                       onChange={(e) =>
-                        setPendingCandidate({ ...pendingCandidate, address: e.target.value })
+                        setPendingCandidate({ ...pendingCandidate, tag: e.target.value })
                       }
-                      placeholder="例如：東京都台東區西淺草3-1-12"
+                      placeholder="例如：百年老字號、黑毛和牛壽喜燒、午間定食超值"
                       className="w-full px-3 py-2 bg-[#faf8f9] border border-[#e4d3d7] focus:border-[#992545] focus:bg-white rounded-xl outline-hidden text-xs text-[#2d2527]"
                     />
                   </div>
                   <div>
                     <label className="font-bold text-[#4a383d] block mb-1">
-                      招牌亮點一句話
+                      建議停留或造訪時段
                     </label>
                     <input
                       type="text"
-                      value={pendingCandidate.highlight || ""}
+                      value={pendingCandidate.suggestedTime || ""}
                       onChange={(e) =>
-                        setPendingCandidate({ ...pendingCandidate, highlight: e.target.value })
+                        setPendingCandidate({ ...pendingCandidate, suggestedTime: e.target.value })
                       }
-                      placeholder="例如：百年秘傳和牛壽喜燒與傳承醬汁"
+                      placeholder="例如：約 1.5 小時、建議午間 11:30 造訪"
                       className="w-full px-3 py-2 bg-[#faf8f9] border border-[#e4d3d7] focus:border-[#992545] focus:bg-white rounded-xl outline-hidden text-xs text-[#2d2527]"
                     />
                   </div>
                 </div>
 
-                {/* Summary */}
+                {/* Literary Description / Summary */}
                 <div>
                   <label className="font-bold text-[#4a383d] block mb-1">
-                    地點深度介紹
+                    地點深度介紹 (旅の手帖風格)
                   </label>
                   <textarea
                     rows={3}
-                    value={pendingCandidate.summary || ""}
+                    value={pendingCandidate.desc || pendingCandidate.summary || ""}
                     onChange={(e) =>
-                      setPendingCandidate({ ...pendingCandidate, summary: e.target.value })
+                      setPendingCandidate({
+                        ...pendingCandidate,
+                        desc: e.target.value,
+                        summary: e.target.value,
+                      })
                     }
-                    placeholder="介紹地點的核心特色、招牌料理或歷史..."
+                    placeholder="細膩描繪店內香氣、師傅手藝與町家風情之文字..."
                     className="w-full p-2.5 bg-[#faf8f9] border border-[#e4d3d7] focus:border-[#992545] focus:bg-white rounded-xl outline-hidden text-xs text-[#2d2527] leading-relaxed"
                   />
                 </div>
 
-                {/* Tips */}
+                {/* Recommendation & Practical Tips */}
                 <div>
                   <label className="font-bold text-[#4a383d] block mb-1">
-                    💡 自由行探訪貼步（排隊、預約、避雷建議）
+                    ✨ 招牌推薦與造訪指引
                   </label>
                   <textarea
                     rows={2}
-                    value={pendingCandidate.tips || ""}
+                    value={pendingCandidate.recommendation || pendingCandidate.tips || ""}
                     onChange={(e) =>
-                      setPendingCandidate({ ...pendingCandidate, tips: e.target.value })
+                      setPendingCandidate({
+                        ...pendingCandidate,
+                        recommendation: e.target.value,
+                        tips: e.target.value,
+                      })
                     }
-                    placeholder="例如：午間定食CP值最高，建議提早30分鐘候位..."
+                    placeholder="例如：必點「特選和牛壽喜燒定食」，建議提早30分鐘領取號碼牌..."
                     className="w-full p-2.5 bg-[#faf8f9] border border-[#e4d3d7] focus:border-[#992545] focus:bg-white rounded-xl outline-hidden text-xs text-[#2d2527] leading-relaxed"
                   />
                 </div>
@@ -2163,58 +2492,72 @@ export const PocketWishlistSection: React.FC = () => {
                   </div>
                 )}
 
-                {/* Address & Highlight */}
+                {/* Address */}
+                <div>
+                  <label className="font-bold text-[#4a383d] block mb-1">
+                    所在區域 / 地址
+                  </label>
+                  <input
+                    type="text"
+                    value={editAddress}
+                    onChange={(e) => setEditAddress(e.target.value)}
+                    placeholder="例如：東京都台東區西淺草3-1-12"
+                    className="w-full px-3 py-2 bg-[#faf8f9] border border-[#e4d3d7] focus:border-[#992545] focus:bg-white rounded-xl outline-hidden text-xs text-[#2d2527]"
+                  />
+                </div>
+
+                {/* Tag & Suggested Time in 2 columns */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="font-bold text-[#4a383d] block mb-1">
-                      所在區域 / 地址
+                      特色標籤（以頓號或逗號分隔）
                     </label>
                     <input
                       type="text"
-                      value={editAddress}
-                      onChange={(e) => setEditAddress(e.target.value)}
-                      placeholder="例如：東京都台東區西淺草3-1-12"
+                      value={editTag}
+                      onChange={(e) => setEditTag(e.target.value)}
+                      placeholder="例如：百年老字號、黑毛和牛壽喜燒、午間定食超值"
                       className="w-full px-3 py-2 bg-[#faf8f9] border border-[#e4d3d7] focus:border-[#992545] focus:bg-white rounded-xl outline-hidden text-xs text-[#2d2527]"
                     />
                   </div>
                   <div>
                     <label className="font-bold text-[#4a383d] block mb-1">
-                      招牌亮點一句話
+                      建議停留或造訪時段
                     </label>
                     <input
                       type="text"
-                      value={editHighlight}
-                      onChange={(e) => setEditHighlight(e.target.value)}
-                      placeholder="例如：百年秘傳和牛壽喜燒與傳承醬汁"
+                      value={editSuggestedTime}
+                      onChange={(e) => setEditSuggestedTime(e.target.value)}
+                      placeholder="例如：約 1.5 小時、建議午間 11:30 造訪"
                       className="w-full px-3 py-2 bg-[#faf8f9] border border-[#e4d3d7] focus:border-[#992545] focus:bg-white rounded-xl outline-hidden text-xs text-[#2d2527]"
                     />
                   </div>
                 </div>
 
-                {/* Summary */}
+                {/* Literary Description / Summary */}
                 <div>
                   <label className="font-bold text-[#4a383d] block mb-1">
-                    地點深度 / 簡易介紹
+                    地點深度介紹 (旅の手帖風格)
                   </label>
                   <textarea
                     rows={3}
                     value={editSummary}
                     onChange={(e) => setEditSummary(e.target.value)}
-                    placeholder="介紹地點的核心特色、招牌料理或歷史..."
+                    placeholder="細膩描繪店內香氣、師傅手藝與町家風情之文字..."
                     className="w-full p-2.5 bg-[#faf8f9] border border-[#e4d3d7] focus:border-[#992545] focus:bg-white rounded-xl outline-hidden text-xs text-[#2d2527] leading-relaxed"
                   />
                 </div>
 
-                {/* Tips */}
+                {/* Recommendation & Practical Tips */}
                 <div>
                   <label className="font-bold text-[#4a383d] block mb-1">
-                    💡 自由行探訪貼步（排隊、預約、避雷建議）
+                    ✨ 招牌推薦與造訪指引
                   </label>
                   <textarea
                     rows={2}
                     value={editTips}
                     onChange={(e) => setEditTips(e.target.value)}
-                    placeholder="例如：午間定食CP值最高，建議提早30分鐘候位..."
+                    placeholder="例如：必點「特選和牛壽喜燒定食」，建議提早30分鐘領取號碼牌..."
                     className="w-full p-2.5 bg-[#faf8f9] border border-[#e4d3d7] focus:border-[#992545] focus:bg-white rounded-xl outline-hidden text-xs text-[#2d2527] leading-relaxed"
                   />
                 </div>
@@ -2328,14 +2671,9 @@ export const PocketWishlistSection: React.FC = () => {
                     </span>
                   )}
                 </div>
-                {deletingPlace.japaneseName && (
-                  <p className="text-[11px] text-[#8c7b80] mb-1">
-                    {deletingPlace.japaneseName}
-                  </p>
-                )}
-                {deletingPlace.highlight && (
-                  <p className="text-[11px] text-[#992545] font-medium line-clamp-1">
-                    ★ {deletingPlace.highlight}
+                {(deletingPlace.recommendation || deletingPlace.tips) && (
+                  <p className="text-[11px] text-amber-800 font-medium line-clamp-1">
+                    ✨ {deletingPlace.recommendation || deletingPlace.tips}
                   </p>
                 )}
               </div>
@@ -2559,6 +2897,138 @@ export const PocketWishlistSection: React.FC = () => {
                   <span>開啟 Firebase 授權網域設定</span>
                   <ExternalLink className="w-3.5 h-3.5" />
                 </a>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Google Apps Script (GAS) Sync Settings Modal */}
+        {showGasModal && (
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200"
+          >
+            <div className="bg-white rounded-3xl p-6 sm:p-7 max-w-lg w-full shadow-2xl border border-[#ebd8dc] max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between mb-4 pb-3 border-b border-[#f0e2e5]">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
+                    <LinkIcon className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-base text-[#2d2527]">
+                      Google 試算表 (GAS) 雲端同步設定
+                    </h3>
+                    <p className="text-[11px] text-[#735e65]">
+                      串接 osaka-trip-2027 標準 Google Apps Script 雲端同步端點
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowGasModal(false)}
+                  className="p-1 text-stone-400 hover:text-stone-700 rounded-full cursor-pointer hover:bg-stone-100"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="space-y-4 text-xs text-[#4a383d] leading-relaxed">
+                <div className="p-3 bg-emerald-50/80 border border-emerald-200 rounded-2xl">
+                  <p className="font-bold text-emerald-950 mb-1 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <span>自動雙向同步運作中</span>
+                  </p>
+                  <p className="text-emerald-900 text-[11px]">
+                    所有新增、編輯、標記「想去」或刪除操作，將自動透過伺服器代理推播至此 Google Apps Script Web App，確保免 CORS 錯誤且與 osaka-trip-2027 雲端資料庫無縫同步！
+                  </p>
+                </div>
+
+                <div>
+                  <label className="font-bold block mb-1 text-[#2d2527]">
+                    GAS Web App 部署網址：
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={tempGasInput}
+                    onChange={(e) => setTempGasInput(e.target.value)}
+                    placeholder="https://script.google.com/macros/s/.../exec"
+                    className="w-full p-2.5 bg-[#faf8f9] border border-[#e4d3d7] focus:border-emerald-600 focus:bg-white rounded-xl outline-hidden text-xs text-[#2d2527] font-mono leading-relaxed"
+                  />
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTempGasInput(DEFAULT_GAS_URL);
+                    }}
+                    className="px-3 py-1.5 rounded-lg border border-[#ebd8dc] text-xs font-semibold text-[#735e65] hover:bg-stone-50 cursor-pointer"
+                  >
+                    恢復預設網址
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const trimmed = tempGasInput.trim();
+                      if (!trimmed) return;
+                      try {
+                        setToastMessage("正在測試連線中...");
+                        const testRes = await fetch("/api/sync/gas-proxy", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ gasUrl: trimmed, action: "test" }),
+                        });
+                        const testJson = await testRes.json();
+                        if (testRes.ok && testJson?.success) {
+                          setToastMessage("✓ 連線成功！GAS 服務正常運作");
+                        } else {
+                          setToastMessage(`⚠️ 連線異常: ${testJson?.error || testRes.status}`);
+                        }
+                      } catch (err: any) {
+                        setToastMessage(`⚠️ 連線失敗: ${err?.message || "未知原因"}`);
+                      }
+                      setTimeout(() => setToastMessage(null), 3500);
+                    }}
+                    className="px-3 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-semibold cursor-pointer"
+                  >
+                    測試連線狀態
+                  </button>
+                </div>
+
+                <div className="p-3 bg-[#faf6f7] border border-[#ebd8dc] rounded-2xl text-[11px] text-[#735e65]">
+                  <p className="font-semibold text-[#2d2527] mb-1">💡 跨裝置協作提示：</p>
+                  <p>
+                    旅伴若在其他裝置透過此試算表新增或標記行程，只需點擊上方的「重新整理」按鈕，即可立即拉取並更新本機私房清單。
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-6 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowGasModal(false)}
+                  className="px-4 py-2 rounded-xl border border-[#ebd8dc] text-xs font-semibold text-[#735e65] hover:bg-stone-50 cursor-pointer"
+                >
+                  取消
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const finalGas = tempGasInput.trim() || DEFAULT_GAS_URL;
+                    setGasUrl(finalGas);
+                    try {
+                      localStorage.setItem(GAS_URL_STORAGE_KEY, finalGas);
+                    } catch {}
+                    setShowGasModal(false);
+                    setToastMessage("✓ 已儲存 GAS 同步網址！");
+                    setTimeout(() => setToastMessage(null), 2500);
+                    handleManualSync();
+                  }}
+                  className="px-5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold shadow-xs cursor-pointer"
+                >
+                  儲存並套用
+                </button>
               </div>
             </div>
           </div>

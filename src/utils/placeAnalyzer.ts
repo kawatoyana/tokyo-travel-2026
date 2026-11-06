@@ -4,10 +4,19 @@
  */
 
 export interface AnalyzedPlaceData {
+  // Osaka-trip-2027 standard literary fields
+  spotName?: string;
+  categoryLabel: string;
+  tag?: string;
+  desc?: string;
+  recommendation?: string;
+  suggestedTime?: string;
+  mapUrl?: string;
+
+  // Compatibility fields
   name: string;
   japaneseName: string;
   category: "dining" | "sightseeing" | "shopping" | "cafe" | "stay" | "other";
-  categoryLabel: string;
   highlight: string;
   summary: string;
   address: string;
@@ -505,15 +514,25 @@ export function synthesizePlaceData(
   // 1. Check exact or partial landmark dictionary matches
   for (const [key, data] of Object.entries(TOKYO_LANDMARKS)) {
     if (combined.includes(key.toLowerCase())) {
+      const spotTitle = data.name || rawName;
+      const spotDesc = data.summary || `${spotTitle} 是東京極具口碑的熱門去處，氛圍與特色深受旅人喜愛。`;
+      const spotRec = data.tips || `${spotTitle} 推薦招牌特色；造訪前可開啟地圖確認營業狀態。`;
       return {
-        name: data.name || rawName,
+        spotName: spotTitle,
+        categoryLabel: data.categoryLabel || "餐廳美饌",
+        tag: `東京散策、${data.categoryLabel || "人氣探訪"}、自由行推薦`,
+        desc: spotDesc,
+        recommendation: spotRec,
+        suggestedTime: data.bestTimeToVisit || "午後散策時段",
+        mapUrl: url,
+
+        name: spotTitle,
         japaneseName: data.japaneseName || rawName,
         category: (data.category as any) || "dining",
-        categoryLabel: data.categoryLabel || "餐廳美饌",
-        highlight: data.highlight || `${data.name} 自由行私房人氣必訪推薦`,
-        summary: data.summary || `${data.name} 是東京極具口碑的熱門去處，氛圍與特色深受旅人喜愛。`,
+        highlight: data.highlight || `${spotTitle} 自由行私房人氣必訪推薦`,
+        summary: spotDesc,
         address: data.address || detectDistrict(combined),
-        tips: data.tips || "出發前可開啟 Google 地圖再次確認即時營業時間與公休日。",
+        tips: spotRec,
         cuisineType: data.cuisineType,
         signatureDishes: data.signatureDishes,
         priceRange: data.priceRange,

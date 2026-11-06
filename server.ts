@@ -509,7 +509,52 @@ async function startServer() {
     res.status(200).json({ status: "ok", uptime: process.uptime() });
   });
 
-  // API Route: Analyze Google Maps link with Gemini AI
+  // API Route: Osaka-trip-2027 standard spot-enrich endpoint
+  app.post("/api/gemini/spot-enrich", async (req, res) => {
+    try {
+      const { rawInput, spotName, mapsUrl, cityOrArea } = req.body;
+      const target = (mapsUrl || rawInput || spotName || "").trim();
+      if (!target) {
+        return res.status(400).json({ success: false, error: "請提供地點名稱或 Google Maps 連結" });
+      }
+
+      const analyzed = await analyzePlaceWithRobustPipeline({
+        url: mapsUrl || (target.startsWith("http") ? target : undefined),
+        placeName: spotName || (!target.startsWith("http") ? target : undefined),
+        rawInput,
+        cityOrArea: cityOrArea || "東京",
+      });
+
+      return res.json({
+        success: true,
+        data: {
+          spotName: analyzed.spotName || analyzed.name,
+          categoryLabel: analyzed.categoryLabel,
+          tag: analyzed.tag,
+          desc: analyzed.desc || analyzed.summary,
+          recommendation: analyzed.recommendation || analyzed.tips,
+          suggestedTime: analyzed.suggestedTime || analyzed.bestTimeToVisit || "午後散策時段",
+          mapUrl: analyzed.url,
+        },
+      });
+    } catch (err: any) {
+      console.error("Error in /api/gemini/spot-enrich:", err);
+      return res.status(200).json({
+        success: true,
+        data: {
+          spotName: req.body?.spotName || "日本散策名所",
+          categoryLabel: "私房推薦探訪",
+          tag: "東京自由行、私房名單",
+          desc: "漫步在街角巷弄，感受在地日常生活與職人手藝的溫暖光景。",
+          recommendation: "可點選地圖確認最新營業狀況與公休日，離峰時段探訪最為愜意。",
+          suggestedTime: "午後散策時段",
+          mapUrl: req.body?.mapsUrl || req.body?.rawInput || "",
+        },
+      });
+    }
+  });
+
+  // API Route: Analyze Google Maps link with Gemini AI (backward compatible)
   app.post("/api/analyze-place", async (req, res) => {
     try {
       const { url, rawText, clientExtractedName, placeName } = req.body;
@@ -546,6 +591,106 @@ async function startServer() {
         },
       });
     }
+  });
+
+  // Google Apps Script URL normalizer
+  function normalizeGasUrl(urlStr: string): string {
+    let u = (urlStr || "").trim();
+    if (u.includes("/edit")) u = u.replace(/\/edit.*$/, "/exec");
+    if (u.includes("/view")) u = u.replace(/\/view.*$/, "/exec");
+    return u;
+  }
+
+  // API Route: Google Apps Script sync proxy (bypasses CORS restrictions)
+  app.post("/api/sync/gas-proxy", async (req, res) => {
+    try {
+      const { gasUrl, action = "get", payload } = req.body;
+      const cleanUrl = normalizeGasUrl(gasUrl);
+      if (!cleanUrl) {
+        return res.status(400).json({ success: false, error: "未提供有效的 Google Apps Script 網址" });
+      }
+
+      if (action === "test" || action === "get") {
+        const resp = await fetch(cleanUrl, {
+          method: "GET",
+          headers: { Accept: "application/json" },
+          redirect: "follow",
+          signal: AbortSignal.timeout(15000),
+        });
+
+        const text = await resp.text();
+
+        // Check if authentication error or login redirect occurred
+        if (resp.status === 401 || resp.status === 403 || text.includes("accounts.google.com/ServiceLogin")) {
+          return res.status(200).json({
+            success: false,
+            isAuthError: true,
+            error: "需要存取權限：請在 Google Apps Script 部署設定中，將「誰可以存取 (Who has access)」設定為「任何人 (Anyone)」",
+          });
+        }
+
+        let parsed: any;
+        try {
+          parsed = JSON.parse(text);
+        } catch {
+          return res.status(200).json({
+            success: true,
+            data: { raw: text },
+          });
+        }
+
+        return res.json({
+          success: true,
+          data: parsed.data || parsed,
+          spots: parsed.spots || parsed.data?.spots,
+          expenses: parsed.expenses || parsed.data?.expenses,
+        });
+      }
+
+      if (action === "post") {
+        const resp = await fetch(cleanUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+          },
+          body: JSON.stringify(payload || {}),
+          redirect: "follow",
+          signal: AbortSignal.timeout(15000),
+        });
+
+        const text = await resp.text();
+        let parsed: any;
+        try {
+          parsed = JSON.parse(text);
+        } catch {
+          parsed = { message: "ok" };
+        }
+
+        return res.json({
+          success: true,
+          data: parsed,
+        });
+      }
+
+      return res.status(400).json({ success: false, error: "不支援的 action 參數" });
+    } catch (err: any) {
+      console.error("Error in /api/sync/gas-proxy:", err);
+      return res.status(200).json({
+        success: false,
+        error: `連接 Google Apps Script 失敗: ${err.message || "連線逾時或網路異常"}`,
+      });
+    }
+  });
+
+  // Local sync cache store in memory
+  let cachedCloudSyncData: any = null;
+  app.get("/api/sync/data", (_req, res) => {
+    res.json({ success: true, data: cachedCloudSyncData || { spots: [], expenses: [] } });
+  });
+  app.post("/api/sync/data", (req, res) => {
+    cachedCloudSyncData = req.body;
+    res.json({ success: true, message: "Sync snapshot updated" });
   });
 
   // API 404 handler - prevents API requests from falling through to the HTML SPA index
