@@ -128,8 +128,32 @@ export const VjwGuideModal: React.FC<VjwGuideModalProps> = ({ isOpen, onClose })
 
   if (!isOpen) return null;
 
-  const copyToClipboard = (key: string, text: string) => {
-    navigator.clipboard.writeText(text);
+  const copyToClipboard = async (key: string, text: string) => {
+    let copied = false;
+    if (navigator?.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(text);
+        copied = true;
+      } catch (err) {
+        console.warn("navigator.clipboard.writeText failed, trying fallback:", err);
+      }
+    }
+    if (!copied) {
+      try {
+        const textarea = document.createElement("textarea");
+        textarea.value = text;
+        textarea.setAttribute("readonly", "");
+        textarea.style.position = "absolute";
+        textarea.style.left = "-9999px";
+        document.body.appendChild(textarea);
+        textarea.select();
+        copied = document.execCommand("copy");
+        document.body.removeChild(textarea);
+      } catch (fallbackErr) {
+        console.warn("Fallback execCommand failed:", fallbackErr);
+      }
+    }
+
     setCopiedKey(key);
     setTimeout(() => {
       setCopiedKey((prev) => (prev === key ? null : prev));
@@ -182,11 +206,11 @@ export const VjwGuideModal: React.FC<VjwGuideModalProps> = ({ isOpen, onClose })
     <div
       role="dialog"
       aria-modal="true"
-      className="fixed inset-0 z-[70] bg-black/65 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 overflow-y-auto"
+      className="fixed inset-0 z-[100] bg-black/65 backdrop-blur-xs flex items-center justify-center p-3 pb-24 sm:p-5 sm:pb-28 overflow-y-auto"
       onClick={onClose}
     >
       <div
-        className="relative w-full max-w-2xl bg-white rounded-3xl shadow-2xl border border-[#ebd8dc] overflow-hidden my-auto max-h-[88vh] flex flex-col"
+        className="relative w-full max-w-2xl bg-white rounded-3xl shadow-2xl border border-[#ebd8dc] overflow-hidden my-auto max-h-[calc(100dvh-6.5rem)] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
@@ -262,7 +286,7 @@ export const VjwGuideModal: React.FC<VjwGuideModalProps> = ({ isOpen, onClose })
         </div>
 
         {/* Modal Body */}
-        <div className="p-4 sm:p-6 overflow-y-auto flex-1 space-y-4">
+        <div className="p-4 sm:p-6 overflow-y-auto min-h-0 flex-1 space-y-4">
           {/* ============================================================== */}
           {/* TAB 1: PRE-FILL COPY ASSISTANT                                 */}
           {/* ============================================================== */}
@@ -409,6 +433,20 @@ export const VjwGuideModal: React.FC<VjwGuideModalProps> = ({ isOpen, onClose })
 
                   <div className="bg-white p-3 rounded-xl border border-[#ebd8dc] flex items-center justify-between">
                     <div>
+                      <span className="text-[11px] text-[#786b6f] block">飯店日文名稱 (日文輸入備用)</span>
+                      <span className="text-xs font-bold text-[#2d2527]">ヴィアインプライム日本橋人形町</span>
+                    </div>
+                    <button
+                      onClick={() => copyToClipboard("hotel-ja", "ヴィアインプライム日本橋人形町")}
+                      className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-[#fdf2f4] hover:bg-[#fae4e8] text-[#8e2443] transition-all flex items-center gap-1 cursor-pointer"
+                    >
+                      {copiedKey === "hotel-ja" ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                      <span>{copiedKey === "hotel-ja" ? "已複製" : "複製"}</span>
+                    </button>
+                  </div>
+
+                  <div className="bg-white p-3 rounded-xl border border-[#ebd8dc] flex items-center justify-between">
+                    <div>
                       <span className="text-[11px] text-[#786b6f] block">日本聯絡電話 (電話番号)</span>
                       <span className="text-xs font-bold text-[#2d2527] font-mono">03-3667-5489</span>
                     </div>
@@ -418,6 +456,20 @@ export const VjwGuideModal: React.FC<VjwGuideModalProps> = ({ isOpen, onClose })
                     >
                       {copiedKey === "phone" ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
                       <span>{copiedKey === "phone" ? "已複製" : "複製"}</span>
+                    </button>
+                  </div>
+
+                  <div className="bg-[#fff9fa] p-3 rounded-xl border border-[#f3d9de] flex items-center justify-between">
+                    <div className="pr-2">
+                      <span className="text-[11px] text-[#992545] font-bold block">一鍵複製飯店完整住宿資訊（快速填寫備註）</span>
+                      <span className="text-[11px] text-[#4a383d] font-mono leading-tight block">〒103-0013 東京都中央区日本橋人形町2-24-3 VIA INN PRIME (TEL: 03-3667-5489)</span>
+                    </div>
+                    <button
+                      onClick={() => copyToClipboard("hotel-all", "〒103-0013 東京都中央区日本橋人形町2-24-3 VIA INN PRIME NIHONBASHI NINGYOCHO (TEL: 03-3667-5489)")}
+                      className="px-2.5 py-1.5 text-xs font-bold rounded-lg bg-[#992545] hover:bg-[#801b36] text-white transition-all flex items-center gap-1 cursor-pointer shrink-0"
+                    >
+                      {copiedKey === "hotel-all" ? <Check className="w-3 h-3 text-emerald-300" /> : <Copy className="w-3 h-3" />}
+                      <span>{copiedKey === "hotel-all" ? "已複製" : "複製全部"}</span>
                     </button>
                   </div>
                 </div>

@@ -305,7 +305,6 @@ export const PocketWishlistSection: React.FC = () => {
   const [isLoadingPlaces, setIsLoadingPlaces] = useState(false);
 
   // New Link Input Form
-  const [inputPlaceName, setInputPlaceName] = useState("");
   const [inputUrl, setInputUrl] = useState("");
   const [inputNotes, setInputNotes] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -689,10 +688,9 @@ export const PocketWishlistSection: React.FC = () => {
     setFormSuccess(null);
 
     const rawUrlInput = inputUrl.trim();
-    const rawPlaceInput = inputPlaceName.trim();
 
-    if (!rawUrlInput && !rawPlaceInput) {
-      setFormError("請輸入店家/景點名稱，或貼上 Google Maps 分享連結！");
+    if (!rawUrlInput) {
+      setFormError("請貼上 Google Maps 分享連結！");
       return;
     }
 
@@ -713,8 +711,8 @@ export const PocketWishlistSection: React.FC = () => {
     textPart = textPart.replace(/〒?\d{3}-\d{4}/g, " ");
     textPart = textPart.replace(/[·|•‧]/g, " ").replace(/\s+/g, " ").trim();
 
-    // Priority for place name: 1) explicit inputPlaceName, 2) text extracted from share snippet, 3) rawUrlInput if not HTTP
-    const explicitPlaceName = (rawPlaceInput || textPart || (!targetUrl.startsWith("http") ? targetUrl : "")).trim();
+    // Priority for place name: 1) text extracted from share snippet, 2) rawUrlInput if not HTTP, 3) URL extract
+    const explicitPlaceName = (textPart || (!targetUrl.startsWith("http") ? targetUrl : "")).trim();
 
     // Auto-construct Google Maps search URL if targetUrl is not an HTTP URL
     if (!targetUrl.startsWith("http://") && !targetUrl.startsWith("https://")) {
@@ -819,12 +817,12 @@ export const PocketWishlistSection: React.FC = () => {
 
       // Determine canonical category
       let safeCategory = (analyzed?.category || "other").toLowerCase().trim();
-      const categoryCheckText = `${analyzed?.category || ""} ${analyzed?.categoryLabel || ""} ${analyzed?.spotName || analyzed?.name || ""} ${analyzed?.desc || analyzed?.summary || ""} ${analyzed?.tag || ""}`;
-      if (/(壽喜燒|燒肉|壽司|拉麵|牛舌|和牛|炸豬排|天婦羅|居酒屋|串燒|火鍋|食堂|洋食|丼飯|今半|敘敘苑|叙々苑|利久|afuri|restaurant|sushi|ramen)/i.test(categoryCheckText)) {
+      const categoryCheckText = `${analyzed?.category || ""} ${analyzed?.categoryLabel || ""} ${analyzed?.spotName || analyzed?.name || ""} ${analyzed?.desc || analyzed?.summary || ""} ${analyzed?.tag || ""} ${targetUrl} ${explicitPlaceName}`.toLowerCase();
+      if (/(壽喜燒|すき焼き|sukiyaki|燒肉|烤肉|焼肉|yakiniku|bbq|壽司|寿司|鮨|すし|sushi|拉麵|ラーメン|ramen|沾麵|つけ麺|つけめん|烏龍麵|うどん|udon|蕎麥麵|そば|soba|炸豬排|とんかつ|tonkatsu|炸牛排|牛かつ|牛舌|牛たん|和牛|wagyu|天婦羅|天ぷら|tempura|天丼|tendon|串燒|焼き鳥|焼鳥|yakitori|串かつ|居酒屋|izakaya|食堂|定食|丼飯|丼|洋食|咖哩|カレー|curry|火鍋|しゃぶしゃぶ|鍋|もつ鍋|漢堡|ハンバーグ|hamburg|牛排|ステーキ|steak|餃子|gyoza|割烹|kappo|懷石|懐石|kaiseki|和食|washoku|海鮮|海鮮丼|seafood|餐廳|餐館|料理|restaurant|bistro|dining|今半|叙々苑|敘敘苑|利久|afuri|一蘭|一風堂|六厘舍|六厘舎|金子半之助|根室花丸|美登利|鳥貴族|挽肉と米|挽肉與米|すしざんまい)/i.test(categoryCheckText)) {
         safeCategory = "dining";
-      } else if (/(甜點|蛋糕|抹茶|咖啡|喫茶|生吐司|千層|布丁|可麗露|冰淇淋|下午茶|鬆餅|HARBS|cafe|bakery)/i.test(categoryCheckText)) {
+      } else if (/(咖啡|珈琲|coffee|cafe|喫茶|kissaten|甜點|甜品|dessert|蛋糕|cake|布丁|プリン|purin|pudding|千層|mille|可麗露|canele|生吐司|toast|鬆餅|pancake|舒芙蕾|souffle|冰淇淋|ice cream|霜淇淋|抹茶|matcha|焙茶|hojicha|下午茶|tea|烘焙|麵包|bakery|茶屋|甘味|パフェ|parfait|harbs|blue bottle|藍瓶|dixans)/i.test(categoryCheckText)) {
         safeCategory = "cafe";
-      } else if (/(神社|寺|宮|公園|庭園|展望台|塔|城|水族館|美術館|博物館|觀光|景點|shrine|temple|sky)/i.test(categoryCheckText)) {
+      } else if (/(神社|shrine|寺|temple|宮|jingu|公園|park|庭園|garden|展望台|observatory|tower|塔|城|castle|水族館|aquarium|美術館|museum|博物館|歷史古蹟|觀光|景點|attraction|skytree|sky|roppongi hills|二重橋|雷門)/i.test(categoryCheckText)) {
         safeCategory = "sightseeing";
       } else if (/(購物|百貨|商店街|藥妝|唐吉訶德|大丸|Bic|免稅|商場|mall)/i.test(categoryCheckText)) {
         safeCategory = "shopping";
@@ -1058,7 +1056,6 @@ export const PocketWishlistSection: React.FC = () => {
       // 3. Close modal & reset input fields
       setIsReviewModalOpen(false);
       setPendingCandidate(null);
-      setInputPlaceName("");
       setInputUrl("");
       setInputNotes("");
 
@@ -1422,46 +1419,31 @@ export const PocketWishlistSection: React.FC = () => {
         <div className="bg-white rounded-3xl p-5 sm:p-7 border border-[#ebd8dc] shadow-[0_10px_30px_rgba(50,30,35,0.06)] mb-8">
           <div className="flex items-center gap-2 font-bold text-[#2d2527] text-base mb-2">
             <Sparkles className="w-4 h-4 text-[#b83358]" />
-            <span>貼上 Google 地圖連結或店家 / 地址，AI 分析後審閱確認</span>
+            <span>貼上 Google 地圖分享連結，AI 自動辨識並審閱確認</span>
           </div>
           <p className="text-xs text-[#786b6f] mb-4">
-            支援手機 Google Maps「分享連結」、電腦版網址，或輸入日本店家與地址。AI 分析後將開啟<strong>「審閱視窗」</strong>供您人工檢視與編輯內容後再儲存！
+            支援手機 Google Maps「分享連結」、電腦版網址。貼上後 AI 自動精準辨識地點名稱、分類與深度介紹，並開啟<strong>「審閱視窗」</strong>供您確認後再儲存！
           </p>
 
           <form onSubmit={handleAnalyzeAndSave} className="space-y-3">
             <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5">
-              {/* Field 1: Place / Restaurant Name (Primary, high-precision) */}
-              <div className="relative md:col-span-5">
+              {/* Field 1: Google Maps Share Link (Primary) */}
+              <div className="relative md:col-span-8">
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#9e8b92]">
-                  <MapPin className="w-4 h-4 text-[#992545]" />
-                </div>
-                <input
-                  type="text"
-                  value={inputPlaceName}
-                  onChange={(e) => setInputPlaceName(e.target.value)}
-                  placeholder="店家或景點名稱 (例如：淺草今半、敘敘苑 晴空塔店、AFURI)"
-                  disabled={isAnalyzing}
-                  className="w-full pl-10 pr-3.5 py-2.5 bg-[#faf8f9] hover:bg-white focus:bg-white border border-[#e4d3d7] focus:border-[#992545] focus:ring-2 focus:ring-[#992545]/20 rounded-2xl text-xs sm:text-sm text-[#2d2527] outline-hidden transition-all font-medium"
-                />
-              </div>
-
-              {/* Field 2: Google Maps Link (Optional, auto-navigation) */}
-              <div className="relative md:col-span-4">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#9e8b92]">
-                  <LinkIcon className="w-4 h-4" />
+                  <LinkIcon className="w-4 h-4 text-[#992545]" />
                 </div>
                 <input
                   type="text"
                   value={inputUrl}
                   onChange={(e) => setInputUrl(e.target.value)}
-                  placeholder="Google 地圖分享連結 (選填，可一鍵導航)"
+                  placeholder="貼上 Google 地圖分享連結 (例如：https://maps.app.goo.gl/...) 或手機分享文字"
                   disabled={isAnalyzing}
-                  className="w-full pl-10 pr-3.5 py-2.5 bg-[#faf8f9] hover:bg-white focus:bg-white border border-[#e4d3d7] focus:border-[#992545] focus:ring-2 focus:ring-[#992545]/20 rounded-2xl text-xs sm:text-sm text-[#2d2527] outline-hidden transition-all"
+                  className="w-full pl-10 pr-3.5 py-2.5 bg-[#faf8f9] hover:bg-white focus:bg-white border border-[#e4d3d7] focus:border-[#992545] focus:ring-2 focus:ring-[#992545]/20 rounded-2xl text-xs sm:text-sm text-[#2d2527] outline-hidden transition-all font-medium"
                 />
               </div>
 
-              {/* Field 3: Notes (Optional) */}
-              <div className="md:col-span-3">
+              {/* Field 2: Notes (Optional) */}
+              <div className="md:col-span-4">
                 <input
                   type="text"
                   value={inputNotes}
@@ -1477,13 +1459,13 @@ export const PocketWishlistSection: React.FC = () => {
               <div className="text-[11px] text-[#7a6269] flex items-center gap-1.5 bg-[#fbf6f7] px-3.5 py-1.5 rounded-xl border border-[#f1dde1]">
                 <Sparkles className="w-3.5 h-3.5 text-[#992545] shrink-0" />
                 <span>
-                  💡 <strong>精確辨識小撇步：</strong>可直接輸入店家名稱（如「敘敘苑 晴空塔店」），AI 能 100% 精確識別為燒肉美食並推薦招牌菜！
+                  💡 <strong>直接貼上分享連結即可：</strong>支援各類 Google Maps 短網址與手機分享文字，AI 自動解析真實店家名稱與分類！
                 </span>
               </div>
 
               <button
                 type="submit"
-                disabled={isAnalyzing || (!inputPlaceName.trim() && !inputUrl.trim())}
+                disabled={isAnalyzing || !inputUrl.trim()}
                 className="px-6 py-2.5 bg-[#992545] hover:bg-[#801b36] disabled:bg-stone-300 text-white font-bold rounded-2xl transition-all shadow-xs flex items-center justify-center gap-2 text-xs sm:text-sm cursor-pointer disabled:cursor-not-allowed shrink-0"
               >
                 {isAnalyzing ? (
@@ -1865,11 +1847,11 @@ export const PocketWishlistSection: React.FC = () => {
           <div
             role="dialog"
             aria-modal="true"
-            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 overflow-hidden"
+            className="fixed inset-0 z-[100] bg-black/65 backdrop-blur-xs flex items-center justify-center p-3 pb-28 sm:p-5 sm:pb-32 overflow-y-auto overscroll-contain"
           >
-            <div className="bg-white rounded-3xl max-w-xl w-full shadow-2xl border border-[#ebd8dc] max-h-[88vh] sm:max-h-[85vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="bg-white rounded-3xl max-w-xl w-full shadow-2xl border border-[#ebd8dc] max-h-[calc(100dvh-7.5rem)] my-auto flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
               {/* 1. Fixed Header (Always visible at top) */}
-              <div className="flex items-center justify-between px-5 py-4 sm:px-6 sm:py-4.5 border-b border-[#f0e2e5] shrink-0 bg-white">
+              <div className="flex items-center justify-between px-5 py-3.5 sm:px-6 sm:py-4 border-b border-[#f0e2e5] shrink-0 bg-white z-10">
                 <div className="flex items-center gap-2.5">
                   <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-2xl bg-[#fcebee] text-[#992545] flex items-center justify-center shrink-0">
                     <Sparkles className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -1895,8 +1877,8 @@ export const PocketWishlistSection: React.FC = () => {
                 </button>
               </div>
 
-              {/* 2. Scrollable Body (Form Content with smooth scroll) */}
-              <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-4 text-xs">
+              {/* 2. Scrollable Body (Form Content with smooth scroll - min-h-0 prevents flex overflow cut-off) */}
+              <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-4 text-xs overscroll-contain">
                 {/* Friendly Tip if name seems generic or URL-like */}
                 {(pendingCandidate.name.startsWith("http") ||
                   pendingCandidate.name === "私房探訪據點" ||
@@ -2288,11 +2270,11 @@ export const PocketWishlistSection: React.FC = () => {
           <div
             role="dialog"
             aria-modal="true"
-            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 overflow-hidden"
+            className="fixed inset-0 z-[100] bg-black/65 backdrop-blur-xs flex items-center justify-center p-3 pb-28 sm:p-5 sm:pb-32 overflow-y-auto overscroll-contain"
           >
-            <div className="bg-white rounded-3xl max-w-xl w-full shadow-2xl border border-[#ebd8dc] max-h-[88vh] sm:max-h-[85vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="bg-white rounded-3xl max-w-xl w-full shadow-2xl border border-[#ebd8dc] max-h-[calc(100dvh-7.5rem)] my-auto flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
               {/* 1. Fixed Header */}
-              <div className="flex items-center justify-between px-5 py-4 sm:px-6 sm:py-4.5 border-b border-[#f0e2e5] shrink-0 bg-white">
+              <div className="flex items-center justify-between px-5 py-3.5 sm:px-6 sm:py-4 border-b border-[#f0e2e5] shrink-0 bg-white z-10">
                 <div className="flex items-center gap-2.5">
                   <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-2xl bg-[#fcebee] text-[#992545] flex items-center justify-center shrink-0">
                     <Edit3 className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -2316,7 +2298,7 @@ export const PocketWishlistSection: React.FC = () => {
               </div>
 
               {/* 2. Scrollable Body */}
-              <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-4 text-xs">
+              <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-4 text-xs overscroll-contain">
                 {/* Name & Japanese Name in 2 columns */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
@@ -2642,9 +2624,9 @@ export const PocketWishlistSection: React.FC = () => {
           <div
             role="dialog"
             aria-modal="true"
-            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4"
+            className="fixed inset-0 z-[100] bg-black/65 backdrop-blur-xs flex items-center justify-center p-4 pb-28 sm:pb-32"
           >
-            <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-rose-100">
+            <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-rose-100 max-h-[calc(100dvh-7.5rem)] my-auto overflow-y-auto">
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-10 h-10 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
                   <Trash2 className="w-5 h-5" />
@@ -2715,7 +2697,7 @@ export const PocketWishlistSection: React.FC = () => {
           <div
             role="dialog"
             aria-modal="true"
-            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200"
+            className="fixed inset-0 z-[100] bg-black/65 backdrop-blur-xs flex items-center justify-center p-4 pb-28 sm:pb-32 animate-in fade-in duration-200"
           >
             <div className="bg-white rounded-3xl p-6 sm:p-7 max-w-lg w-full shadow-2xl border border-[#ebd8dc] max-h-[90vh] overflow-y-auto">
               <div className="flex items-center justify-between mb-4 pb-3 border-b border-[#f0e2e5]">
@@ -2796,9 +2778,9 @@ export const PocketWishlistSection: React.FC = () => {
           <div
             role="dialog"
             aria-modal="true"
-            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4"
+            className="fixed inset-0 z-[100] bg-black/65 backdrop-blur-xs flex items-center justify-center p-4 pb-28 sm:pb-32"
           >
-            <div className="bg-white rounded-3xl p-6 sm:p-7 max-w-lg w-full shadow-2xl border border-[#ebd8dc] max-h-[90vh] overflow-y-auto">
+            <div className="bg-white rounded-3xl p-6 sm:p-7 max-w-lg w-full shadow-2xl border border-[#ebd8dc] max-h-[calc(100dvh-7.5rem)] overflow-y-auto">
               <div className="flex items-center justify-between mb-4 pb-3 border-b border-[#f0e2e5]">
                 <div className="flex items-center gap-2">
                   <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center shrink-0">
@@ -2907,9 +2889,9 @@ export const PocketWishlistSection: React.FC = () => {
           <div
             role="dialog"
             aria-modal="true"
-            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200"
+            className="fixed inset-0 z-[100] bg-black/65 backdrop-blur-xs flex items-center justify-center p-4 pb-28 sm:pb-32 animate-in fade-in duration-200"
           >
-            <div className="bg-white rounded-3xl p-6 sm:p-7 max-w-lg w-full shadow-2xl border border-[#ebd8dc] max-h-[90vh] overflow-y-auto">
+            <div className="bg-white rounded-3xl p-6 sm:p-7 max-w-lg w-full shadow-2xl border border-[#ebd8dc] max-h-[calc(100dvh-7.5rem)] overflow-y-auto">
               <div className="flex items-center justify-between mb-4 pb-3 border-b border-[#f0e2e5]">
                 <div className="flex items-center gap-2">
                   <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
@@ -3036,7 +3018,7 @@ export const PocketWishlistSection: React.FC = () => {
 
         {/* Global Floating Toast */}
         {toastMessage && (
-          <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 bg-[#2d2527] text-white px-5 py-2.5 rounded-full shadow-2xl flex items-center gap-2 text-xs font-semibold animate-bounce duration-300 pointer-events-none">
+          <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[110] bg-[#2d2527] text-white px-5 py-2.5 rounded-full shadow-2xl flex items-center gap-2 text-xs font-semibold animate-bounce duration-300 pointer-events-none">
             <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
             <span>{toastMessage}</span>
           </div>

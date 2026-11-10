@@ -599,6 +599,13 @@ export function synthesizePlaceData(
     }
 
     return {
+      spotName: cleanName,
+      desc: `${cleanName} 位於${district}，以道地烹調技藝與新鮮食材聞名，空氣中瀰漫著誘人料理香氣，每一口都感受得到對食材的專注堅持，是旅程中療癒味蕾的極上選擇。`,
+      recommendation: "建議品嚐店內的招牌現做料理；尖峰用餐時段人潮較多，推薦提早前往候位或離峰造訪，以享舒適品嚐空間。",
+      suggestedTime: "午間定食或晚間用餐時段",
+      tag: `東京散策、在地美食、自由行推薦`,
+      mapUrl: url,
+
       name: cleanName,
       japaneseName: cleanName,
       category: "dining",
@@ -629,6 +636,13 @@ export function synthesizePlaceData(
     combined.includes("抹茶")
   ) {
     return {
+      spotName: cleanName,
+      desc: `${cleanName} 營造出寧靜溫柔的木質休憩氛圍，現煮精品咖啡香氣流淌，搭配每日手作限定甜點，將旅途中的奔波悄悄撫平，沉浸在優雅愜意的午後時光。`,
+      recommendation: "推薦點選招牌手沖咖啡或拿鐵，搭配當日手作烘焙點心；下午時段甜點常提早售罄建議提早到訪。",
+      suggestedTime: "午後悠閒散策時段 (13:30 - 16:30)",
+      tag: `東京咖啡、手作甜點、午茶散策`,
+      mapUrl: url,
+
       name: cleanName,
       japaneseName: cleanName,
       category: "cafe",
@@ -674,6 +688,13 @@ export function synthesizePlaceData(
     }
 
     return {
+      spotName: cleanName,
+      desc: `${cleanName} 佇立在${district}，承載著深厚文化與歲月沉澱，微風輕拂綠意，隨處可見歷史與當代生活交織的細膩痕跡，是自由行散策途中最舒心難忘的探訪角落。`,
+      recommendation: "造訪時建議預留彈性時間漫步參觀，欣賞周邊傳統建築風情；晨間造訪人潮最為清幽舒適。",
+      suggestedTime: "清晨參拜或黃昏散策時段",
+      tag: `東京名勝、歷史古蹟、散策攝影`,
+      mapUrl: url,
+
       name: cleanName,
       japaneseName: cleanName,
       category: "sightseeing",
@@ -703,6 +724,13 @@ export function synthesizePlaceData(
     combined.includes("電器")
   ) {
     return {
+      spotName: cleanName,
+      desc: `${cleanName} 匯集多元特色品牌與潮流雜貨，動線開闊明亮，逛街採買十分舒適便捷，能一站滿足各類伴手禮與生活選物需求。`,
+      recommendation: "外國旅客可至服務櫃台出示護照確認免稅服務（Tax-Free）與外國人專屬優惠券。",
+      suggestedTime: "午後或晚間採買時段",
+      tag: `東京購物、免稅商場、精選伴手禮`,
+      mapUrl: url,
+
       name: cleanName,
       japaneseName: cleanName,
       category: "shopping",
@@ -726,6 +754,13 @@ export function synthesizePlaceData(
     combined.includes("溫泉")
   ) {
     return {
+      spotName: cleanName,
+      desc: `${cleanName} 地理位置優越，提供整潔溫馨的住宿環境與齊全設施服務，讓旅人在充實的行程後獲得充分放鬆與舒眠。`,
+      recommendation: "建議留意飯店入住（Check-in）時間，提早抵達通常可先於櫃台免費寄存行李。",
+      suggestedTime: "入住登記時段 (15:00 後)",
+      tag: `東京住宿、交通便利、舒適旅宿`,
+      mapUrl: url,
+
       name: cleanName,
       japaneseName: cleanName,
       category: "stay",
@@ -739,6 +774,13 @@ export function synthesizePlaceData(
 
   // Default fallback for any Tokyo spot: Never use "東京精選推薦據點"
   return {
+    spotName: cleanName,
+    desc: `${cleanName} 位於${district}，以其獨特的在地魅力與熱情氛圍吸引旅人前來探訪，是自由行散策途中值得駐足感受的特色去處。`,
+    recommendation: "前往時可利用 Google 地圖實時步行導航，並可點擊地圖連結確認今日最新營業時間。",
+    suggestedTime: "午後散策時段",
+    tag: `東京散策、自由行推薦、私房清單`,
+    mapUrl: url,
+
     name: cleanName,
     japaneseName: cleanName,
     category: "dining",
