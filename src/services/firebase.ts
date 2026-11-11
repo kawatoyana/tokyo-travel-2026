@@ -85,7 +85,7 @@ export function handleFirestoreError(
 // Test connection on boot per Firebase skill guidelines
 async function testConnection() {
   try {
-    await getDocFromServer(doc(db, "test", "connection"));
+    await getDocFromServer(doc(db, "savedPlaces", "connection-health"));
   } catch (error) {
     if (
       error instanceof Error &&
