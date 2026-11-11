@@ -642,6 +642,9 @@ export async function analyzePlaceWithRobustPipeline(params: {
     extractedUrl = urlMatch[0];
   }
 
+  // Preserve the exact original link pasted by the user for opening maps
+  const originalUserUrl = extractedUrl || (candidateUrlString.startsWith("http") ? candidateUrlString : "");
+
   const cleanedInputText = cleanSharedText(candidateUrlString);
   const cleanedRawText = cleanSharedText(rawText);
   const rawName = (spotName || placeName || "").trim();
@@ -678,18 +681,27 @@ export async function analyzePlaceWithRobustPipeline(params: {
 
         const loc = hopRes.headers.get("location");
         if (loc) {
-          resolvedUrl = loc;
-          const fromLoc = extractPlaceFromUrl(loc);
+          // Unwrap consent.google.com redirect if encountered
+          let cleanLoc = loc;
+          if (loc.includes("consent.google.com")) {
+            const continueMatch = loc.match(/[?&]continue=([^&#]+)/i);
+            if (continueMatch && continueMatch[1]) {
+              cleanLoc = safeDecode(continueMatch[1]);
+            }
+          }
+
+          resolvedUrl = cleanLoc;
+          const fromLoc = extractPlaceFromUrl(cleanLoc);
           if (fromLoc.name) {
             initialQueryHint = fromLoc.name;
           }
           if (fromLoc.categoryClue) {
             categoryClueFromUrl = fromLoc.categoryClue;
           }
-          if (loc.startsWith("http")) {
-            currentHopUrl = loc;
+          if (cleanLoc.startsWith("http")) {
+            currentHopUrl = cleanLoc;
           }
-          if (!loc.includes("goo.gl") && !loc.includes("page.link")) {
+          if (!cleanLoc.includes("goo.gl") && !cleanLoc.includes("page.link")) {
             break;
           }
         } else {
@@ -730,6 +742,8 @@ export async function analyzePlaceWithRobustPipeline(params: {
     resolvedUrl = targetUrl;
   }
 
+  const finalSafeMapUrl = originalUserUrl || targetUrl;
+
   // 4. Check built-in high-literary registry for instantaneous precision
   const lowerName = effectivePlaceName.toLowerCase();
   for (const [key, preset] of Object.entries(POETIC_LANDMARK_REGISTRY)) {
@@ -741,7 +755,7 @@ export async function analyzePlaceWithRobustPipeline(params: {
         desc: preset.desc,
         recommendation: preset.recommendation,
         suggestedTime: preset.suggestedTime,
-        mapUrl: targetUrl,
+        mapUrl: finalSafeMapUrl,
 
         name: preset.spotName,
         japaneseName: preset.japaneseName,
@@ -750,8 +764,8 @@ export async function analyzePlaceWithRobustPipeline(params: {
         summary: preset.desc,
         address: preset.address,
         tips: preset.recommendation,
-        url: targetUrl,
-        resolvedUrl,
+        url: finalSafeMapUrl,
+        resolvedUrl: resolvedUrl && !resolvedUrl.includes("consent.google.com") ? resolvedUrl : finalSafeMapUrl,
 
         cuisineType: preset.cuisineType,
         signatureDishes: preset.signatureDishes,
@@ -857,7 +871,8 @@ export async function analyzePlaceWithRobustPipeline(params: {
         directPlaceName ||
         (initialQueryHint && initialQueryHint !== "日本精選散策據點" && !initialQueryHint.startsWith("http") ? initialQueryHint : "") ||
         (ogTitle && !ogTitle.includes("Google") ? ogTitle : "") ||
-        targetUrl
+        effectivePlaceName ||
+        "日本精選散策據點"
       );
 
       const upstreamRes = await fetch("https://osaka-trip-2027.ai.studio/api/gemini/spot-enrich", {
@@ -866,9 +881,9 @@ export async function analyzePlaceWithRobustPipeline(params: {
         signal: AbortSignal.timeout(12000),
         body: JSON.stringify({
           spotName: nameForUpstream,
-          mapUrl: targetUrl,
-          rawInput: targetUrl,
-          cityOrArea: cityOrArea || "日本",
+          mapUrl: finalSafeMapUrl,
+          rawInput: finalSafeMapUrl,
+          cityOrArea: cityOrArea || "東京",
         }),
       });
 
@@ -924,7 +939,7 @@ export async function analyzePlaceWithRobustPipeline(params: {
       else if (/(漢堡|ハンバーグ)/i.test(inspectText)) finalCategoryLabel = "炭火手作多汁漢堡排";
       else if (/(海鮮|海鮮丼)/i.test(inspectText)) finalCategoryLabel = "產地直送極上海鮮丼";
       else if (/(咖哩|カレー)/i.test(inspectText)) finalCategoryLabel = "熟成濃郁日式咖哩";
-      else finalCategoryLabel = "在地和食人氣美饌";
+      else finalCategoryLabel = "餐廳美饌";
     }
   } else if (isCafe) {
     finalCategory = "cafe";
@@ -934,7 +949,7 @@ export async function analyzePlaceWithRobustPipeline(params: {
       else if (/(咖啡|coffee|珈琲)/i.test(inspectText)) finalCategoryLabel = "手沖精品咖啡館";
       else if (/(生吐司|toast)/i.test(inspectText)) finalCategoryLabel = "極厚焦香生吐司";
       else if (/(喫茶)/i.test(inspectText)) finalCategoryLabel = "老派懷舊昭和喫茶店";
-      else finalCategoryLabel = "質感手作甜點咖啡";
+      else finalCategoryLabel = "甜點咖啡";
     }
   } else if (isSightseeing) {
     finalCategory = "sightseeing";
@@ -943,18 +958,18 @@ export async function analyzePlaceWithRobustPipeline(params: {
       else if (/(寺)/i.test(inspectText)) finalCategoryLabel = "古剎千年歷史名勝";
       else if (/(展望台|塔|sky)/i.test(inspectText)) finalCategoryLabel = "360度露天高空展望台";
       else if (/(公園|庭園)/i.test(inspectText)) finalCategoryLabel = "四季景致都會庭園";
-      else finalCategoryLabel = "人氣名勝觀光景點";
+      else finalCategoryLabel = "觀光景點";
     }
   } else if (inspectText.includes("商場") || inspectText.includes("百貨") || inspectText.includes("mall") || inspectText.includes("免稅")) {
     finalCategory = "shopping";
-    if (!finalCategoryLabel) finalCategoryLabel = "流行免稅商場";
+    if (!finalCategoryLabel) finalCategoryLabel = "購物商場";
   } else if (inspectText.includes("飯店") || inspectText.includes("hotel") || inspectText.includes("inn") || inspectText.includes("溫泉")) {
     finalCategory = "stay";
-    if (!finalCategoryLabel) finalCategoryLabel = "旅宿溫泉飯店";
+    if (!finalCategoryLabel) finalCategoryLabel = "旅宿飯店";
   }
 
   const finalSpotName = aiData?.spotName || aiData?.name || ogTitle || effectivePlaceName;
-  const finalCategoryTitle = finalCategoryLabel || (finalCategory === "dining" ? "在地和食人氣美饌" : finalCategory === "cafe" ? "質感手作甜點咖啡" : "人氣名勝景致");
+  const finalCategoryTitle = finalCategoryLabel || (finalCategory === "dining" ? "餐廳美饌" : finalCategory === "cafe" ? "甜點咖啡" : "觀光景點");
   const finalTag = aiData?.tag || `${cityOrArea || "東京"}散策、人氣探訪、自由行推薦`;
   
   const finalDesc =
@@ -985,7 +1000,7 @@ export async function analyzePlaceWithRobustPipeline(params: {
     desc: finalDesc,
     recommendation: finalRecommendation,
     suggestedTime: finalSuggestedTime,
-    mapUrl: targetUrl,
+    mapUrl: finalSafeMapUrl,
 
     name: finalSpotName,
     japaneseName: aiData?.japaneseName || finalSpotName,
@@ -994,8 +1009,8 @@ export async function analyzePlaceWithRobustPipeline(params: {
     summary: finalDesc,
     address: finalAddress,
     tips: finalRecommendation,
-    url: targetUrl,
-    resolvedUrl,
+    url: finalSafeMapUrl,
+    resolvedUrl: resolvedUrl && !resolvedUrl.includes("consent.google.com") ? resolvedUrl : finalSafeMapUrl,
 
     cuisineType: aiData?.cuisineType || (finalCategory === "dining" ? finalCategoryTitle : undefined),
     signatureDishes: Array.isArray(aiData?.signatureDishes) ? aiData.signatureDishes : undefined,

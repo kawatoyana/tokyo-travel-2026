@@ -35,6 +35,7 @@ import {
   extractPlaceNameFromUrl,
   synthesizePlaceData,
   analyzePlaceWithClientGemini,
+  cleanGoogleMapsLink,
   type AnalyzedPlaceData,
 } from "../utils/placeAnalyzer";
 import {
@@ -206,7 +207,7 @@ const DEFAULT_SEEDS: Omit<SavedPlace, "id">[] = [
     bestTimeToVisit: "清晨或傍晚散策、慢跑時段",
   },
   {
-    url: "https://maps.app.goo.gl/rikyu-ariake",
+    url: "https://www.google.com/maps/search/?api=1&query=%E7%89%9B%E3%81%9F%E3%82%93%E7%82%AD%E7%84%BC+%E5%88%A9%E4%B9%85+%E6%9C%89%E6%98%8E%E3%82%AC%E3%83%BC%E3%83%87%E3%83%B3%E5%BA%97",
     name: "牛たん炭焼 利久 有明花園店",
     japaneseName: "牛たん炭焼 利久 有明ガーデン店",
     category: "dining",
@@ -720,6 +721,9 @@ export const PocketWishlistSection: React.FC = () => {
       targetUrl = urlExtracted;
     }
 
+    // Preserve the user's exact original URL so that native Maps opening never hits consent walls
+    const originalUserUrl = urlExtracted || (rawUrlInput.startsWith("http") ? rawUrlInput : "");
+
     // Clean text part from mobile share sheet
     let textPart = rawUrlInput.replace(/https?:\/\/[^\s]+/gi, " ").trim();
     textPart = textPart.replace(/\([\d,]+[+\s\w\u4e00-\u9fa5]*\)/g, " ");
@@ -752,9 +756,9 @@ export const PocketWishlistSection: React.FC = () => {
           credentials: "include",
           signal: AbortSignal.timeout(18000),
           body: JSON.stringify({
-            rawInput: targetUrl || rawUrlInput,
+            rawInput: originalUserUrl || targetUrl || rawUrlInput,
             spotName: explicitPlaceName || clientExtractedName,
-            mapsUrl: targetUrl.startsWith("http") ? targetUrl : "",
+            mapsUrl: originalUserUrl || (targetUrl.startsWith("http") ? targetUrl : ""),
             cityOrArea: "東京",
           }),
         });
@@ -778,7 +782,7 @@ export const PocketWishlistSection: React.FC = () => {
             credentials: "include",
             signal: AbortSignal.timeout(18000),
             body: JSON.stringify({
-              url: targetUrl,
+              url: originalUserUrl || targetUrl,
               placeName: explicitPlaceName,
               rawText: effectiveNotes || explicitPlaceName,
               clientExtractedName: clientExtractedName,
@@ -804,7 +808,6 @@ export const PocketWishlistSection: React.FC = () => {
           try {
             const unshortened = await unshortenGoogleMapsLinkClient(targetUrl);
             if (unshortened.resolvedUrl) {
-              targetUrl = unshortened.resolvedUrl;
               const nameFromUrl = extractPlaceNameFromUrl(unshortened.resolvedUrl);
               if (nameFromUrl) {
                 clientExtractedName = nameFromUrl;
@@ -824,14 +827,6 @@ export const PocketWishlistSection: React.FC = () => {
         analyzed = synthesizePlaceData(effectiveSearchName, targetUrl, rawUrlInput, inputNotes);
       }
 
-      // Valid link: format valid Google Maps search URL if not HTTP
-      const finalUrl =
-        targetUrl.startsWith("http://") || targetUrl.startsWith("https://")
-          ? targetUrl
-          : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(explicitPlaceName || targetUrl)}`;
-
-      const placeId = "p-" + Date.now() + "-" + Math.random().toString(36).substring(2, 7);
-
       // Determine canonical category
       let safeCategory = (analyzed?.category || "other").toLowerCase().trim();
       const categoryCheckText = `${analyzed?.category || ""} ${analyzed?.categoryLabel || ""} ${analyzed?.spotName || analyzed?.name || ""} ${analyzed?.desc || analyzed?.summary || ""} ${analyzed?.tag || ""} ${targetUrl} ${explicitPlaceName}`.toLowerCase();
@@ -847,12 +842,20 @@ export const PocketWishlistSection: React.FC = () => {
         safeCategory = "stay";
       }
 
-      const safeCategoryLabel = analyzed?.categoryLabel || CATEGORY_MAP[safeCategory]?.label || "其他探訪";
+      const safeCategoryLabel = analyzed?.categoryLabel || CATEGORY_MAP[safeCategory]?.label || (safeCategory === "dining" ? "餐廳美饌" : safeCategory === "cafe" ? "甜點咖啡" : "觀光景點");
 
       let candidateName = String(analyzed?.spotName || analyzed?.name || "").trim();
       if (!candidateName || candidateName.startsWith("http")) {
         candidateName = textPart || inputNotes.trim() || (!targetUrl.startsWith("http") ? targetUrl : "") || "私房探訪據點";
       }
+
+      // Valid link: PRESERVE the exact user pasted URL, clean of any consent wrapper
+      const finalUrl = cleanGoogleMapsLink(
+        originalUserUrl || analyzed?.url || targetUrl,
+        candidateName
+      );
+
+      const placeId = "p-" + Date.now() + "-" + Math.random().toString(36).substring(2, 7);
 
       const descVal = String(analyzed?.desc || analyzed?.summary || `${candidateName} 是在地廣受好評的探訪去處，氛圍與特色極具魅力，值得親自造訪體驗。`).trim();
       const recVal = String(analyzed?.recommendation || analyzed?.tips || "造訪前可開啟 Google 地圖再次確認即時營業時間與公休日。").trim();
@@ -863,6 +866,7 @@ export const PocketWishlistSection: React.FC = () => {
       const newPlaceDoc: SavedPlace = {
         id: placeId,
         url: finalUrl.slice(0, 1000),
+        mapUrl: finalUrl.slice(0, 1000),
         name: candidateName.slice(0, 200),
         spotName: String(analyzed?.spotName || candidateName).trim().slice(0, 200),
         japaneseName: String(analyzed?.japaneseName || candidateName).trim().slice(0, 200),
@@ -883,7 +887,7 @@ export const PocketWishlistSection: React.FC = () => {
         addedByName: String(currentUser?.displayName || currentUser?.email?.split("@")[0] || "旅伴").slice(0, 100),
         userId: currentUser?.uid || "local-user",
         createdAt: nowIso,
-        updatedAt: Date.now(),
+        updatedAt: nowIso,
         // Distinct Dining attributes
         cuisineType: analyzed?.cuisineType || (safeCategory === "dining" ? safeCategoryLabel : ""),
         signatureDishes: Array.isArray(analyzed?.signatureDishes) ? analyzed.signatureDishes : [],
@@ -1006,6 +1010,8 @@ export const PocketWishlistSection: React.FC = () => {
       }
     } catch {}
 
+    const safeFinalUrl = cleanGoogleMapsLink(pendingCandidate.url || "", trimmedName);
+
     const finalizedPlace: SavedPlace = {
       ...pendingCandidate,
       id: placeId,
@@ -1013,7 +1019,7 @@ export const PocketWishlistSection: React.FC = () => {
       spotName: trimmedName,
       japaneseName: (pendingCandidate.japaneseName || "").trim(),
       category: pendingCandidate.category || "dining",
-      categoryLabel: CATEGORY_MAP[pendingCandidate.category]?.label || "餐廳美饌",
+      categoryLabel: pendingCandidate.categoryLabel || CATEGORY_MAP[pendingCandidate.category]?.label || "餐廳美饌",
       desc: (pendingCandidate.desc || pendingCandidate.summary || "自由行旅人私房推薦據點。").trim(),
       summary: (pendingCandidate.summary || pendingCandidate.desc || "自由行旅人私房推薦據點。").trim(),
       recommendation: (pendingCandidate.recommendation || pendingCandidate.tips || "").trim(),
@@ -1023,8 +1029,8 @@ export const PocketWishlistSection: React.FC = () => {
       notes: (pendingCandidate.notes || "").trim(),
       tag: (pendingCandidate.tag || "").trim(),
       suggestedTime: (pendingCandidate.suggestedTime || "").trim(),
-      url: pendingCandidate.url || "",
-      mapUrl: pendingCandidate.url || "",
+      url: safeFinalUrl,
+      mapUrl: safeFinalUrl,
       cuisineType: pendingCandidate.cuisineType || "",
       signatureDishes: pendingCandidate.signatureDishes || [],
       priceRange: pendingCandidate.priceRange || "",
@@ -1044,27 +1050,31 @@ export const PocketWishlistSection: React.FC = () => {
 
     try {
       // 1. Immediately persist to React state & localStorage
-      setPlaces((prev) => {
-        const next = [finalizedPlace, ...prev.filter((p) => p.id !== placeId)];
-        savePlacesToLocal(next);
-        syncPushToGas(next);
-        return next;
-      });
+      const nextList = [finalizedPlace, ...places.filter((p) => p.id !== placeId)];
+      setPlaces(nextList);
+      savePlacesToLocal(nextList);
+      syncPushToGas(nextList);
 
       // 2. If logged in to Firebase, sync to Firestore with authorized schema fields
       if (currentUser) {
         try {
           const firestoreData: Record<string, any> = {
             url: finalizedPlace.url,
+            mapUrl: finalizedPlace.mapUrl || finalizedPlace.url,
             name: finalizedPlace.name,
+            spotName: finalizedPlace.spotName || finalizedPlace.name,
             japaneseName: finalizedPlace.japaneseName || "",
             category: finalizedPlace.category,
             categoryLabel: finalizedPlace.categoryLabel || "",
             summary: finalizedPlace.summary || "",
+            desc: finalizedPlace.desc || finalizedPlace.summary || "",
+            recommendation: finalizedPlace.recommendation || finalizedPlace.tips || "",
             highlight: finalizedPlace.highlight || "",
             address: finalizedPlace.address || "",
             tips: finalizedPlace.tips || "",
             notes: finalizedPlace.notes || "",
+            tag: finalizedPlace.tag || "",
+            suggestedTime: finalizedPlace.suggestedTime || "",
             isVisited: false,
             addedByName: finalizedPlace.addedByName || "",
             userId: currentUser.uid,
@@ -1856,7 +1866,7 @@ export const PocketWishlistSection: React.FC = () => {
                     </div>
 
                     <a
-                      href={place.url}
+                      href={cleanGoogleMapsLink(place.url, place.name)}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-1 text-xs font-bold text-[#992545] hover:text-[#70152e] hover:underline cursor-pointer"
@@ -2247,7 +2257,7 @@ export const PocketWishlistSection: React.FC = () => {
                     {pendingCandidate.url}
                   </span>
                   <a
-                    href={pendingCandidate.url}
+                    href={cleanGoogleMapsLink(pendingCandidate.url, pendingCandidate.name)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 text-[#992545] hover:underline font-bold shrink-0 ml-2"
@@ -2595,7 +2605,7 @@ export const PocketWishlistSection: React.FC = () => {
                     </label>
                     {editUrl && (
                       <a
-                        href={editUrl}
+                        href={cleanGoogleMapsLink(editUrl, editName)}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="inline-flex items-center gap-1 text-[#992545] hover:underline font-bold text-[11px]"

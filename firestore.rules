@@ -25,7 +25,7 @@ service cloud.firestore {
 
     function isValidSavedPlace(data) {
       return data.keys().hasAll(['url', 'name', 'category', 'userId']) &&
-             data.keys().hasOnly(['url', 'name', 'japaneseName', 'category', 'categoryLabel', 'summary', 'highlight', 'address', 'tips', 'notes', 'isVisited', 'addedByName', 'userId', 'createdAt', 'updatedAt']) &&
+             data.keys().hasOnly(['url', 'name', 'japaneseName', 'category', 'categoryLabel', 'summary', 'highlight', 'address', 'tips', 'notes', 'isVisited', 'addedByName', 'userId', 'createdAt', 'updatedAt', 'spotName', 'desc', 'recommendation', 'tag', 'suggestedTime', 'mapUrl']) &&
              data.url is string && data.url.size() <= 1000 &&
              data.name is string && data.name.size() <= 200 &&
              data.category is string && data.category.size() <= 50 &&
@@ -40,7 +40,13 @@ service cloud.firestore {
              (!('isVisited' in data) || data.isVisited is bool) &&
              (!('addedByName' in data) || (data.addedByName is string && data.addedByName.size() <= 100)) &&
              (!('createdAt' in data) || (data.createdAt is string && data.createdAt.size() <= 50)) &&
-             (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 50));
+             (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 50)) &&
+             (!('spotName' in data) || (data.spotName is string && data.spotName.size() <= 200)) &&
+             (!('desc' in data) || (data.desc is string && data.desc.size() <= 1000)) &&
+             (!('recommendation' in data) || (data.recommendation is string && data.recommendation.size() <= 500)) &&
+             (!('tag' in data) || (data.tag is string && data.tag.size() <= 200)) &&
+             (!('suggestedTime' in data) || (data.suggestedTime is string && data.suggestedTime.size() <= 100)) &&
+             (!('mapUrl' in data) || (data.mapUrl is string && data.mapUrl.size() <= 1000));
     }
 
     // Collaborative Pocket Wishlist: Travelers can view, add, edit, and delete saved spots

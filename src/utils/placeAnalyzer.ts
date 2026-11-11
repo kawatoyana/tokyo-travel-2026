@@ -398,7 +398,65 @@ export async function unshortenGoogleMapsLinkClient(shortUrl: string): Promise<{
     }
   }
 
+  // If resolvedUrl is a Google consent redirect, extract the actual continue= destination
+  if (resolvedUrl.includes("consent.google.com")) {
+    try {
+      const continueMatch = resolvedUrl.match(/[?&]continue=([^&#]+)/i);
+      if (continueMatch && continueMatch[1]) {
+        resolvedUrl = decodeURIComponent(continueMatch[1]);
+      }
+    } catch {}
+  }
+
   return { resolvedUrl, title };
+}
+
+/**
+ * Sanitizes any Google Maps URL to ensure it NEVER opens Google's Cookie consent page
+ */
+export function cleanGoogleMapsLink(rawUrl: string, fallbackName?: string): string {
+  if (!rawUrl) {
+    return fallbackName
+      ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(fallbackName)}`
+      : "https://www.google.com/maps";
+  }
+
+  let clean = rawUrl.trim();
+
+  // Strip consent.google.com wrapper if present
+  if (clean.includes("consent.google.com")) {
+    try {
+      const match = clean.match(/[?&]continue=([^&#]+)/i);
+      if (match && match[1]) {
+        clean = decodeURIComponent(match[1]);
+      }
+    } catch {}
+  }
+
+  // Strip sorry/index bot check wrapper
+  if (clean.includes("google.com/sorry")) {
+    try {
+      const match = clean.match(/[?&]continue=([^&#]+)/i);
+      if (match && match[1]) {
+        clean = decodeURIComponent(match[1]);
+      }
+    } catch {}
+  }
+
+  // Fallback if still consent
+  if (clean.includes("consent.google.com") || clean.includes("google.com/sorry")) {
+    if (fallbackName) {
+      return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(fallbackName)}`;
+    }
+    return "https://www.google.com/maps";
+  }
+
+  // If not HTTP, format as Google Maps search
+  if (!clean.startsWith("http://") && !clean.startsWith("https://")) {
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(clean || fallbackName || "東京")}`;
+  }
+
+  return clean;
 }
 
 /**
