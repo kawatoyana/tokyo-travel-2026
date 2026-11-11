@@ -424,7 +424,9 @@ export const FlightHotelSection: React.FC = () => {
 
       {/* VJW Interactive Assistant Modal protected by ErrorBoundary */}
       <ErrorBoundary fallbackTitle="VJW 設定指南載入發生異常" onReset={() => setIsVjwOpen(false)}>
-        <VjwGuideModal isOpen={isVjwOpen} onClose={() => setIsVjwOpen(false)} />
+        {isVjwOpen && (
+          <VjwGuideModal isOpen={isVjwOpen} onClose={() => setIsVjwOpen(false)} />
+        )}
       </ErrorBoundary>
     </section>
   );

@@ -192,7 +192,12 @@ export async function scrapeOpenGraphAndMetadata(targetUrl: string): Promise<Scr
   const result: ScrapedOpenGraph = {};
   if (
     (!targetUrl.startsWith("http://") && !targetUrl.startsWith("https://")) ||
-    targetUrl.includes("google.com/maps/search")
+    targetUrl.includes("google.com/maps") ||
+    targetUrl.includes("maps.google.com") ||
+    targetUrl.includes("maps.app.goo.gl") ||
+    targetUrl.includes("goo.gl") ||
+    targetUrl.includes("page.link") ||
+    targetUrl.includes("consent.google.com")
   ) {
     return result;
   }

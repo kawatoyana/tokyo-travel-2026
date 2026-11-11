@@ -1866,7 +1866,7 @@ export const PocketWishlistSection: React.FC = () => {
                     </div>
 
                     <a
-                      href={cleanGoogleMapsLink(place.url, place.name)}
+                      href={cleanGoogleMapsLink(place.url, place.spotName || place.name)}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-1 text-xs font-bold text-[#992545] hover:text-[#70152e] hover:underline cursor-pointer"
@@ -2257,7 +2257,7 @@ export const PocketWishlistSection: React.FC = () => {
                     {pendingCandidate.url}
                   </span>
                   <a
-                    href={cleanGoogleMapsLink(pendingCandidate.url, pendingCandidate.name)}
+                    href={cleanGoogleMapsLink(pendingCandidate.url, pendingCandidate.spotName || pendingCandidate.name)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 text-[#992545] hover:underline font-bold shrink-0 ml-2"

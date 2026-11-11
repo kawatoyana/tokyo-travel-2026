@@ -415,13 +415,28 @@ export async function unshortenGoogleMapsLinkClient(shortUrl: string): Promise<{
  * Sanitizes any Google Maps URL to ensure it NEVER opens Google's Cookie consent page
  */
 export function cleanGoogleMapsLink(rawUrl: string, fallbackName?: string): string {
-  if (!rawUrl) {
-    return fallbackName
-      ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(fallbackName)}`
-      : "https://www.google.com/maps";
-  }
+  const cleanName = (fallbackName || "").trim();
+  let clean = (rawUrl || "").trim();
 
-  let clean = rawUrl.trim();
+  // If it is a short link (maps.app.goo.gl, goo.gl, g.co) or consent redirect:
+  // Short links trigger Google's 302 redirect which drops users into consent.google.com GDPR walls on desktop.
+  // Converting short links to official Google Maps Search API URLs guarantees:
+  // 1) Zero Cookie / Terms agreement consent screens
+  // 2) Native Google Maps app opening on iOS & Android
+  // 3) Instant pin placement on the location
+  if (
+    cleanName &&
+    (!clean ||
+      clean.includes("maps.app.goo.gl") ||
+      clean.includes("goo.gl") ||
+      clean.includes("g.co/") ||
+      clean.includes("page.link") ||
+      clean.includes("consent.google.com") ||
+      clean.includes("google.com/sorry") ||
+      !clean.startsWith("http"))
+  ) {
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cleanName)}`;
+  }
 
   // Strip consent.google.com wrapper if present
   if (clean.includes("consent.google.com")) {
@@ -445,15 +460,15 @@ export function cleanGoogleMapsLink(rawUrl: string, fallbackName?: string): stri
 
   // Fallback if still consent
   if (clean.includes("consent.google.com") || clean.includes("google.com/sorry")) {
-    if (fallbackName) {
-      return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(fallbackName)}`;
+    if (cleanName) {
+      return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cleanName)}`;
     }
     return "https://www.google.com/maps";
   }
 
   // If not HTTP, format as Google Maps search
   if (!clean.startsWith("http://") && !clean.startsWith("https://")) {
-    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(clean || fallbackName || "東京")}`;
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(clean || cleanName || "東京")}`;
   }
 
   return clean;
