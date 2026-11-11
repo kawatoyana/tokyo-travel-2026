@@ -727,7 +727,7 @@ async function startServer() {
   const isProduction = process.env.NODE_ENV === "production" || process.env.NODE_ENV === "prod";
   const distPath = path.resolve(__dirname, "dist");
 
-  if (isProduction || (process.env.NODE_ENV !== "development" && fs.existsSync(distPath))) {
+  if (isProduction) {
     app.use(express.static(distPath));
     app.get("*", (_req, res) => {
       const indexPath = path.resolve(distPath, "index.html");

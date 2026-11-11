@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import {
   X,
   Copy,
@@ -81,13 +82,27 @@ export const VjwGuideModal: React.FC<VjwGuideModalProps> = ({ isOpen, onClose })
   const [activeTab, setActiveTab] = useState<"copier" | "checklist" | "vault">("copier");
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
-  // Checklist state stored in localStorage
+  // Checklist state stored in localStorage with bulletproof validation
   const [checklist, setChecklist] = useState<VjwChecklistItem[]>(() => {
     try {
-      const saved = localStorage.getItem("vjw_trip_checklist_state");
-      if (saved) return JSON.parse(saved);
-    } catch {
-      // fallback
+      if (typeof window !== "undefined" && window.localStorage) {
+        const saved = window.localStorage.getItem("vjw_trip_checklist_state");
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            return DEFAULT_VJW_CHECKLIST.map((def) => {
+              const matched = parsed.find(
+                (p) => p && typeof p === "object" && p.id === def.id
+              );
+              return matched
+                ? { ...def, checked: Boolean(matched.checked) }
+                : def;
+            });
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("Could not read vjw_trip_checklist_state:", e);
     }
     return DEFAULT_VJW_CHECKLIST;
   });
@@ -95,19 +110,29 @@ export const VjwGuideModal: React.FC<VjwGuideModalProps> = ({ isOpen, onClose })
   // Offline QR Code Vault state
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string | null>(() => {
     try {
-      return localStorage.getItem("vjw_qr_code_vault_img");
-    } catch {
-      return null;
+      if (typeof window !== "undefined" && window.localStorage) {
+        const val = window.localStorage.getItem("vjw_qr_code_vault_img");
+        return typeof val === "string" ? val : null;
+      }
+    } catch (e) {
+      console.warn("Could not read vjw_qr_code_vault_img:", e);
     }
+    return null;
   });
 
   const [isQrFullscreen, setIsQrFullscreen] = useState<boolean>(false);
+  const [fileError, setFileError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Sync checklist to localStorage
   useEffect(() => {
     try {
-      localStorage.setItem("vjw_trip_checklist_state", JSON.stringify(checklist));
+      if (typeof window !== "undefined" && window.localStorage && Array.isArray(checklist)) {
+        window.localStorage.setItem(
+          "vjw_trip_checklist_state",
+          JSON.stringify(checklist)
+        );
+      }
     } catch {
       // ignore
     }
@@ -116,17 +141,46 @@ export const VjwGuideModal: React.FC<VjwGuideModalProps> = ({ isOpen, onClose })
   // Sync QR code to localStorage
   useEffect(() => {
     try {
-      if (qrCodeDataUrl) {
-        localStorage.setItem("vjw_qr_code_vault_img", qrCodeDataUrl);
-      } else {
-        localStorage.removeItem("vjw_qr_code_vault_img");
+      if (typeof window !== "undefined" && window.localStorage) {
+        if (qrCodeDataUrl) {
+          window.localStorage.setItem("vjw_qr_code_vault_img", qrCodeDataUrl);
+        } else {
+          window.localStorage.removeItem("vjw_qr_code_vault_img");
+        }
       }
     } catch {
       // ignore
     }
   }, [qrCodeDataUrl]);
 
+  // Close on Escape key
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        if (isQrFullscreen) {
+          setIsQrFullscreen(false);
+        } else {
+          onClose();
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, isQrFullscreen, onClose]);
+
   if (!isOpen) return null;
+  if (typeof document === "undefined") return null;
+
+  const safeChecklist =
+    Array.isArray(checklist) && checklist.length > 0
+      ? checklist
+      : DEFAULT_VJW_CHECKLIST;
+  const completedCount = safeChecklist.filter((item) => item && item.checked).length;
+  const progressPercent =
+    safeChecklist.length > 0
+      ? Math.round((completedCount / safeChecklist.length) * 100)
+      : 0;
 
   const copyToClipboard = async (key: string, text: string) => {
     let copied = false;
@@ -161,18 +215,20 @@ export const VjwGuideModal: React.FC<VjwGuideModalProps> = ({ isOpen, onClose })
   };
 
   const handleToggleCheck = (id: string) => {
-    setChecklist((prev) =>
-      prev.map((item) =>
+    setChecklist((prev) => {
+      const list =
+        Array.isArray(prev) && prev.length > 0 ? prev : DEFAULT_VJW_CHECKLIST;
+      return list.map((item) =>
         item.id === id ? { ...item, checked: !item.checked } : item
-      )
-    );
+      );
+    });
   };
 
   const handleResetChecklist = () => {
-    setChecklist(DEFAULT_VJW_CHECKLIST.map((item) => ({ ...item, checked: false })));
+    setChecklist(
+      DEFAULT_VJW_CHECKLIST.map((item) => ({ ...item, checked: false }))
+    );
   };
-
-  const [fileError, setFileError] = useState<string | null>(null);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -199,15 +255,16 @@ export const VjwGuideModal: React.FC<VjwGuideModalProps> = ({ isOpen, onClose })
     setQrCodeDataUrl(null);
   };
 
-  const completedCount = checklist.filter((item) => item.checked).length;
-  const progressPercent = Math.round((completedCount / checklist.length) * 100);
-
-  return (
+  const modalMarkup = (
     <div
       role="dialog"
       aria-modal="true"
-      className="fixed inset-0 z-[100] bg-black/65 backdrop-blur-xs flex items-center justify-center p-3 pb-24 sm:p-5 sm:pb-28 overflow-y-auto"
-      onClick={onClose}
+      className="fixed inset-0 z-[100] bg-black/65 backdrop-blur-sm flex items-center justify-center p-3 pb-24 sm:p-5 sm:pb-28 overflow-y-auto"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) {
+          onClose();
+        }
+      }}
     >
       <div
         className="relative w-full max-w-2xl bg-white rounded-3xl shadow-2xl border border-[#ebd8dc] overflow-hidden my-auto max-h-[calc(100dvh-6.5rem)] flex flex-col"
@@ -508,8 +565,8 @@ export const VjwGuideModal: React.FC<VjwGuideModalProps> = ({ isOpen, onClose })
                   />
                 </div>
                 <div className="mt-2 flex items-center justify-between text-[11px] text-[#786b6f]">
-                  <span>已完成 {completedCount} 項 / 共 {checklist.length} 項</span>
-                  {completedCount === checklist.length && (
+                  <span>已完成 {completedCount} 項 / 共 {safeChecklist.length} 項</span>
+                  {completedCount === safeChecklist.length && (
                     <span className="text-emerald-700 font-bold flex items-center gap-1">
                       <CheckCircle2 className="w-3.5 h-3.5" />
                       所有手續已就緒！
@@ -520,7 +577,7 @@ export const VjwGuideModal: React.FC<VjwGuideModalProps> = ({ isOpen, onClose })
 
               {/* Checklist Items */}
               <div className="space-y-2.5">
-                {checklist.map((item) => (
+                {safeChecklist.map((item) => (
                   <div
                     key={item.id}
                     onClick={() => handleToggleCheck(item.id)}
@@ -690,7 +747,7 @@ export const VjwGuideModal: React.FC<VjwGuideModalProps> = ({ isOpen, onClose })
         <div
           role="dialog"
           aria-modal="true"
-          className="fixed inset-0 z-[80] bg-white flex flex-col items-center justify-center p-4"
+          className="fixed inset-0 z-[120] bg-white flex flex-col items-center justify-center p-4"
           onClick={() => setIsQrFullscreen(false)}
         >
           <div className="absolute top-4 right-4 z-10">
@@ -733,4 +790,6 @@ export const VjwGuideModal: React.FC<VjwGuideModalProps> = ({ isOpen, onClose })
       )}
     </div>
   );
+
+  return createPortal(modalMarkup, document.body);
 };

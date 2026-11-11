@@ -20,6 +20,7 @@ import {
   FloatingBubble,
 } from "./CuteDoodles";
 import { VjwGuideModal } from "./VjwGuideModal";
+import { ErrorBoundary } from "./ErrorBoundary";
 import { OutboundPlaneIcon, InboundPlaneIcon } from "./FlightIcons";
 import {
   fetchTaoyuanFlightCounter,
@@ -335,6 +336,7 @@ export const FlightHotelSection: React.FC = () => {
           </div>
 
           <button
+            type="button"
             onClick={() => setIsVjwOpen(true)}
             className="w-full md:w-auto px-6 py-3 rounded-full bg-[#992545] hover:bg-[#7e1c36] text-white text-xs sm:text-sm font-bold shadow-xs hover:shadow-md transition-all flex items-center justify-center gap-2 shrink-0 cursor-pointer hover:-translate-y-0.5"
           >
@@ -420,8 +422,10 @@ export const FlightHotelSection: React.FC = () => {
         </div>
       </div>
 
-      {/* VJW Interactive Assistant Modal */}
-      <VjwGuideModal isOpen={isVjwOpen} onClose={() => setIsVjwOpen(false)} />
+      {/* VJW Interactive Assistant Modal protected by ErrorBoundary */}
+      <ErrorBoundary fallbackTitle="VJW 設定指南載入發生異常" onReset={() => setIsVjwOpen(false)}>
+        <VjwGuideModal isOpen={isVjwOpen} onClose={() => setIsVjwOpen(false)} />
+      </ErrorBoundary>
     </section>
   );
 };
