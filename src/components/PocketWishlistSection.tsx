@@ -470,13 +470,22 @@ export const PocketWishlistSection: React.FC = () => {
           // Remove explicitly deleted spots
           const validRemote = remoteList.filter((p) => !deletedIds.has(p.id));
 
-          // Only keep local-only offline items that haven't been deleted
+          // Keep all local, newly added and GAS items that haven't been deleted and aren't in remote
           const remoteIds = new Set(validRemote.map((p) => p.id));
           const localOnly = prevPlaces.filter(
-            (p) => !remoteIds.has(p.id) && !deletedIds.has(p.id) && (p.id.startsWith("seed-") || p.userId === "local-user")
+            (p) => !remoteIds.has(p.id) && !deletedIds.has(p.id)
           );
 
-          const combined = [...validRemote, ...localOnly];
+          // Merge: for remote items, preserve any rich local attributes
+          const mergedRemote = validRemote.map((remote) => {
+            const localMatch = prevPlaces.find((lp) => lp.id === remote.id);
+            if (localMatch) {
+              return { ...localMatch, ...remote };
+            }
+            return remote;
+          });
+
+          const combined = [...mergedRemote, ...localOnly];
           combined.sort((a, b) => {
             const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
             const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
@@ -608,10 +617,18 @@ export const PocketWishlistSection: React.FC = () => {
 
       const remoteIds = new Set(remoteList.map((p) => p.id));
       const localOnly = places.filter(
-        (p) => !remoteIds.has(p.id) && !deletedIds.has(p.id) && (p.id.startsWith("seed-") || p.userId === "local-user")
+        (p) => !remoteIds.has(p.id) && !deletedIds.has(p.id)
       );
 
-      const combined = [...remoteList, ...localOnly];
+      const mergedRemote = remoteList.map((remote) => {
+        const localMatch = places.find((lp) => lp.id === remote.id);
+        if (localMatch) {
+          return { ...localMatch, ...remote };
+        }
+        return remote;
+      });
+
+      const combined = [...mergedRemote, ...localOnly];
       combined.sort((a, b) => {
         const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
         const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
@@ -977,18 +994,37 @@ export const PocketWishlistSection: React.FC = () => {
     const placeId = pendingCandidate.id || "p-" + Date.now() + "-" + Math.random().toString(36).substring(2, 7);
     const nowIso = new Date().toISOString();
 
+    // Ensure placeId is not in deletedIds
+    try {
+      const rawDel = localStorage.getItem(DELETED_IDS_KEY);
+      if (rawDel) {
+        const deletedSet = new Set<string>(JSON.parse(rawDel));
+        if (deletedSet.has(placeId)) {
+          deletedSet.delete(placeId);
+          localStorage.setItem(DELETED_IDS_KEY, JSON.stringify(Array.from(deletedSet)));
+        }
+      }
+    } catch {}
+
     const finalizedPlace: SavedPlace = {
       ...pendingCandidate,
       id: placeId,
       name: trimmedName,
+      spotName: trimmedName,
       japaneseName: (pendingCandidate.japaneseName || "").trim(),
       category: pendingCandidate.category || "dining",
       categoryLabel: CATEGORY_MAP[pendingCandidate.category]?.label || "餐廳美饌",
-      summary: (pendingCandidate.summary || "自由行旅人私房推薦據點。").trim(),
+      desc: (pendingCandidate.desc || pendingCandidate.summary || "自由行旅人私房推薦據點。").trim(),
+      summary: (pendingCandidate.summary || pendingCandidate.desc || "自由行旅人私房推薦據點。").trim(),
+      recommendation: (pendingCandidate.recommendation || pendingCandidate.tips || "").trim(),
       highlight: (pendingCandidate.highlight || "").trim(),
       address: (pendingCandidate.address || "東京都內").trim(),
-      tips: (pendingCandidate.tips || "").trim(),
+      tips: (pendingCandidate.tips || pendingCandidate.recommendation || "").trim(),
       notes: (pendingCandidate.notes || "").trim(),
+      tag: (pendingCandidate.tag || "").trim(),
+      suggestedTime: (pendingCandidate.suggestedTime || "").trim(),
+      url: pendingCandidate.url || "",
+      mapUrl: pendingCandidate.url || "",
       cuisineType: pendingCandidate.cuisineType || "",
       signatureDishes: pendingCandidate.signatureDishes || [],
       priceRange: pendingCandidate.priceRange || "",
@@ -997,6 +1033,12 @@ export const PocketWishlistSection: React.FC = () => {
       mustSeeHighlights: pendingCandidate.mustSeeHighlights || [],
       ticketInfo: pendingCandidate.ticketInfo || "",
       bestTimeToVisit: pendingCandidate.bestTimeToVisit || "",
+      isVisited: false,
+      visited: false,
+      isWishlist: false,
+      addedByName: pendingCandidate.addedByName || (currentUser?.displayName || currentUser?.email?.split("@")[0] || "旅伴"),
+      userId: currentUser?.uid || "local-user",
+      createdAt: pendingCandidate.createdAt || nowIso,
       updatedAt: nowIso,
     };
 
@@ -1009,47 +1051,29 @@ export const PocketWishlistSection: React.FC = () => {
         return next;
       });
 
-      // 2. If logged in to Firebase, sync to Firestore
+      // 2. If logged in to Firebase, sync to Firestore with authorized schema fields
       if (currentUser) {
         try {
-          const firestoreData = {
+          const firestoreData: Record<string, any> = {
             url: finalizedPlace.url,
             name: finalizedPlace.name,
-            spotName: finalizedPlace.spotName || finalizedPlace.name,
             japaneseName: finalizedPlace.japaneseName || "",
             category: finalizedPlace.category,
             categoryLabel: finalizedPlace.categoryLabel || "",
-            tag: finalizedPlace.tag || "",
-            desc: finalizedPlace.desc || finalizedPlace.summary || "",
             summary: finalizedPlace.summary || "",
-            recommendation: finalizedPlace.recommendation || finalizedPlace.tips || "",
             highlight: finalizedPlace.highlight || "",
-            suggestedTime: finalizedPlace.suggestedTime || "",
             address: finalizedPlace.address || "",
             tips: finalizedPlace.tips || "",
             notes: finalizedPlace.notes || "",
-            cuisineType: finalizedPlace.cuisineType || "",
-            signatureDishes: finalizedPlace.signatureDishes || [],
-            priceRange: finalizedPlace.priceRange || "",
-            diningAtmosphere: finalizedPlace.diningAtmosphere || "",
-            spotType: finalizedPlace.spotType || "",
-            mustSeeHighlights: finalizedPlace.mustSeeHighlights || [],
-            ticketInfo: finalizedPlace.ticketInfo || "",
-            bestTimeToVisit: finalizedPlace.bestTimeToVisit || "",
             isVisited: false,
-            visited: false,
-            isWishlist: false,
             addedByName: finalizedPlace.addedByName || "",
             userId: currentUser.uid,
             createdAt: finalizedPlace.createdAt || nowIso,
-            updatedAt: finalizedPlace.updatedAt || nowIso,
+            updatedAt: nowIso,
           };
           await setDoc(doc(db, "savedPlaces", placeId), firestoreData);
         } catch (dbErr: any) {
-          console.warn("Firestore sync error:", dbErr);
-          try {
-            handleFirestoreError(dbErr, OperationType.CREATE, `savedPlaces/${placeId}`);
-          } catch {}
+          console.warn("Firestore sync notice (saved locally and in GAS):", dbErr);
         }
       }
 
@@ -1109,15 +1133,10 @@ export const PocketWishlistSection: React.FC = () => {
       try {
         await updateDoc(doc(db, "savedPlaces", place.id), {
           isVisited: nextStatus,
-          visited: nextStatus,
-          isWishlist: nextStatus,
           updatedAt: new Date().toISOString(),
         });
       } catch (err) {
-        console.warn("Firestore update visited status failed:", err);
-        try {
-          handleFirestoreError(err, OperationType.UPDATE, `savedPlaces/${place.id}`);
-        } catch {}
+        console.warn("Firestore update visited status notice:", err);
       }
     }
   };
@@ -1261,12 +1280,22 @@ export const PocketWishlistSection: React.FC = () => {
       // 2. Update Firestore if logged in
       if (currentUser && !editingPlace.id.startsWith("seed-")) {
         try {
-          await updateDoc(doc(db, "savedPlaces", editingPlace.id), updatedFields);
+          const firestoreUpdateFields: Record<string, any> = {
+            name: trimmedName.slice(0, 200),
+            japaneseName: editJapaneseName.trim().slice(0, 200),
+            category: editCategory.slice(0, 50),
+            categoryLabel: updatedCatLabel,
+            address: editAddress.trim().slice(0, 300),
+            highlight: editHighlight.trim().slice(0, 500),
+            summary: updatedDesc,
+            tips: updatedRec,
+            notes: editNotes.trim().slice(0, 1000),
+            url: (editUrl.trim() || editingPlace.url).slice(0, 1000),
+            updatedAt: new Date().toISOString(),
+          };
+          await updateDoc(doc(db, "savedPlaces", editingPlace.id), firestoreUpdateFields);
         } catch (dbErr) {
-          console.warn("Firestore updateDoc failed:", dbErr);
-          try {
-            handleFirestoreError(dbErr, OperationType.UPDATE, `savedPlaces/${editingPlace.id}`);
-          } catch {}
+          console.warn("Firestore updateDoc notice:", dbErr);
         }
       }
 
