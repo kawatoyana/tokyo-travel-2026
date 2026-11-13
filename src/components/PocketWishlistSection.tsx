@@ -761,7 +761,7 @@ export const PocketWishlistSection: React.FC = () => {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
-          signal: AbortSignal.timeout(18000),
+          signal: AbortSignal.timeout(25000),
           body: JSON.stringify(enrichPayload),
         });
 
@@ -783,7 +783,7 @@ export const PocketWishlistSection: React.FC = () => {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             credentials: "include",
-            signal: AbortSignal.timeout(18000),
+            signal: AbortSignal.timeout(20000),
             body: JSON.stringify({
               url: originalUserUrl || targetUrl,
               placeName: explicitPlaceName,
@@ -807,10 +807,12 @@ export const PocketWishlistSection: React.FC = () => {
       // 3. High-Fidelity Client-side intelligence pipeline
       let clientCategoryClue = "";
       if (!analyzed) {
+        let clientExtraMeta: Awaited<ReturnType<typeof unshortenGoogleMapsLinkClient>> | undefined;
         // If it's a short link and we don't have a place name yet, unshorten client-side via CORS proxies
         if (!clientExtractedName && (targetUrl.includes("maps.app.goo.gl") || targetUrl.includes("goo.gl") || targetUrl.includes("g.co/") || targetUrl.includes("page.link"))) {
           try {
             const unshortened = await unshortenGoogleMapsLinkClient(targetUrl);
+            clientExtraMeta = unshortened;
             if (unshortened.categoryClue) {
               clientCategoryClue = unshortened.categoryClue;
             }
@@ -831,7 +833,7 @@ export const PocketWishlistSection: React.FC = () => {
         const effectiveSearchName = (explicitPlaceName || clientExtractedName || (!targetUrl.startsWith("http") ? targetUrl : "")).trim();
 
         // Client Landmark DB + Deep Tokyo Taxonomy
-        analyzed = synthesizePlaceData(effectiveSearchName, targetUrl, rawUrlInput, inputNotes, clientCategoryClue);
+        analyzed = synthesizePlaceData(effectiveSearchName, targetUrl, rawUrlInput, inputNotes, clientCategoryClue, clientExtraMeta);
       }
 
       // Determine canonical category (inspect ONLY name & labels with word boundaries — never prose description)
@@ -951,7 +953,7 @@ export const PocketWishlistSection: React.FC = () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        signal: AbortSignal.timeout(12000),
+        signal: AbortSignal.timeout(20000),
         body: JSON.stringify({
           spotName: trimmed,
           rawInput: pendingCandidate.url,
