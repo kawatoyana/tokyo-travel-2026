@@ -80,20 +80,92 @@ export function safeDecode(str: string): string {
   return prev;
 }
 
-// Clean mobile share sheet text (strips rating stars, review counts, Japanese phone numbers, postal codes)
+// Normalize Traditional Chinese Japanese-area names into Japanese Shinjitai for accurate search & matching
+export function toJapaneseAreaHint(str: string): string {
+  if (!str) return "";
+  return str
+    .replace(/澀谷/g, "渋谷")
+    .replace(/淺草/g, "浅草")
+    .replace(/武藏野/g, "武蔵野")
+    .replace(/惠比壽/g, "恵比寿")
+    .replace(/廣尾/g, "広尾")
+    .replace(/豐洲/g, "豊洲")
+    .replace(/濱松町/g, "浜松町")
+    .replace(/龜戶/g, "亀戸")
+    .replace(/高圓寺/g, "高円寺")
+    .replace(/神樂坂/g, "神楽坂")
+    .replace(/表參道/g, "表参道")
+    .replace(/自由之丘/g, "自由が丘")
+    .replace(/橫濱/g, "横浜")
+    .replace(/關西/g, "関西")
+    .replace(/大阪梅田/g, "梅田")
+    .replace(/東京站/g, "東京駅")
+    .replace(/車站/g, "駅")
+    .replace(/區/g, "区")
+    .trim();
+}
+
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const R = 6371;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+const KNOWN_AREA_BRANCH_TOKENS = [
+  "渋谷", "新宿", "銀座", "原宿", "表参道", "恵比寿", "中目黒", "代官山", "六本木", "麻布十番", "麻布台", "赤坂",
+  "池袋", "上野", "浅草", "西浅草", "秋葉原", "神田", "日本橋", "人形町", "築地", "丸の内", "東京駅", "有楽町", "日比谷",
+  "品川", "五反田", "目黒", "新橋", "浜松町", "大門", "押上", "スカイツリー", "錦糸町", "両国", "門前仲町", "清澄白河",
+  "豊洲", "有明", "台場", "お台場", "吉祥寺", "三鷹", "中野", "高円寺", "下北沢", "自由が丘", "二子玉川", "飯田橋",
+  "神楽坂", "水道橋", "九段下", "駒込", "巣鴨", "千駄ヶ谷", "北千住", "横浜", "鎌倉", "道頓堀", "難波", "心斎橋", "梅田", "京都", "祇園",
+];
+
+function extractAreaBranchTokens(text: string): string[] {
+  if (!text) return [];
+  const norm = toJapaneseAreaHint(text).toLowerCase();
+  const found = new Set<string>();
+  for (const tok of KNOWN_AREA_BRANCH_TOKENS) {
+    if (norm.includes(tok.toLowerCase())) found.add(tok);
+  }
+  const enMap: Record<string, string> = {
+    shibuya: "渋谷", shinjuku: "新宿", ginza: "銀座", harajuku: "原宿", omotesando: "表参道",
+    ebisu: "恵比寿", nakameguro: "中目黒", daikanyama: "代官山", roppongi: "六本木", akasaka: "赤坂",
+    ikebukuro: "池袋", ueno: "上野", asakusa: "浅草", akihabara: "秋葉原", kanda: "神田",
+    nihonbashi: "日本橋", ningyocho: "人形町", tsukiji: "築地", marunouchi: "丸の内", yurakucho: "有楽町",
+    shinagawa: "品川", shinbashi: "新橋", oshiage: "押上", skytree: "スカイツリー", toyosu: "豊洲",
+    ariake: "有明", odaiba: "お台場", kichijoji: "吉祥寺", nakano: "中野", shimokitazawa: "下北沢",
+    jiyugaoka: "自由が丘", kagurazaka: "神楽坂", yokohama: "横浜", namba: "難波", umeda: "梅田", kyoto: "京都",
+    kiyosumi: "清澄白河", azabudai: "麻布台", sendagaya: "千駄ヶ谷",
+  };
+  for (const [en, jp] of Object.entries(enMap)) {
+    if (new RegExp(`\\b${en}\\b`, "i").test(norm)) found.add(jp);
+  }
+  return Array.from(found);
+}
+
+// Clean mobile share sheet text (strips rating stars, review counts, phone numbers, postal codes, share boilerplate, inline addresses)
 export function cleanSharedText(input: string): string {
   if (!input) return "";
   let text = input.replace(/https?:\/\/[^\s]+/gi, " ").trim();
+  text = text.replace(/^(?:查看\s*Google\s*地圖上的|在\s*Google\s*地圖上查看|已分享的地點[：:]?|Check out\s+|Shared via Google Maps[：:]?)/i, " ");
+  text = text.replace(/\s*on Google Maps\s*$/i, " ");
+  text = text.replace(/[「『]([^」』]+)[」』]/g, " $1 ");
   text = text.replace(/\([\d,]+[+\s\w\u4e00-\u9fa5]*\)/g, " ");
   text = text.replace(/[\d.]+\s*[★☆星]+/g, " ").replace(/[★☆]+/g, " ");
   text = text.replace(/(?:\+81[\s-]?)?\b\d{2,4}-\d{2,4}-\d{4}\b/g, " ");
+  // Strip trailing full Japanese address if glued after shop name
+  text = text.replace(/\s*(?:〒?\d{3}-\d{4}\s*)?(?:東京都|大阪府|京都府|神奈川県|千葉県|埼玉県|北海道|福岡県)[^\n]{4,80}$/g, " ");
   text = text.replace(/〒?\d{3}-\d{4}/g, " ");
   text = text.replace(/[·|•‧]/g, " ");
   text = text.replace(/\s+/g, " ").trim();
   return text;
 }
 
-// Extract place title from URL or path
+// Extract place title from URL or path (extract raw segment first so %2F inside shop names isn't truncated)
 export function extractPlaceFromUrl(rawUrl: string): { name: string; categoryClue?: string; lat?: number; lng?: number } {
   if (!rawUrl) return { name: "" };
   const decoded = safeDecode(rawUrl);
@@ -108,7 +180,7 @@ export function extractPlaceFromUrl(rawUrl: string): { name: string; categoryClu
   else if (decoded.includes("hotel") || decoded.includes("lodging")) categoryClue = "stay";
 
   // Check if URL is a Google consent or sorry bot-check redirect (?continue=...)
-  const continueMatch = decoded.match(/[?&]continue=([^&#]+)/i);
+  const continueMatch = rawUrl.match(/[?&]continue=([^&#]+)/i);
   if (continueMatch && continueMatch[1]) {
     const innerUrl = safeDecode(continueMatch[1]);
     const innerResult = extractPlaceFromUrl(innerUrl);
@@ -148,20 +220,21 @@ export function extractPlaceFromUrl(rawUrl: string): { name: string; categoryClu
     }
   }
 
-  // 1. Google Maps place path: /maps/place/<name>/@<lat>,<lng>
-  const placeMatch = decoded.match(/\/maps\/place\/([^/@?]+)/i);
-  if (placeMatch && placeMatch[1]) {
-    let raw = placeMatch[1].replace(/\+/g, " ").trim();
-    raw = raw.replace(/@.*$/, "").trim();
+  // 1. Google Maps place path: /maps/place/<raw_encoded_name>/@<lat>,<lng> (preserve %2F before decode)
+  const rawPlaceMatch = rawUrl.match(/\/maps\/place\/([^?]+?)(?:\/@|\/data=|\/?(?:\?|$|#))/i);
+  if (rawPlaceMatch && rawPlaceMatch[1]) {
+    let raw = safeDecode(rawPlaceMatch[1]).replace(/\+/g, " ").trim();
+    raw = raw.replace(/@.*$/, "").replace(/\/$/, "").trim();
     if (raw && !raw.startsWith("http") && !raw.startsWith("0x") && !raw.startsWith("ChIJ")) {
       return { name: raw, categoryClue, lat, lng };
     }
   }
 
   // 2. Query parameter: ?q=<name> or ?query=<name>
-  const queryMatch = decoded.match(/[?&](?:q|query)=([^&#]+)/i);
+  const queryMatch = rawUrl.match(/[?&](?:q|query)=([^&#]+)/i);
   if (queryMatch && queryMatch[1]) {
-    let raw = queryMatch[1].replace(/\+/g, " ").trim();
+    let raw = safeDecode(queryMatch[1]).replace(/\+/g, " ").trim();
+    raw = raw.replace(/\s*(?:〒?\d{3}-\d{4}\s*)?(?:東京都|大阪府|京都府|神奈川県|千葉県|埼玉県|北海道|福岡県)[^\n]{4,80}$/g, "").trim();
     if (raw.includes(",")) {
       raw = raw.split(",")[0].trim();
     }
@@ -171,9 +244,9 @@ export function extractPlaceFromUrl(rawUrl: string): { name: string; categoryClu
   }
 
   // 3. Destination parameter: ?destination=<name>
-  const destinationMatch = decoded.match(/[?&]destination=([^&#]+)/i);
+  const destinationMatch = rawUrl.match(/[?&]destination=([^&#]+)/i);
   if (destinationMatch && destinationMatch[1]) {
-    let raw = destinationMatch[1].replace(/\+/g, " ").trim();
+    let raw = safeDecode(destinationMatch[1]).replace(/\+/g, " ").trim();
     if (raw.includes(",")) {
       raw = raw.split(",")[0].trim();
     }
@@ -183,9 +256,9 @@ export function extractPlaceFromUrl(rawUrl: string): { name: string; categoryClu
   }
 
   // 4. Search path: /maps/search/<name>/
-  const searchMatch = decoded.match(/\/maps\/search\/([^/@?]+)/i);
+  const searchMatch = rawUrl.match(/\/maps\/search\/([^?]+?)(?:\/@|\/data=|\/?(?:\?|$|#))/i);
   if (searchMatch && searchMatch[1]) {
-    let raw = searchMatch[1].replace(/\+/g, " ").trim();
+    let raw = safeDecode(searchMatch[1]).replace(/\+/g, " ").replace(/\/$/, "").trim();
     if (raw && !raw.startsWith("http") && !/^-?[\d.]+,\s*-?[\d.]+$/.test(raw)) {
       return { name: raw, categoryClue, lat, lng };
     }
@@ -442,7 +515,7 @@ const JP_PREFECTURE_CODES: Record<string, string> = {
 async function fetchNominatimInfo(lat: number, lng: number): Promise<NominatimInfo> {
   try {
     const res = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=18&extratags=1&namedetails=1&accept-language=zh-TW,ja`,
+      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=18&extratags=1&namedetails=1&accept-language=ja,zh-TW`,
       {
         signal: AbortSignal.timeout(2600),
         headers: {
@@ -563,7 +636,7 @@ interface YahooPlaceFacts {
   rawSnippetText?: string;
 }
 
-function parseYahooJapanSearchText(plainText: string): YahooPlaceFacts {
+function parseYahooJapanSearchText(plainText: string, expectedAreaTokens: string[] = []): YahooPlaceFacts {
   const facts: YahooPlaceFacts = {};
   if (!plainText || plainText.length < 100) return facts;
 
@@ -577,11 +650,11 @@ function parseYahooJapanSearchText(plainText: string): YahooPlaceFacts {
     facts.tabelogReviews = tabMatch[2];
   }
 
-  // Tabelog / Yahoo category clues (e.g. "渋谷/喫茶店 | 食べログ" or "食べログ - ... / ケーキ")
+  // Tabelog / Yahoo category clues (e.g. "渋谷/カフェ、喫茶店 | 食べログ" or "食べログ - ... / ケーキ")
   const catMatch =
-    trimmed.match(/\/([^/\s|｜\-–\n]{2,15})\s*[|｜]\s*食べログ/i) ||
-    trimmed.match(/食べログ[^/\n]{0,40}\/\s*([^\s|｜\-–\n]{2,15})\s*[-–|｜]/i) ||
-    trimmed.match(/([^\s/\n]{2,14})\/(?:営業中|営業時間外)/);
+    trimmed.match(/\/([^/\s|｜\-–\n]{2,25})\s*[|｜]\s*食べログ/i) ||
+    trimmed.match(/食べログ[^/\n]{0,40}\/\s*([^\s|｜\-–\n]{2,20})\s*[-–|｜]/i) ||
+    trimmed.match(/([^\s/\n]{2,16})\/(?:営業中|営業時間外)/);
   if (catMatch && catMatch[1]) {
     facts.yahooCategory = catMatch[1].trim();
   }
@@ -595,16 +668,51 @@ function parseYahooJapanSearchText(plainText: string): YahooPlaceFacts {
     facts.foundingYear = `${yearMatch[1]}年創業`;
   }
 
-  // Exact street address in Japan
-  const addrMatch = trimmed.match(/((?:東京都|大阪府|京都府|神奈川県|千葉県|埼玉県|北海道|福岡県)[^\s、。,；;()（）「」<>]{3,34}[0-9０-９]{1,3}[-－−丁目番地號号][0-9０-９\-－−]{1,12})/);
-  if (addrMatch && addrMatch[1]) {
-    facts.exactAddress = addrMatch[1].replace(/－/g, "-").trim();
+  // Exact street address in Japan — collect all matches and validate against expectedAreaTokens so another branch never wins!
+  const addrRe = /((?:東京都|大阪府|京都府|神奈川県|千葉県|埼玉県|北海道|福岡県)[^\s、。,；;()（）「」<>]{3,34}[0-9０-９]{1,3}[-－−丁目番地號号][0-9０-９\-－−]{1,12})/g;
+  const addrCandidates = Array.from(trimmed.matchAll(addrRe)).map((m) => m[1].replace(/－/g, "-").trim());
+  if (addrCandidates.length > 0) {
+    if (expectedAreaTokens.length > 0) {
+      let bestAddr = "";
+      let bestScore = -1;
+      for (const cand of addrCandidates) {
+        let score = 0;
+        for (const tok of expectedAreaTokens) {
+          if (cand.includes(tok)) score += tok.length;
+        }
+        if (score > bestScore) {
+          bestScore = score;
+          bestAddr = cand;
+        }
+      }
+      if (bestScore > 0) {
+        facts.exactAddress = bestAddr;
+      } else {
+        // Fallback: keep only if at least prefecture matches (never pick wrong prefecture/wrong known ward)
+        const cand0 = addrCandidates[0];
+        const prefMismatch = expectedAreaTokens.some((t) => /^(?:東京都|大阪府|京都府|神奈川県)$/.test(t)) &&
+          !expectedAreaTokens.some((t) => /^(?:東京都|大阪府|京都府|神奈川県)$/.test(t) && cand0.includes(t));
+        const candTokens = extractAreaBranchTokens(cand0);
+        const wardConflict = candTokens.length > 0 && expectedAreaTokens.some((t) => KNOWN_AREA_BRANCH_TOKENS.includes(t)) && !candTokens.some((t) => expectedAreaTokens.includes(t));
+        if (!prefMismatch && !wardConflict) {
+          facts.exactAddress = cand0;
+        }
+      }
+    } else {
+      facts.exactAddress = addrCandidates[0];
+    }
   }
 
-  // Station access
-  const accessMatch = trimmed.match(/([^\s、。,・/()（）「」]{2,12}駅?(?:東口|西口|南口|北口|中央口)?(?:から)?徒歩[0-9０-９]{1,2}分)/);
-  if (accessMatch && accessMatch[1]) {
-    facts.accessInfo = accessMatch[1].replace(/[「」]/g, "").trim();
+  // Station access — prefer station matching expectedAreaTokens if present
+  const accessRe = /(?:▶︎|▸|►|：|:|\s|^)([A-Za-z0-9一-龠ぁ-んァ-ヶー]{2,14}駅(?:[東西南北中央]*口)?(?:から)?徒歩[0-9０-９]{1,2}分)/g;
+  const accessCandidates = Array.from(trimmed.matchAll(accessRe)).map((m) => m[1].replace(/[「」]/g, "").trim());
+  if (accessCandidates.length > 0) {
+    if (expectedAreaTokens.length > 0) {
+      const matched = accessCandidates.find((a) => expectedAreaTokens.some((t) => a.includes(t) || t.includes(a.replace(/駅.*$/, ""))));
+      facts.accessInfo = matched || accessCandidates[0];
+    } else {
+      facts.accessInfo = accessCandidates[0];
+    }
   }
 
   // Hours, closed day, payment/reservation rules
@@ -667,12 +775,14 @@ function parseYahooJapanSearchText(plainText: string): YahooPlaceFacts {
   return facts;
 }
 
-async function fetchYahooJapanPlaceFacts(queryName: string, areaHint: string): Promise<YahooPlaceFacts> {
+async function fetchYahooJapanPlaceFacts(queryName: string, areaHint: string, expectedTokens: string[] = []): Promise<YahooPlaceFacts> {
   if (!queryName || queryName === "日本精選散策據點") return {};
   try {
-    const q = `${queryName} ${areaHint || ""}`.trim();
+    const jpQueryName = toJapaneseAreaHint(queryName);
+    const jpAreaHint = toJapaneseAreaHint(areaHint || "");
+    const q = jpAreaHint && !jpQueryName.includes(jpAreaHint) ? `${jpQueryName} ${jpAreaHint}`.trim() : jpQueryName;
     const res = await fetch(`https://search.yahoo.co.jp/search?p=${encodeURIComponent(q)}`, {
-      signal: AbortSignal.timeout(3200),
+      signal: AbortSignal.timeout(3400),
       headers: {
         "User-Agent":
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
@@ -689,7 +799,7 @@ async function fetchYahooJapanPlaceFacts(queryName: string, areaHint: string): P
       .replace(/&nbsp;/g, " ")
       .replace(/\s+/g, " ")
       .trim();
-    return parseYahooJapanSearchText(cleaned);
+    return parseYahooJapanSearchText(cleaned, expectedTokens);
   } catch {
     return {};
   }
@@ -1096,6 +1206,32 @@ const POETIC_LANDMARK_REGISTRY: Record<string, PoeticSpotEntry> = {
   },
 };
 
+// Branch & Coordinate Guard Metadata so Branch A of any chain is NEVER hijacked by flagship Branch B presets
+const LANDMARK_BRANCH_GUARDS: Record<string, { coords?: [number, number]; isChain?: boolean; branchTokens?: string[]; requirePattern?: RegExp; excludePattern?: RegExp }> = {
+  "志乃多": { isChain: true, branchTokens: ["人形町", "浅草"], coords: [35.685, 139.782] },
+  "今半": { isChain: true, branchTokens: ["浅草", "西浅草", "国際通り"], coords: [35.713, 139.791] },
+  "敘敘苑": { isChain: true, branchTokens: ["押上", "スカイツリー", "ソラマチ"], coords: [35.710, 139.811] },
+  "利久": { isChain: true, branchTokens: ["有明", "有明ガーデン"], coords: [35.634, 139.793] },
+  "afuri": { isChain: true, branchTokens: ["原宿", "千駄ヶ谷"], coords: [35.672, 139.705] },
+  "小網神社": { coords: [35.6838, 139.7803] },
+  "淺草寺": { coords: [35.7148, 139.7967] },
+  "shibuya sky": { coords: [35.6584, 139.7022] },
+  "挽肉": { isChain: true, requirePattern: /挽肉と米|挽肉與米/, branchTokens: ["渋谷", "道玄坂"], coords: [35.659, 139.698] },
+  "一蘭": { isChain: true, branchTokens: ["渋谷", "新宿", "浅草", "六本木"] },
+  "金子半之助": { isChain: true, branchTokens: ["日本橋", "室町"], coords: [35.686, 139.773] },
+  "根室花丸": { isChain: true, branchTokens: ["丸の内", "kitte", "東京駅"], coords: [35.6797, 139.7649] },
+  "美登利": { isChain: true, branchTokens: ["渋谷", "マークシティ", "道玄坂"], coords: [35.6585, 139.699] },
+  "鳥貴族": { isChain: true },
+  "六厘舍": { isChain: true, branchTokens: ["東京駅", "丸の内", "ラーメンストリート"], coords: [35.6805, 139.7679] },
+  "harbs": { isChain: true, branchTokens: ["渋谷", "ヒカリエ", "hikarie", "新宿", "ルミネ"], coords: [35.659, 139.703] },
+  "まったりプリン": { coords: [34.6687, 135.502] },
+  "明治神宮": { coords: [35.6764, 139.6993] },
+  "新宿御苑": { coords: [35.6852, 139.7101] },
+  "東京鐵塔": { coords: [35.6586, 139.7454] },
+  "晴空塔": { coords: [35.7101, 139.8107] },
+  "築地": { requirePattern: /築地場外|築地市場|tsukiji outer|tsukiji fish/i, excludePattern: /本願寺|銀だこ|すしざんまい|玉寿司/, coords: [35.6655, 139.7707] },
+};
+
 // Comprehensive Robust Place Analysis Pipeline
 export async function analyzePlaceWithRobustPipeline(params: {
   url?: string;
@@ -1250,7 +1386,12 @@ export async function analyzePlaceWithRobustPipeline(params: {
 
   if (jinaMarkdown) {
     jinaInfo = parseJinaGoogleMapsMarkdown(jinaMarkdown);
-    if (jinaInfo.finalUrl) {
+    if (
+      jinaInfo.finalUrl &&
+      !jinaInfo.finalUrl.includes("consent.google.com") &&
+      !jinaInfo.finalUrl.includes("google.com/sorry") &&
+      (jinaInfo.finalUrl.includes("/maps/place/") || !resolvedUrl.includes("/maps/place/"))
+    ) {
       resolvedUrl = jinaInfo.finalUrl;
       const fromJina = extractPlaceFromUrl(jinaInfo.finalUrl);
       if (fromJina.name && !initialQueryHint) initialQueryHint = fromJina.name;
@@ -1310,11 +1451,23 @@ export async function analyzePlaceWithRobustPipeline(params: {
   let effectivePlaceName = realExtractedName || "日本精選散策據點";
 
   // In keyless published mode, fetch real-time Yahoo Japan / Tabelog facts for accurate categories, menus, hours, ratings, and addresses
+  const pinAreaTokens = Array.from(
+    new Set([
+      ...extractAreaBranchTokens(`${realExtractedName} ${nominatimInfo.neighborhood || ""} ${nominatimInfo.city || ""} ${nominatimInfo.formattedAddress || ""} ${jinaInfo.address || ""}`),
+      ...(nominatimInfo.neighborhood ? [toJapaneseAreaHint(nominatimInfo.neighborhood)] : []),
+      ...(nominatimInfo.city ? [toJapaneseAreaHint(nominatimInfo.city)] : []),
+    ])
+  ).filter(Boolean);
+
   let yahooFacts: YahooPlaceFacts = {};
   if (!process.env.GEMINI_API_KEY && realExtractedName) {
     const yQuery = jinaInfo.japaneseTitle || realExtractedName || nominatimInfo.japaneseName || "";
-    const yArea = nominatimInfo.neighborhood || inferredCityOrArea;
-    yahooFacts = await fetchYahooJapanPlaceFacts(yQuery, yArea);
+    const nameAlreadyHasArea = extractAreaBranchTokens(yQuery).length > 0;
+    const specificArea = toJapaneseAreaHint(
+      [nominatimInfo.neighborhood, nominatimInfo.city].filter(Boolean).join(" ") || inferredCityOrArea
+    );
+    const yArea = nameAlreadyHasArea ? (nominatimInfo.neighborhood ? toJapaneseAreaHint(nominatimInfo.neighborhood) : "") : specificArea;
+    yahooFacts = await fetchYahooJapanPlaceFacts(yQuery, yArea, pinAreaTokens);
   }
 
   // If targetUrl is not HTTP, format standard Google Maps search URL
@@ -1324,57 +1477,94 @@ export async function analyzePlaceWithRobustPipeline(params: {
   }
 
   const cleanOriginalUrl = originalUserUrl ? unwrapGoogleRedirect(originalUserUrl) : "";
-  const finalSafeMapUrl =
-    cleanOriginalUrl && !cleanOriginalUrl.includes("consent.google.com") && !cleanOriginalUrl.includes("google.com/sorry")
-      ? cleanOriginalUrl
-      : resolvedUrl && !resolvedUrl.includes("consent.google.com") && !resolvedUrl.includes("google.com/sorry")
-      ? resolvedUrl
-      : targetUrl;
-  const cleanResolvedUrl =
-    resolvedUrl && !resolvedUrl.includes("consent.google.com") && !resolvedUrl.includes("google.com/sorry")
-      ? resolvedUrl
-      : finalSafeMapUrl;
+  const isCleanResolvedPlace =
+    !!resolvedUrl &&
+    !resolvedUrl.includes("consent.google.com") &&
+    !resolvedUrl.includes("google.com/sorry") &&
+    !resolvedUrl.includes("maps.app.goo.gl") &&
+    !resolvedUrl.includes("goo.gl") &&
+    !resolvedUrl.includes("page.link") &&
+    !resolvedUrl.includes("g.co/");
+  const cleanResolvedUrl = isCleanResolvedPlace
+    ? resolvedUrl
+    : cleanOriginalUrl && !cleanOriginalUrl.includes("consent.google.com") && !cleanOriginalUrl.includes("google.com/sorry")
+    ? cleanOriginalUrl
+    : targetUrl;
+  const finalSafeMapUrl = isCleanResolvedPlace
+    ? cleanResolvedUrl
+    : cleanOriginalUrl && !cleanOriginalUrl.includes("consent.google.com") && !cleanOriginalUrl.includes("google.com/sorry")
+    ? cleanOriginalUrl
+    : targetUrl;
 
-  // 4. Check built-in high-literary registry for instantaneous precision
-  const lowerName = `${effectivePlaceName} ${jinaInfo.japaneseTitle || ""}`.toLowerCase();
+  // 4. Branch- & Coordinate-Aware Check against built-in high-literary registry (never hijack Branch A with flagship Branch B)
+  const lowerName = toJapaneseAreaHint(`${effectivePlaceName} ${jinaInfo.japaneseTitle || ""}`).toLowerCase();
+  const branchCheckText = toJapaneseAreaHint(`${effectivePlaceName} ${jinaInfo.address || ""} ${nominatimInfo.formattedAddress || ""} ${yahooFacts.exactAddress || ""}`).toLowerCase();
+  const urlAndPinTokens = extractAreaBranchTokens(branchCheckText);
+
   for (const [key, preset] of Object.entries(POETIC_LANDMARK_REGISTRY)) {
-    if (lowerName.includes(key.toLowerCase()) || (cleanResolvedUrl && cleanResolvedUrl.toLowerCase().includes(key.toLowerCase()))) {
-      return {
-        spotName: preset.spotName,
-        categoryLabel: preset.categoryLabel,
-        tag: preset.tag,
-        desc: preset.desc,
-        recommendation: preset.recommendation,
-        suggestedTime: preset.suggestedTime,
-        mapUrl: finalSafeMapUrl,
+    const keyMatch = lowerName.includes(toJapaneseAreaHint(key).toLowerCase());
+    if (!keyMatch) continue;
 
-        name: preset.spotName,
-        japaneseName: preset.japaneseName,
-        category: preset.category,
-        highlight: preset.recommendation.split("。")[0] || `${preset.spotName} 招牌特色`,
-        summary: preset.desc,
-        address: preset.address,
-        tips: preset.recommendation,
-        url: finalSafeMapUrl,
-        resolvedUrl: cleanResolvedUrl,
+    const guard = LANDMARK_BRANCH_GUARDS[key];
+    if (guard) {
+      if (guard.requirePattern && !guard.requirePattern.test(lowerName)) continue;
+      if (guard.excludePattern && guard.excludePattern.test(lowerName)) continue;
 
-        cuisineType: preset.cuisineType,
-        signatureDishes: preset.signatureDishes,
-        priceRange: preset.priceRange,
-        diningAtmosphere: preset.diningAtmosphere,
-        spotType: preset.spotType,
-        mustSeeHighlights: preset.mustSeeHighlights,
-        ticketInfo: preset.ticketInfo,
-        bestTimeToVisit: preset.bestTimeToVisit,
+      // Coordinate check: if pin is > 1.8km away from the preset's flagship location, it's another branch or nearby place
+      if (guard.coords && coordLat && coordLng) {
+        const distKm = haversineKm(coordLat, coordLng, guard.coords[0], guard.coords[1]);
+        if (distKm > 1.8) continue;
+      }
 
-        metaSource: {
-          ogTitle: ogTitle || undefined,
-          ogDescription: ogDesc || undefined,
-          placesApiMatched: true,
-          geminiEnhanced: true,
-        },
-      };
+      // Multi-branch chain guard: if URL/pin explicitly indicates a branch/ward outside preset's flagship tokens, skip preset
+      if (guard.isChain) {
+        if (!guard.branchTokens || guard.branchTokens.length === 0) continue; // e.g. 鳥貴族 has hundreds of branches
+        if (urlAndPinTokens.length > 0) {
+          const matchesPresetBranch = urlAndPinTokens.some((tok) =>
+            guard.branchTokens!.some((bt) => bt.toLowerCase() === tok.toLowerCase() || tok.toLowerCase().includes(bt.toLowerCase()))
+          );
+          if (!matchesPresetBranch) continue;
+        } else if (guard.coords && (!coordLat || !coordLng)) {
+          // No coords & no branch info on a chain — don't guess the flagship blindly if user might want general search
+        }
+      }
     }
+
+    return {
+      spotName: preset.spotName,
+      categoryLabel: preset.categoryLabel,
+      tag: preset.tag,
+      desc: preset.desc,
+      recommendation: preset.recommendation,
+      suggestedTime: preset.suggestedTime,
+      mapUrl: finalSafeMapUrl,
+
+      name: preset.spotName,
+      japaneseName: preset.japaneseName,
+      category: preset.category,
+      highlight: preset.recommendation.split("。")[0] || `${preset.spotName} 招牌特色`,
+      summary: preset.desc,
+      address: preset.address,
+      tips: preset.recommendation,
+      url: finalSafeMapUrl,
+      resolvedUrl: cleanResolvedUrl,
+
+      cuisineType: preset.cuisineType,
+      signatureDishes: preset.signatureDishes,
+      priceRange: preset.priceRange,
+      diningAtmosphere: preset.diningAtmosphere,
+      spotType: preset.spotType,
+      mustSeeHighlights: preset.mustSeeHighlights,
+      ticketInfo: preset.ticketInfo,
+      bestTimeToVisit: preset.bestTimeToVisit,
+
+      metaSource: {
+        ogTitle: ogTitle || undefined,
+        ogDescription: ogDesc || undefined,
+        placesApiMatched: true,
+        geminiEnhanced: true,
+      },
+    };
   }
 
   // 5. Call Gemini AI (gemini-4-hydrogen with Google Search Grounding)
@@ -1482,12 +1672,13 @@ export async function analyzePlaceWithRobustPipeline(params: {
     }
   }
 
-  // 5b. Upstream AI Intelligence Pipeline (14s timeout allows full Gemini search grounding, passes extracted name + Japanese name + Yahoo category/station + area)
+  // 5b. Upstream AI Intelligence Pipeline (14s timeout, passes exact branch/address hints & validates returned branch/area against pin coordinates)
   if (!aiData) {
     try {
-      const resolvedJpName = jinaInfo.japaneseTitle || nominatimInfo.japaneseName || "";
+      const resolvedJpName = jinaInfo.japaneseTitle || (!realExtractedName ? nominatimInfo.japaneseName : "") || "";
       const factHints = [
         yahooFacts.yahooCategory,
+        yahooFacts.exactAddress || nominatimInfo.formattedAddress,
         yahooFacts.accessInfo,
         yahooFacts.isHyakumeiten ? "Tabelog百名店" : "",
       ].filter(Boolean).join(" ");
@@ -1499,9 +1690,10 @@ export async function analyzePlaceWithRobustPipeline(params: {
         cityOrArea: nominatimInfo.neighborhood ? `${inferredCityOrArea} ${nominatimInfo.neighborhood}` : inferredCityOrArea,
       };
       if (realExtractedName) {
+        const branchSuffix = !extractAreaBranchTokens(realExtractedName).length && nominatimInfo.neighborhood ? ` ${nominatimInfo.neighborhood}` : "";
         upstreamPayload.spotName = resolvedJpName && !realExtractedName.includes(resolvedJpName)
-          ? `${realExtractedName} (${resolvedJpName})`
-          : realExtractedName;
+          ? `${realExtractedName} (${resolvedJpName})${branchSuffix}`
+          : `${realExtractedName}${branchSuffix}`;
       }
 
       const upstreamRes = await fetch("https://osaka-trip-2027.ai.studio/api/gemini/spot-enrich", {
@@ -1517,6 +1709,8 @@ export async function analyzePlaceWithRobustPipeline(params: {
           const candidate = upstreamJson.data;
           const returnedName = String(candidate.spotName || candidate.name || "");
           const returnedDesc = String(candidate.desc || candidate.summary || "");
+          const returnedAddr = String(candidate.address || "");
+
           // Guard against upstream generic hallucination ("代官山 蔦屋書店") or wrong-city Osaka template
           const isHallucinatedTsutaya =
             returnedName.includes("蔦屋") &&
@@ -1530,9 +1724,25 @@ export async function analyzePlaceWithRobustPipeline(params: {
           const isGenericPlaceholder =
             returnedDesc.includes("是一個充滿魅力的日本旅遊去處") ||
             returnedDesc.includes("漫步在街角巷弄，感受在地日常生活與職人手藝的溫暖光景");
-          if (!isHallucinatedTsutaya && !isWrongOsakaFallback && !isGenericPlaceholder) {
+
+          // Guard against Wrong Branch (分店A -> 分店B): check if upstream returned a conflicting Tokyo area/branch token
+          const expectedBranchTokens = extractAreaBranchTokens(
+            `${realExtractedName} ${nominatimInfo.neighborhood || ""} ${nominatimInfo.city || ""} ${nominatimInfo.formattedAddress || ""} ${yahooFacts.exactAddress || ""}`
+          );
+          const candidateBranchTokens = extractAreaBranchTokens(`${returnedName} ${returnedAddr}`);
+          const isWrongBranch =
+            expectedBranchTokens.length > 0 &&
+            candidateBranchTokens.length > 0 &&
+            !candidateBranchTokens.some((ct) => expectedBranchTokens.includes(ct));
+          const isUnresolvedBlindGuess = !realExtractedName && !explicitText && !coordLat && !ogTitle;
+
+          if (!isHallucinatedTsutaya && !isWrongOsakaFallback && !isGenericPlaceholder && !isWrongBranch && !isUnresolvedBlindGuess) {
             aiData = candidate;
             console.log(`[AI-Enrich] Upstream Gemini successfully analyzed: ${aiData.spotName}`);
+          } else if (isWrongBranch) {
+            console.warn(
+              `[AI-Enrich] Rejected wrong-branch upstream output (${returnedName} / ${returnedAddr}), expected one of [${expectedBranchTokens.join(", ")}]`
+            );
           }
         }
       }
@@ -1546,13 +1756,13 @@ export async function analyzePlaceWithRobustPipeline(params: {
   let finalCategoryLabel = aiData?.categoryLabel || "";
   // Inspect ONLY name, Google category, Japanese subtitle, Yahoo/Tabelog category, category labels, OSM tags (only if name wasn't extracted or matches), and URL clues
   const useNominatimCat = !realExtractedName || (nominatimInfo.japaneseName && realExtractedName.includes(nominatimInfo.japaneseName));
-  const inspectText = `${realExtractedName} ${jinaInfo.japaneseTitle || ""} ${jinaInfo.googleCategory || ""} ${yahooFacts.yahooCategory || ""} ${useNominatimCat ? `${nominatimInfo.japaneseName || ""} ${nominatimInfo.osmType || ""} ${nominatimInfo.cuisine || ""}` : ""} ${ogTitle} ${categoryClueFromUrl} ${aiData?.spotName || ""} ${aiData?.categoryLabel || ""} ${aiData?.tag || ""}`.toLowerCase();
+  const inspectText = `${realExtractedName} ${jinaInfo.japaneseTitle || ""} ${jinaInfo.googleCategory || ""} ${yahooFacts.yahooCategory || ""} ${(yahooFacts.menuItems || []).join(" ")} ${(yahooFacts.extraHighlights || []).join(" ")} ${useNominatimCat ? `${nominatimInfo.japaneseName || ""} ${nominatimInfo.osmType || ""} ${nominatimInfo.cuisine || ""}` : ""} ${ogTitle} ${categoryClueFromUrl} ${aiData?.spotName || ""} ${aiData?.categoryLabel || ""} ${aiData?.tag || ""}`.toLowerCase();
 
   const isDining =
     categoryClueFromUrl === "sushi" ||
     categoryClueFromUrl === "ramen" ||
     categoryClueFromUrl === "dining" ||
-    /(壽喜燒|すき焼き|sukiyaki|燒肉|烤肉|焼肉|yakiniku|\bbbq\b|壽司|寿司|鮨|すし|sushi|拉麵|ラーメン|ramen|沾麵|つけ麺|つけめん|烏龍麵|うどん|\budon\b|蕎麥麵|そば|\bsoba\b|炸豬排|とんかつ|tonkatsu|炸牛排|牛かつ|牛舌|牛たん|和牛|wagyu|天婦羅|天ぷら|tempura|天丼|tendon|串燒|焼き鳥|焼鳥|yakitori|雞肉料理|鳥料理|鳥元|串かつ|居酒屋|izakaya|酒場|酒館|食堂|定食|丼飯|洋食|咖哩|カレー|\bcurry\b|火鍋|しゃぶしゃぶ|もつ鍋|漢堡排|ハンバーグ|hamburg|牛排|ステーキ|\bsteak\b|餃子|gyoza|割烹|kappo|懷石|懐石|kaiseki|和食|washoku|海鮮|海鮮丼|\bseafood\b|餐廳|餐館|\brestaurant\b|\bbistro\b|\bdining\b|\bpizza\b|\bpasta\b|義大利麵|燒鳥|鰻魚|うなぎ|今半|叙々苑|敘敘苑|利久|afuri|一蘭|一風堂|六厘舍|六厘舎|金子半之助|根室花丸|美登利|鳥貴族|挽肉と米|挽肉與米|すしざんまい)/i.test(
+    /(壽喜燒|すき焼き|すき焼|sukiyaki|燒肉|焼き肉|烤肉|焼肉|yakiniku|\bbbq\b|壽司|寿司|鮨|すし|回転寿司|sushi|拉麵|ラーメン|らーめん|ramen|沾麵|つけ麺|つけめん|烏龍麵|うどん|\budon\b|蕎麥麵|そば|蕎麦|\bsoba\b|炸豬排|とんかつ|豚カツ|tonkatsu|炸牛排|牛かつ|gyukatsu|牛舌|牛たん|牛タン|ねぎし|和牛|wagyu|天婦羅|天ぷら|tempura|天丼|tendon|串燒|焼き鳥|焼鳥|yakitori|雞肉料理|鳥料理|鳥元|串かつ|居酒屋|izakaya|酒場|酒館|立ち飲み|ダイニングバー|食堂|定食|丼飯|洋食|咖哩|カレー|\bcurry\b|火鍋|しゃぶしゃぶ|\bshabu\b|もつ鍋|漢堡排|ハンバーグ|hamburg|牛排|ステーキ|\bsteak\b|鐵板燒|鉄板焼|teppanyaki|文字燒|もんじゃ|\bmonja\b|大阪燒|お好み焼き|okonomiyaki|關東煮|おでん|\boden\b|餃子|gyoza|割烹|kappo|懷石|懐石|kaiseki|おまかせ|omakase|和食|washoku|海鮮|海鮮丼|\bseafood\b|餐廳|餐館|\brestaurant\b|\bbistro\b|\bdining\b|\btrattoria\b|\bosteria\b|\bpizzeria\b|\bkitchen\b|\bgrill\b|\btavern\b|\bpizza\b|\bpasta\b|義大利麵|燒鳥|鰻魚|うなぎ|\bunagi\b|今半|叙々苑|敘敘苑|利久|\bafuri\b|一蘭|一風堂|山頭火|大戸屋|やよい軒|六厘舍|六厘舎|金子半之助|根室花丸|美登利|鳥貴族|挽肉と米|挽肉與米|すしざんまい)/i.test(
       inspectText
     );
 
@@ -1561,7 +1771,7 @@ export async function analyzePlaceWithRobustPipeline(params: {
     nominatimInfo.osmType === "pastry" ||
     nominatimInfo.osmType === "bakery" ||
     nominatimInfo.osmType === "cafe" ||
-    /(咖啡|珈琲|\bcoffee\b|\bcafe\b|カフェ|喫茶|kissaten|甜點|甜品|\bdessert\b|スイーツ|洋菓子|ケーキ|蛋糕|\bcake\b|cake shop|泡芙|シュー|chou|布丁|プリン|purin|pudding|千層|mille|可麗露|canele|生吐司|\btoast\b|鬆餅|pancake|舒芙蕾|souffle|冰淇淋|ice cream|霜淇淋|抹茶|matcha|焙茶|hojicha|下午茶|\btea\b|烘焙|麵包|パン|ベーカリー|\bbakery\b|\bpastry\b|\bpatisserie\b|菓子|茶屋|甘味|パフェ|parfait|harbs|blue bottle|藍瓶|dixans|sucre-rie|シュークリー)/i.test(
+    /(咖啡|珈琲|\bcoffee\b|\bcafe\b|\broastery\b|\bespresso\b|カフェ|喫茶|kissaten|甜點|甜品|\bdessert\b|\bsweets\b|スイーツ|洋菓子|和菓子|ケーキ|蛋糕|\bcake\b|cake shop|泡芙|シュー|chou|布丁|プリン|purin|pudding|千層|mille|可麗露|canele|生吐司|\btoast\b|鬆餅|pancake|\bwaffle\b|\bcrepe\b|舒芙蕾|souffle|冰淇淋|ice cream|\bgelato\b|霜淇淋|抹茶|matcha|焙茶|hojicha|下午茶|\btea\b|\btea house\b|\btea room\b|\bparlor\b|フルーツパーラー|烘焙|麵包|パン|ベーカリー|\bbakery\b|\bboulangerie\b|\bpastry\b|\bpatisserie\b|\bchocolatier\b|菓子|茶屋|甘味|パフェ|parfait|harbs|blue bottle|藍瓶|dixans|sucre-rie|シュークリー)/i.test(
       inspectText
     );
 
@@ -1696,7 +1906,19 @@ export async function analyzePlaceWithRobustPipeline(params: {
 
   const finalSuggestedTime = aiData?.suggestedTime || (finalCategory === "dining" ? "午間定食或晚間用餐時段" : finalCategory === "cafe" ? "午後悠閒散策時段 (13:30 - 16:30)" : "清晨參拜或黃昏散策時段");
   const genericAddr = !aiData?.address || /^(東京|大阪|京都)?市區$/.test(String(aiData.address).trim());
-  const finalAddress = yahooFacts.exactAddress || (!genericAddr ? aiData?.address : undefined) || nominatimInfo.formattedAddress || jinaInfo.address || ogData.schemaAddress || (areaLabel || "日本都會商圈");
+  const finalPinAreaTokens = extractAreaBranchTokens(`${realExtractedName} ${nominatimInfo.neighborhood || ""} ${nominatimInfo.formattedAddress || ""}`);
+  const aiAddrTokens = aiData?.address ? extractAreaBranchTokens(String(aiData.address)) : [];
+  const aiAddrConflict =
+    finalPinAreaTokens.length > 0 &&
+    aiAddrTokens.length > 0 &&
+    !aiAddrTokens.some((tok) => finalPinAreaTokens.includes(tok));
+  const finalAddress =
+    yahooFacts.exactAddress ||
+    (!genericAddr && !aiAddrConflict ? aiData?.address : undefined) ||
+    nominatimInfo.formattedAddress ||
+    jinaInfo.address ||
+    ogData.schemaAddress ||
+    (areaLabel || "日本都會商圈");
 
   // Extract quoted specialties 「...」 from AI/prose recommendation & desc + real Yahoo menu items
   const quotedItems = Array.from(

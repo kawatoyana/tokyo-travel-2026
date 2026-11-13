@@ -723,11 +723,15 @@ export const PocketWishlistSection: React.FC = () => {
     // Preserve the user's exact original URL so that native Maps opening never hits consent walls
     const originalUserUrl = urlExtracted || (rawUrlInput.startsWith("http") ? rawUrlInput : "");
 
-    // Clean text part from mobile share sheet
+    // Clean text part from mobile share sheet (strip share-sheet boilerplate & inline addresses)
     let textPart = rawUrlInput.replace(/https?:\/\/[^\s]+/gi, " ").trim();
+    textPart = textPart.replace(/^(?:查看\s*Google\s*地圖上的|在\s*Google\s*地圖上查看|已分享的地點[：:]?|Check out\s+|Shared via Google Maps[：:]?)/i, " ");
+    textPart = textPart.replace(/\s*on Google Maps\s*$/i, " ");
+    textPart = textPart.replace(/[「『]([^」』]+)[」』]/g, " $1 ");
     textPart = textPart.replace(/\([\d,]+[+\s\w\u4e00-\u9fa5]*\)/g, " ");
     textPart = textPart.replace(/[\d.]+\s*[★☆星]+/g, " ").replace(/[★☆]+/g, " ");
     textPart = textPart.replace(/(?:\+81[\s-]?)?\b\d{2,4}-\d{2,4}-\d{4}\b/g, " ");
+    textPart = textPart.replace(/\s*(?:〒?\d{3}-\d{4}\s*)?(?:東京都|大阪府|京都府|神奈川県|千葉県|埼玉県|北海道|福岡県)[^\n]{4,80}$/g, " ");
     textPart = textPart.replace(/〒?\d{3}-\d{4}/g, " ");
     textPart = textPart.replace(/[·|•‧]/g, " ").replace(/\s+/g, " ").trim();
 
@@ -839,17 +843,17 @@ export const PocketWishlistSection: React.FC = () => {
       // Determine canonical category (inspect ONLY name & labels with word boundaries — never prose description)
       let safeCategory = (analyzed?.category || "other").toLowerCase().trim();
       const hasValidServerCategory = ["dining", "cafe", "sightseeing", "shopping", "stay"].includes(safeCategory);
-      const nameCheckText = `${analyzed?.categoryLabel || ""} ${analyzed?.spotName || analyzed?.name || ""} ${clientCategoryClue} ${explicitPlaceName}`.toLowerCase();
+      const nameCheckText = `${analyzed?.categoryLabel || ""} ${analyzed?.spotName || analyzed?.name || ""} ${clientCategoryClue} ${explicitPlaceName} ${clientExtraMeta?.yahooCategory || ""} ${(clientExtraMeta?.menuItems || []).join(" ")}`.toLowerCase();
 
       if (!hasValidServerCategory) {
         if (
           clientCategoryClue === "dining" ||
-          /(壽喜燒|すき焼き|sukiyaki|燒肉|烤肉|焼肉|yakiniku|\bbbq\b|壽司|寿司|鮨|すし|\bsushi\b|拉麵|ラーメン|\bramen\b|沾麵|つけ麺|つけめん|烏龍麵|うどん|\budon\b|蕎麥麵|そば|\bsoba\b|炸豬排|とんかつ|tonkatsu|炸牛排|牛かつ|牛舌|牛たん|和牛|wagyu|天婦羅|天ぷら|tempura|天丼|tendon|串燒|焼き鳥|焼鳥|yakitori|串かつ|居酒屋|\bizakaya\b|食堂|定食|丼飯|洋食|咖哩|カレー|\bcurry\b|火鍋|しゃぶしゃぶ|もつ鍋|漢堡排|ハンバーグ|hamburg|牛排|ステーキ|\bsteak\b|餃子|gyoza|割烹|kappo|懷石|懐石|kaiseki|和食|washoku|海鮮|海鮮丼|\bseafood\b|餐廳|餐館|料理|\brestaurant\b|\bbistro\b|\bdining\b|今半|叙々苑|敘敘苑|利久|afuri|一蘭|一風堂|六厘舍|六厘舎|金子半之助|根室花丸|美登利|鳥貴族|挽肉と米|挽肉與米|すしざんまい)/i.test(nameCheckText)
+          /(壽喜燒|すき焼き|すき焼|sukiyaki|燒肉|焼き肉|烤肉|焼肉|yakiniku|\bbbq\b|壽司|寿司|鮨|すし|回転寿司|\bsushi\b|拉麵|ラーメン|らーめん|\bramen\b|沾麵|つけ麺|つけめん|烏龍麵|うどん|\budon\b|蕎麥麵|そば|蕎麦|\bsoba\b|炸豬排|とんかつ|豚カツ|tonkatsu|炸牛排|牛かつ|gyukatsu|牛舌|牛たん|牛タン|ねぎし|和牛|wagyu|天婦羅|天ぷら|tempura|天丼|tendon|串燒|焼き鳥|焼鳥|yakitori|串かつ|居酒屋|\bizakaya\b|酒場|立ち飲み|ダイニングバー|食堂|定食|丼飯|洋食|咖哩|カレー|\bcurry\b|火鍋|しゃぶしゃぶ|\bshabu\b|もつ鍋|漢堡排|ハンバーグ|hamburg|牛排|ステーキ|\bsteak\b|鐵板燒|鉄板焼|teppanyaki|文字燒|もんじゃ|\bmonja\b|大阪燒|お好み焼き|okonomiyaki|關東煮|おでん|\boden\b|餃子|gyoza|割烹|kappo|懷石|懐石|kaiseki|おまかせ|omakase|和食|washoku|海鮮|海鮮丼|\bseafood\b|餐廳|餐館|料理|\brestaurant\b|\bbistro\b|\bdining\b|\btrattoria\b|\bosteria\b|\bpizzeria\b|\bkitchen\b|\bgrill\b|\btavern\b|鰻魚|うなぎ|\bunagi\b|今半|叙々苑|敘敘苑|利久|\bafuri\b|一蘭|一風堂|山頭火|大戸屋|やよい軒|六厘舍|六厘舎|金子半之助|根室花丸|美登利|鳥貴族|挽肉と米|挽肉與米|すしざんまい)/i.test(nameCheckText)
         ) {
           safeCategory = "dining";
         } else if (
           clientCategoryClue === "cafe" ||
-          /(咖啡|珈琲|\bcoffee\b|\bcafe\b|喫茶|kissaten|甜點|甜品|\bdessert\b|蛋糕|\bcake\b|泡芙|シュー|\bchou\b|布丁|プリン|purin|pudding|千層|mille|可麗露|canele|生吐司|\btoast\b|鬆餅|pancake|舒芙蕾|souffle|冰淇淋|ice cream|霜淇淋|抹茶|matcha|焙茶|hojicha|下午茶|\btea\b|烘焙|麵包|\bbakery\b|\bpastry\b|茶屋|甘味|パフェ|parfait|harbs|blue bottle|藍瓶|dixans|sucre-rie|シュークリー)/i.test(nameCheckText)
+          /(咖啡|珈琲|\bcoffee\b|\bcafe\b|\broastery\b|\bespresso\b|喫茶|kissaten|甜點|甜品|\bdessert\b|\bsweets\b|和菓子|洋菓子|蛋糕|\bcake\b|泡芙|シュー|\bchou\b|布丁|プリン|purin|pudding|千層|mille|可麗露|canele|生吐司|\btoast\b|鬆餅|pancake|\bwaffle\b|\bcrepe\b|舒芙蕾|souffle|冰淇淋|ice cream|\bgelato\b|霜淇淋|抹茶|matcha|焙茶|hojicha|下午茶|\btea\b|\btea house\b|\btea room\b|\bparlor\b|フルーツパーラー|烘焙|麵包|\bbakery\b|\bboulangerie\b|\bpastry\b|\bpatisserie\b|\bchocolatier\b|茶屋|甘味|パフェ|parfait|harbs|blue bottle|藍瓶|dixans|sucre-rie|シュークリー)/i.test(nameCheckText)
         ) {
           safeCategory = "cafe";
         } else if (
@@ -879,10 +883,22 @@ export const PocketWishlistSection: React.FC = () => {
         candidateName = textPart || inputNotes.trim() || (!targetUrl.startsWith("http") ? targetUrl : "") || "私房探訪據點";
       }
 
-      // Valid link: PRESERVE the exact user pasted URL, clean of any consent wrapper
+      // Preserve the resolved Google Maps pin (so exact branch never gets lost), clean of consent wrappers, with branch-address search fallback
+      const resolvedPinCandidate = [analyzed?.resolvedUrl, analyzed?.mapUrl, analyzed?.url, clientExtraMeta?.resolvedUrl].find(
+        (u) =>
+          typeof u === "string" &&
+          u.startsWith("http") &&
+          !u.includes("maps.app.goo.gl") &&
+          !u.includes("goo.gl") &&
+          !u.includes("g.co/") &&
+          !u.includes("page.link") &&
+          !u.includes("consent.google.com") &&
+          !u.includes("google.com/sorry")
+      );
       const finalUrl = cleanGoogleMapsLink(
-        originalUserUrl || analyzed?.url || targetUrl,
-        candidateName
+        resolvedPinCandidate || originalUserUrl || analyzed?.url || targetUrl,
+        candidateName,
+        String(analyzed?.address || clientExtraMeta?.address || "")
       );
 
       const placeId = "p-" + Date.now() + "-" + Math.random().toString(36).substring(2, 7);
@@ -968,8 +984,15 @@ export const PocketWishlistSection: React.FC = () => {
           const d = json.data;
           const descVal = d.desc || d.summary || pendingCandidate.desc;
           const recVal = d.recommendation || d.tips || pendingCandidate.recommendation;
+          const nextMapUrl = cleanGoogleMapsLink(
+            d.resolvedUrl || d.mapUrl || pendingCandidate.url,
+            d.spotName || d.name || trimmed,
+            d.address || pendingCandidate.address
+          );
           setPendingCandidate({
             ...pendingCandidate,
+            url: nextMapUrl,
+            mapUrl: nextMapUrl,
             name: d.spotName || d.name || trimmed,
             spotName: d.spotName || d.name || trimmed,
             japaneseName: d.japaneseName || pendingCandidate.japaneseName,
