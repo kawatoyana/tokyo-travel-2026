@@ -78,6 +78,36 @@
           "type": "string",
           "maxLength": 50,
           "description": "ISO timestamp of last update"
+        },
+        "spotName": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "Display spot name"
+        },
+        "desc": {
+          "type": "string",
+          "maxLength": 1000,
+          "description": "Literary description"
+        },
+        "recommendation": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Signature dish or highlight recommendation"
+        },
+        "tag": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "Descriptive tags"
+        },
+        "suggestedTime": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "Suggested visit time"
+        },
+        "mapUrl": {
+          "type": "string",
+          "maxLength": 1000,
+          "description": "Preserved Google Maps link"
         }
       },
       "required": ["url", "name", "category", "userId"]

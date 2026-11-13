@@ -317,17 +317,34 @@ const TOKYO_LANDMARKS: Record<string, Partial<AnalyzedPlaceData>> = {
  * Attempt to unshorten Google Maps short link client-side via CORS-friendly proxies
  * (Works 100% on static hosts like GitHub Pages without backend)
  */
-export async function unshortenGoogleMapsLinkClient(shortUrl: string): Promise<{ resolvedUrl: string; title: string }> {
+export async function unshortenGoogleMapsLinkClient(shortUrl: string): Promise<{ resolvedUrl: string; title: string; categoryClue?: string }> {
   let resolvedUrl = "";
   let title = "";
 
   const cleanShort = shortUrl.trim();
 
+  const unwrapRedirect = (u: string): string => {
+    let cur = u;
+    for (let i = 0; i < 3; i++) {
+      if (cur.includes("consent.google.com") || cur.includes("google.com/sorry")) {
+        const m = cur.match(/[?&]continue=([^&#]+)/i);
+        if (m && m[1]) {
+          try {
+            cur = decodeURIComponent(m[1]);
+            continue;
+          } catch {}
+        }
+      }
+      break;
+    }
+    return cur;
+  };
+
   // 1. Try Jina Reader Proxy (Fast, follows 302 redirects, returns Final URL & Markdown)
   try {
     const jinaUrl = `https://r.jina.ai/${cleanShort}`;
     const res = await fetch(jinaUrl, {
-      signal: AbortSignal.timeout(3500),
+      signal: AbortSignal.timeout(4500),
       headers: {
         Accept: "text/plain",
       },
@@ -336,20 +353,23 @@ export async function unshortenGoogleMapsLinkClient(shortUrl: string): Promise<{
       const text = await res.text();
       const finalUrlMatch = text.match(/Final URL:\s*(https?:\/\/[^\s\n]+)/i);
       if (finalUrlMatch && finalUrlMatch[1]) {
-        resolvedUrl = finalUrlMatch[1].trim();
+        resolvedUrl = unwrapRedirect(finalUrlMatch[1].trim());
       }
 
       const titleMatch = text.match(/Title:\s*([^\n\r]+)/i);
       if (titleMatch && titleMatch[1]) {
-        let t = titleMatch[1].trim();
-        t = t.replace(/\s*[-–—|]\s*Google\s*(?:Maps|地圖|マップ)?.*$/i, "").trim();
-        t = t.replace(/\s*[-–—|]\s*Google.*$/i, "").trim();
-        if (t && !t.includes("Google") && t !== "Google Maps") {
+        let rawT = titleMatch[1].trim();
+        if (rawT.includes("/maps/place/") && !resolvedUrl) {
+          resolvedUrl = unwrapRedirect(rawT);
+        }
+        let t = rawT.replace(/\s*[-–—|·]\s*Google\s*(?:Maps|地圖|マップ)?.*$/i, "").trim();
+        t = t.replace(/\s*[-–—|·]\s*Google.*$/i, "").trim();
+        if (t && !t.startsWith("http") && !t.includes("Google") && t !== "Google Maps") {
           title = t;
         }
       }
     }
-  } catch (e) {
+  } catch {
     // Continue to next fallback
   }
 
@@ -357,15 +377,15 @@ export async function unshortenGoogleMapsLinkClient(shortUrl: string): Promise<{
   if (!resolvedUrl) {
     try {
       const unRes = await fetch("https://unshorten.me/json/" + encodeURIComponent(cleanShort), {
-        signal: AbortSignal.timeout(2500),
+        signal: AbortSignal.timeout(3000),
       });
       if (unRes.ok) {
         const uData = await unRes.json();
         if (uData?.resolved_url) {
-          resolvedUrl = uData.resolved_url;
+          resolvedUrl = unwrapRedirect(uData.resolved_url);
         }
       }
-    } catch (e) {
+    } catch {
       // Continue
     }
   }
@@ -374,41 +394,61 @@ export async function unshortenGoogleMapsLinkClient(shortUrl: string): Promise<{
   if (!resolvedUrl) {
     try {
       const res = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(cleanShort)}`, {
-        signal: AbortSignal.timeout(3000),
+        signal: AbortSignal.timeout(3500),
       });
       if (res.ok) {
         const data = await res.json();
         if (data?.status?.url) {
-          resolvedUrl = data.status.url;
+          resolvedUrl = unwrapRedirect(data.status.url);
         }
         if (data?.contents && typeof data.contents === "string") {
+          const placeUrlMatch = data.contents.match(/https?:\/\/(?:www\.)?google\.[^/\s"'<>]+\/maps\/place\/[^"'\s<>\\]+/i);
+          if (placeUrlMatch && placeUrlMatch[0] && (!resolvedUrl || resolvedUrl.includes("consent.google.com") || resolvedUrl.includes("google.com/sorry"))) {
+            resolvedUrl = unwrapRedirect(placeUrlMatch[0].replace(/&amp;/g, "&"));
+          }
           const titleMatch = data.contents.match(/<title[^>]*>([^<]+)<\/title>/i);
           if (titleMatch && titleMatch[1]) {
-            let t = titleMatch[1].trim();
-            t = t.replace(/\s*[-–—|]\s*Google\s*(?:Maps|地圖|マップ)?.*$/i, "").trim();
-            t = t.replace(/\s*[-–—|]\s*Google.*$/i, "").trim();
-            if (t && !t.includes("Google") && t !== "Google Maps") {
+            const rawT = titleMatch[1].replace(/&amp;/g, "&").trim();
+            if (rawT.includes("/maps/place/") && !resolvedUrl) {
+              resolvedUrl = unwrapRedirect(rawT);
+            }
+            let t = rawT.replace(/\s*[-–—|·]\s*Google\s*(?:Maps|地圖|マップ)?.*$/i, "").trim();
+            t = t.replace(/\s*[-–—|·]\s*Google.*$/i, "").trim();
+            if (t && !t.startsWith("http") && !t.includes("Google") && t !== "Google Maps") {
               title = t;
             }
           }
         }
       }
-    } catch (e) {
+    } catch {
       // Ignore
     }
   }
 
-  // If resolvedUrl is a Google consent redirect, extract the actual continue= destination
-  if (resolvedUrl.includes("consent.google.com")) {
+  resolvedUrl = unwrapRedirect(resolvedUrl);
+
+  // Extract category clue from !15s protobuf if present
+  let categoryClue = "";
+  const dataMatch = resolvedUrl.match(/!15s([A-Za-z0-9_-]+)/);
+  if (dataMatch && dataMatch[1] && typeof atob === "function") {
     try {
-      const continueMatch = resolvedUrl.match(/[?&]continue=([^&#]+)/i);
-      if (continueMatch && continueMatch[1]) {
-        resolvedUrl = decodeURIComponent(continueMatch[1]);
+      const b64 = dataMatch[1].replace(/-/g, "+").replace(/_/g, "/");
+      const protoAscii = atob(b64).toLowerCase();
+      if (/(cake_shop|pastry|bakery|cafe|coffee|dessert|tea_house|ice_cream|confectionery)/.test(protoAscii)) {
+        categoryClue = "cafe";
+      } else if (/(sushi|ramen|restaurant|izakaya|yakitori|yakiniku|udon|soba|tonkatsu|tempura|seafood|steak|bar|pub|food|dining)/.test(protoAscii)) {
+        categoryClue = "dining";
+      } else if (/(shrine|temple|museum|park|garden|tourist_attraction|castle|aquarium|zoo|landmark|observatory)/.test(protoAscii)) {
+        categoryClue = "sightseeing";
+      } else if (/(shopping_mall|department_store|store|shop|market)/.test(protoAscii)) {
+        categoryClue = "shopping";
+      } else if (/(hotel|lodging|inn|ryokan|hostel)/.test(protoAscii)) {
+        categoryClue = "stay";
       }
     } catch {}
   }
 
-  return { resolvedUrl, title };
+  return { resolvedUrl, title, categoryClue };
 }
 
 /**
@@ -580,9 +620,11 @@ export function synthesizePlaceData(
   rawName: string,
   url: string,
   rawText: string,
-  userNotes: string = ""
+  userNotes: string = "",
+  categoryClue: string = ""
 ): AnalyzedPlaceData {
   const combined = `${rawName} ${rawText} ${userNotes} ${url}`.toLowerCase();
+  const clue = (categoryClue || "").toLowerCase().trim();
 
   // 1. Check exact or partial landmark dictionary matches
   for (const [key, data] of Object.entries(TOKYO_LANDMARKS)) {
@@ -618,54 +660,38 @@ export function synthesizePlaceData(
     }
   }
 
-  // 2. Intelligent Category and Content Deduction based on keywords
+  // 2. Intelligent Category and Content Deduction based on keywords + protobuf categoryClue
   const district = detectDistrict(combined);
   const cleanName = (rawName || rawText || "私房探訪據點").trim();
+  const nameAndNotes = `${rawName} ${rawText} ${userNotes}`.toLowerCase();
 
   // Dining Keywords
   if (
-    combined.includes("拉麵") ||
-    combined.includes("壽司") ||
-    combined.includes("燒肉") ||
-    combined.includes("壽喜燒") ||
-    combined.includes("牛舌") ||
-    combined.includes("和牛") ||
-    combined.includes("居酒屋") ||
-    combined.includes("食堂") ||
-    combined.includes("串燒") ||
-    combined.includes("鰻魚") ||
-    combined.includes("天婦羅") ||
-    combined.includes("漢堡排") ||
-    combined.includes("炸豬排") ||
-    combined.includes("鍋") ||
-    combined.includes("料理") ||
-    combined.includes("割烹") ||
-    combined.includes("餐廳") ||
-    combined.includes("restaurant") ||
-    combined.includes("sushi") ||
-    combined.includes("ramen") ||
-    combined.includes("yakiniku")
+    clue === "dining" ||
+    clue === "sushi" ||
+    clue === "ramen" ||
+    /(拉麵|壽司|燒肉|壽喜燒|牛舌|和牛|居酒屋|食堂|串燒|鰻魚|天婦羅|漢堡排|炸豬排|火鍋|料理|割烹|餐廳|\brestaurant\b|\bsushi\b|\bramen\b|\byakiniku\b|\budon\b|\bsoba\b|\bizakaya\b|\bsteak\b)/i.test(nameAndNotes)
   ) {
     let highlight = `${cleanName} 嚴選道地風味人氣料理與招牌美食`;
     let cuisineType = "日式特色料理";
     let signatureDishes = ["主廚特選料理", "人氣定番菜色"];
-    if (combined.includes("拉麵")) {
+    if (nameAndNotes.includes("拉麵") || clue === "ramen") {
       highlight = `${cleanName} 濃厚醇郁湯頭與現煮彈牙拉麵`;
       cuisineType = "道地日式拉麵・沾麵";
       signatureDishes = ["特製招牌拉麵", "炙燒叉燒糖心蛋"];
-    } else if (combined.includes("壽司")) {
+    } else if (nameAndNotes.includes("壽司") || clue === "sushi") {
       highlight = `${cleanName} 築地直送極鮮魚料與職人握壽司`;
       cuisineType = "江戶前壽司・海鮮料理";
       signatureDishes = ["主廚特選握壽司盛合", "極鮮鮪魚中腹手卷"];
-    } else if (combined.includes("燒肉")) {
+    } else if (nameAndNotes.includes("燒肉")) {
       highlight = `${cleanName} 極上頂級油花和牛與秘傳炭烤香氣`;
       cuisineType = "日式炭火高級燒肉";
       signatureDishes = ["特上牛五花", "蔥花極厚牛舌", "招牌拌沙拉"];
-    } else if (combined.includes("牛舌")) {
+    } else if (nameAndNotes.includes("牛舌")) {
       highlight = `${cleanName} 極厚切炭烤牛舌、麥飯與清燉牛尾湯`;
       cuisineType = "仙台炭火牛舌專門";
       signatureDishes = ["極厚切牛舌定食", "清燉牛尾湯", "山藥泥麥飯"];
-    } else if (combined.includes("壽喜燒")) {
+    } else if (nameAndNotes.includes("壽喜燒")) {
       highlight = `${cleanName} 百年秘傳高湯割下與柔嫩黑毛和牛`;
       cuisineType = "黑毛和牛壽喜燒・涮涮鍋";
       signatureDishes = ["特選和牛壽喜燒定食", "百年割下和牛御膳"];
@@ -696,17 +722,8 @@ export function synthesizePlaceData(
 
   // Cafe & Dessert Keywords
   if (
-    combined.includes("coffee") ||
-    combined.includes("cafe") ||
-    combined.includes("咖啡") ||
-    combined.includes("甜點") ||
-    combined.includes("喫茶") ||
-    combined.includes("吐司") ||
-    combined.includes("cake") ||
-    combined.includes("bread") ||
-    combined.includes("bakery") ||
-    combined.includes("烘焙") ||
-    combined.includes("抹茶")
+    clue === "cafe" ||
+    /(咖啡|珈琲|\bcoffee\b|\bcafe\b|甜點|甜品|\bdessert\b|喫茶|生吐司|蛋糕|\bcake\b|\bpastry\b|\bchoux\b|泡芙|布丁|\bbread\b|\bbakery\b|烘焙|抹茶|菓子)/i.test(nameAndNotes)
   ) {
     return {
       spotName: cleanName,
@@ -725,7 +742,7 @@ export function synthesizePlaceData(
       address: district,
       tips: "推薦點選招牌手沖咖啡或拿鐵，搭配當日手作烘焙點心；下午時段甜點常提早售罄建議提早到訪。",
       cuisineType: "精品手沖咖啡・法式手作烘焙甜點",
-      signatureDishes: ["招牌手沖精品咖啡", "當季水果千層蛋糕"],
+      signatureDishes: ["招牌手沖精品咖啡", "當季手作烘焙甜點"],
       priceRange: "約 ¥800 - ¥1,800 / 人",
       diningAtmosphere: "優雅放鬆文青空間，適合悠閒歇腳與拍照",
     };
@@ -733,29 +750,19 @@ export function synthesizePlaceData(
 
   // Sightseeing Keywords
   if (
-    combined.includes("shrine") ||
-    combined.includes("temple") ||
-    combined.includes("神社") ||
-    combined.includes("寺") ||
-    combined.includes("宮") ||
-    combined.includes("公園") ||
-    combined.includes("庭園") ||
-    combined.includes("展望台") ||
-    combined.includes("塔") ||
-    combined.includes("美術館") ||
-    combined.includes("博物館") ||
-    combined.includes("城") ||
-    combined.includes("橋")
+    clue === "sightseeing" ||
+    clue === "shrine" ||
+    /(神社|\bshrine\b|寺|\btemple\b|神宮|\bjingu\b|公園|\bpark\b|庭園|\bgarden\b|展望台|\bobservatory\b|\btower\b|鐵塔|晴空塔|美術館|\bmuseum\b|博物館|\bcastle\b)/i.test(nameAndNotes)
   ) {
     let spotType = "歷史古蹟 / 名勝古剎";
     let mustSeeHighlights = ["傳統建築工藝", "四季景致庭園"];
-    if (combined.includes("神社") || combined.includes("寺")) {
+    if (nameAndNotes.includes("神社") || nameAndNotes.includes("寺")) {
       spotType = "古老神社寺院 / 祈福名所";
       mustSeeHighlights = ["壯麗鳥居與山門", "御守祈福參拜", "境內歷史造景"];
-    } else if (combined.includes("展望台") || combined.includes("塔")) {
+    } else if (nameAndNotes.includes("展望台") || nameAndNotes.includes("塔")) {
       spotType = "高空展望台 / 都會地標";
       mustSeeHighlights = ["360度東京天際線俯瞰", "夕陽與璀璨百萬夜景"];
-    } else if (combined.includes("公園") || combined.includes("庭園")) {
+    } else if (nameAndNotes.includes("公園") || nameAndNotes.includes("庭園")) {
       spotType = "都會綠洲 / 悠閒日式庭園";
       mustSeeHighlights = ["迴遊式庭園水景", "四季櫻花與紅葉步道"];
     }
@@ -785,16 +792,8 @@ export function synthesizePlaceData(
 
   // Shopping Keywords
   if (
-    combined.includes("mall") ||
-    combined.includes("market") ||
-    combined.includes("商場") ||
-    combined.includes("百貨") ||
-    combined.includes("購物") ||
-    combined.includes("store") ||
-    combined.includes("shop") ||
-    combined.includes("outlet") ||
-    combined.includes("藥妝") ||
-    combined.includes("電器")
+    clue === "shopping" ||
+    /(\bmall\b|\bmarket\b|商場|百貨|購物|\bstore\b|\bshop\b|\boutlet\b|藥妝|電器)/i.test(nameAndNotes)
   ) {
     return {
       spotName: cleanName,
@@ -817,14 +816,8 @@ export function synthesizePlaceData(
 
   // Lodging Keywords
   if (
-    combined.includes("hotel") ||
-    combined.includes("旅館") ||
-    combined.includes("飯店") ||
-    combined.includes("宿") ||
-    combined.includes("inn") ||
-    combined.includes("resort") ||
-    combined.includes("hostel") ||
-    combined.includes("溫泉")
+    clue === "stay" ||
+    /(\bhotel\b|旅館|飯店|溫泉宿|\binn\b|\bresort\b|\bhostel\b)/i.test(nameAndNotes)
   ) {
     return {
       spotName: cleanName,
@@ -856,92 +849,11 @@ export function synthesizePlaceData(
 
     name: cleanName,
     japaneseName: cleanName,
-    category: "dining",
-    categoryLabel: "餐廳美饌",
+    category: "sightseeing",
+    categoryLabel: "觀光景點",
     highlight: `${cleanName} 自由行私房人氣探訪推薦`,
     summary: `${cleanName} 位於${district}，是在地廣受歡迎的探訪點。點擊卡片右上角地圖圖示可直接開啟 Google Maps 查看即時街景、最新評價與步行路線。`,
     address: district,
     tips: "前往時可利用 Google 地圖實時步行導航，並可點擊地圖連結確認今日最新營業時間。",
   };
-}
-
-/**
- * Client-Side Direct Gemini API Call (Works when VITE_GEMINI_API_KEY or localStorage key exists)
- */
-export async function analyzePlaceWithClientGemini(
-  nameOrQuery: string,
-  url: string,
-  notes: string = ""
-): Promise<AnalyzedPlaceData | null> {
-  const apiKey =
-    (import.meta as any).env?.VITE_GEMINI_API_KEY ||
-    (typeof window !== "undefined" ? localStorage.getItem("tokyo_custom_gemini_api_key") : null);
-
-  if (!apiKey) return null;
-
-  try {
-    const prompt = `你是一位精通日本東京自由行與在地美食的資深旅人嚮導。
-請為以下地點提供深度繁體中文景點/餐廳分析，嚴禁使用空泛廢話或無意義預設名稱：
-地點或名稱：${nameOrQuery}
-連結：${url}
-筆記：${notes}
-
-請嚴格輸出合法的純 JSON（禁止 Markdown 標記）：
-{
-  "name": "繁體中文名稱",
-  "japaneseName": "日文原名及假名",
-  "category": "dining",
-  "categoryLabel": "餐廳美饌",
-  "highlight": "一句話招牌亮點（30字內）",
-  "summary": "2至3句話介紹核心招牌菜或歷史特色（80至130字）",
-  "address": "所在區域或具體地址",
-  "tips": "1至2句自由行實用避雷或預約排隊建議",
-  "cuisineType": "若為餐飲則填寫料理種類（如：黑毛和牛壽喜燒、仙台炭火牛舌、濃厚豚骨拉麵），非餐飲留空",
-  "signatureDishes": ["招牌菜色1", "招牌菜色2"],
-  "priceRange": "若為餐飲則填人均預估預算（如：約 ¥1,500 - ¥3,000 / 人）",
-  "diningAtmosphere": "若為餐飲填寫用餐特色氛圍（如：景觀高空席、溫馨熱絡食堂、百年老鋪）",
-  "spotType": "若為景點則填寫景點類型（如：歷史名勝、開運求財神社、都會高空展望台），非景點留空",
-  "mustSeeHighlights": ["必看亮點1", "必看亮點2"],
-  "ticketInfo": "若為景點填寫門票或參拜資訊（如：境內免費自由參拜、展望台門票約 ¥2,000起）",
-  "bestTimeToVisit": "若為景點填寫最佳造訪時段（如：清晨08:00前清幽無人、日落黃昏百萬夜景）"
-}
-category 限：dining, sightseeing, shopping, cafe, stay, other
-categoryLabel 對應：餐廳美饌, 觀光景點, 購物商場, 甜點咖啡, 旅宿飯店, 其他探訪`;
-
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey}`;
-    const res = await fetch(endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      signal: AbortSignal.timeout(10000),
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          responseMimeType: "application/json",
-          temperature: 0.2,
-        },
-      }),
-    });
-
-    if (res.ok) {
-      const data = await res.json();
-      const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (rawText) {
-        const parsed = JSON.parse(rawText);
-        if (parsed && parsed.name && parsed.summary) {
-          // Hard enforce dining category if name or summary mentions dining terms
-          const combinedStr = `${parsed.name} ${parsed.summary} ${parsed.highlight || ""}`.toLowerCase();
-          const diningTerms = ["燒肉", "壽司", "拉麵", "壽喜燒", "牛舌", "和牛", "居酒屋", "食堂", "鰻魚", "天婦羅", "丼", "串燒", "鍋", "割烹", "料理", "餐廳", "sushi", "ramen", "yakiniku"];
-          if (diningTerms.some((k) => combinedStr.includes(k))) {
-            parsed.category = "dining";
-            parsed.categoryLabel = "餐廳美饌";
-          }
-          return parsed as AnalyzedPlaceData;
-        }
-      }
-    }
-  } catch (e) {
-    console.warn("Client Gemini API call skipped or failed:", e);
-  }
-
-  return null;
 }

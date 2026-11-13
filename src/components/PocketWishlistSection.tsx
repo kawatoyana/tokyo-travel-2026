@@ -34,7 +34,6 @@ import {
   unshortenGoogleMapsLinkClient,
   extractPlaceNameFromUrl,
   synthesizePlaceData,
-  analyzePlaceWithClientGemini,
   cleanGoogleMapsLink,
   type AnalyzedPlaceData,
 } from "../utils/placeAnalyzer";
@@ -750,20 +749,24 @@ export const PocketWishlistSection: React.FC = () => {
 
       // 1. First try /api/gemini/spot-enrich (Osaka-trip-2027 standard pipeline)
       try {
+        const enrichPayload: Record<string, string> = {
+          rawInput: originalUserUrl || targetUrl || rawUrlInput,
+          mapsUrl: originalUserUrl || (targetUrl.startsWith("http") ? targetUrl : ""),
+          cityOrArea: "東京",
+        };
+        if (explicitPlaceName || clientExtractedName) {
+          enrichPayload.spotName = explicitPlaceName || clientExtractedName;
+        }
         const enrichRes = await fetch("/api/gemini/spot-enrich", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
           signal: AbortSignal.timeout(18000),
-          body: JSON.stringify({
-            rawInput: originalUserUrl || targetUrl || rawUrlInput,
-            spotName: explicitPlaceName || clientExtractedName,
-            mapsUrl: originalUserUrl || (targetUrl.startsWith("http") ? targetUrl : ""),
-            cityOrArea: "東京",
-          }),
+          body: JSON.stringify(enrichPayload),
         });
 
-        if (enrichRes.ok) {
+        const enrichContentType = enrichRes.headers.get("content-type") || "";
+        if (enrichRes.ok && enrichContentType.includes("application/json")) {
           const enrichJson = await enrichRes.json();
           if (enrichJson?.success && enrichJson?.data) {
             analyzed = enrichJson.data;
@@ -802,11 +805,15 @@ export const PocketWishlistSection: React.FC = () => {
       }
 
       // 3. High-Fidelity Client-side intelligence pipeline
+      let clientCategoryClue = "";
       if (!analyzed) {
         // If it's a short link and we don't have a place name yet, unshorten client-side via CORS proxies
-        if (!clientExtractedName && (targetUrl.includes("maps.app.goo.gl") || targetUrl.includes("goo.gl") || targetUrl.includes("g.co/"))) {
+        if (!clientExtractedName && (targetUrl.includes("maps.app.goo.gl") || targetUrl.includes("goo.gl") || targetUrl.includes("g.co/") || targetUrl.includes("page.link"))) {
           try {
             const unshortened = await unshortenGoogleMapsLinkClient(targetUrl);
+            if (unshortened.categoryClue) {
+              clientCategoryClue = unshortened.categoryClue;
+            }
             if (unshortened.resolvedUrl) {
               const nameFromUrl = extractPlaceNameFromUrl(unshortened.resolvedUrl);
               if (nameFromUrl) {
@@ -824,22 +831,43 @@ export const PocketWishlistSection: React.FC = () => {
         const effectiveSearchName = (explicitPlaceName || clientExtractedName || (!targetUrl.startsWith("http") ? targetUrl : "")).trim();
 
         // Client Landmark DB + Deep Tokyo Taxonomy
-        analyzed = synthesizePlaceData(effectiveSearchName, targetUrl, rawUrlInput, inputNotes);
+        analyzed = synthesizePlaceData(effectiveSearchName, targetUrl, rawUrlInput, inputNotes, clientCategoryClue);
       }
 
-      // Determine canonical category
+      // Determine canonical category (inspect ONLY name & labels with word boundaries — never prose description)
       let safeCategory = (analyzed?.category || "other").toLowerCase().trim();
-      const categoryCheckText = `${analyzed?.category || ""} ${analyzed?.categoryLabel || ""} ${analyzed?.spotName || analyzed?.name || ""} ${analyzed?.desc || analyzed?.summary || ""} ${analyzed?.tag || ""} ${targetUrl} ${explicitPlaceName}`.toLowerCase();
-      if (/(壽喜燒|すき焼き|sukiyaki|燒肉|烤肉|焼肉|yakiniku|bbq|壽司|寿司|鮨|すし|sushi|拉麵|ラーメン|ramen|沾麵|つけ麺|つけめん|烏龍麵|うどん|udon|蕎麥麵|そば|soba|炸豬排|とんかつ|tonkatsu|炸牛排|牛かつ|牛舌|牛たん|和牛|wagyu|天婦羅|天ぷら|tempura|天丼|tendon|串燒|焼き鳥|焼鳥|yakitori|串かつ|居酒屋|izakaya|食堂|定食|丼飯|丼|洋食|咖哩|カレー|curry|火鍋|しゃぶしゃぶ|鍋|もつ鍋|漢堡|ハンバーグ|hamburg|牛排|ステーキ|steak|餃子|gyoza|割烹|kappo|懷石|懐石|kaiseki|和食|washoku|海鮮|海鮮丼|seafood|餐廳|餐館|料理|restaurant|bistro|dining|今半|叙々苑|敘敘苑|利久|afuri|一蘭|一風堂|六厘舍|六厘舎|金子半之助|根室花丸|美登利|鳥貴族|挽肉と米|挽肉與米|すしざんまい)/i.test(categoryCheckText)) {
-        safeCategory = "dining";
-      } else if (/(咖啡|珈琲|coffee|cafe|喫茶|kissaten|甜點|甜品|dessert|蛋糕|cake|布丁|プリン|purin|pudding|千層|mille|可麗露|canele|生吐司|toast|鬆餅|pancake|舒芙蕾|souffle|冰淇淋|ice cream|霜淇淋|抹茶|matcha|焙茶|hojicha|下午茶|tea|烘焙|麵包|bakery|茶屋|甘味|パフェ|parfait|harbs|blue bottle|藍瓶|dixans)/i.test(categoryCheckText)) {
-        safeCategory = "cafe";
-      } else if (/(神社|shrine|寺|temple|宮|jingu|公園|park|庭園|garden|展望台|observatory|tower|塔|城|castle|水族館|aquarium|美術館|museum|博物館|歷史古蹟|觀光|景點|attraction|skytree|sky|roppongi hills|二重橋|雷門)/i.test(categoryCheckText)) {
-        safeCategory = "sightseeing";
-      } else if (/(購物|百貨|商店街|藥妝|唐吉訶德|大丸|Bic|免稅|商場|mall)/i.test(categoryCheckText)) {
-        safeCategory = "shopping";
-      } else if (/(飯店|旅館|民宿|溫泉宿|hotel|inn)/i.test(categoryCheckText)) {
-        safeCategory = "stay";
+      const hasValidServerCategory = ["dining", "cafe", "sightseeing", "shopping", "stay"].includes(safeCategory);
+      const nameCheckText = `${analyzed?.categoryLabel || ""} ${analyzed?.spotName || analyzed?.name || ""} ${clientCategoryClue} ${explicitPlaceName}`.toLowerCase();
+
+      if (!hasValidServerCategory) {
+        if (
+          clientCategoryClue === "dining" ||
+          /(壽喜燒|すき焼き|sukiyaki|燒肉|烤肉|焼肉|yakiniku|\bbbq\b|壽司|寿司|鮨|すし|\bsushi\b|拉麵|ラーメン|\bramen\b|沾麵|つけ麺|つけめん|烏龍麵|うどん|\budon\b|蕎麥麵|そば|\bsoba\b|炸豬排|とんかつ|tonkatsu|炸牛排|牛かつ|牛舌|牛たん|和牛|wagyu|天婦羅|天ぷら|tempura|天丼|tendon|串燒|焼き鳥|焼鳥|yakitori|串かつ|居酒屋|\bizakaya\b|食堂|定食|丼飯|洋食|咖哩|カレー|\bcurry\b|火鍋|しゃぶしゃぶ|もつ鍋|漢堡排|ハンバーグ|hamburg|牛排|ステーキ|\bsteak\b|餃子|gyoza|割烹|kappo|懷石|懐石|kaiseki|和食|washoku|海鮮|海鮮丼|\bseafood\b|餐廳|餐館|料理|\brestaurant\b|\bbistro\b|\bdining\b|今半|叙々苑|敘敘苑|利久|afuri|一蘭|一風堂|六厘舍|六厘舎|金子半之助|根室花丸|美登利|鳥貴族|挽肉と米|挽肉與米|すしざんまい)/i.test(nameCheckText)
+        ) {
+          safeCategory = "dining";
+        } else if (
+          clientCategoryClue === "cafe" ||
+          /(咖啡|珈琲|\bcoffee\b|\bcafe\b|喫茶|kissaten|甜點|甜品|\bdessert\b|蛋糕|\bcake\b|泡芙|シュー|\bchou\b|布丁|プリン|purin|pudding|千層|mille|可麗露|canele|生吐司|\btoast\b|鬆餅|pancake|舒芙蕾|souffle|冰淇淋|ice cream|霜淇淋|抹茶|matcha|焙茶|hojicha|下午茶|\btea\b|烘焙|麵包|\bbakery\b|\bpastry\b|茶屋|甘味|パフェ|parfait|harbs|blue bottle|藍瓶|dixans|sucre-rie|シュークリー)/i.test(nameCheckText)
+        ) {
+          safeCategory = "cafe";
+        } else if (
+          clientCategoryClue === "sightseeing" ||
+          /(神社|\bshrine\b|寺|\btemple\b|神宮|\bjingu\b|公園|\bpark\b|庭園|\bgarden\b|展望台|\bobservatory\b|\btower\b|鐵塔|晴空塔|\bcastle\b|水族館|\baquarium\b|美術館|\bmuseum\b|博物館|歷史古蹟|觀光|景點|\battraction\b|skytree|roppongi hills|二重橋|雷門|皇居|御苑)/i.test(nameCheckText)
+        ) {
+          safeCategory = "sightseeing";
+        } else if (
+          clientCategoryClue === "shopping" ||
+          /(購物|百貨|商店街|藥妝|唐吉訶德|大丸|bic|免稅|商場|\bmall\b)/i.test(nameCheckText)
+        ) {
+          safeCategory = "shopping";
+        } else if (
+          clientCategoryClue === "stay" ||
+          /(飯店|旅館|民宿|溫泉宿|\bhotel\b|\binn\b)/i.test(nameCheckText)
+        ) {
+          safeCategory = "stay";
+        } else {
+          safeCategory = "sightseeing";
+        }
       }
 
       const safeCategoryLabel = analyzed?.categoryLabel || CATEGORY_MAP[safeCategory]?.label || (safeCategory === "dining" ? "餐廳美饌" : safeCategory === "cafe" ? "甜點咖啡" : "觀光景點");
@@ -931,7 +959,8 @@ export const PocketWishlistSection: React.FC = () => {
         }),
       });
 
-      if (res.ok) {
+      const contentType = res.headers.get("content-type") || "";
+      if (res.ok && contentType.includes("application/json")) {
         const json = await res.json();
         if (json?.success && json?.data) {
           const d = json.data;
@@ -939,16 +968,27 @@ export const PocketWishlistSection: React.FC = () => {
           const recVal = d.recommendation || d.tips || pendingCandidate.recommendation;
           setPendingCandidate({
             ...pendingCandidate,
-            name: d.spotName || trimmed,
-            spotName: d.spotName || trimmed,
+            name: d.spotName || d.name || trimmed,
+            spotName: d.spotName || d.name || trimmed,
+            japaneseName: d.japaneseName || pendingCandidate.japaneseName,
+            category: d.category || pendingCandidate.category,
             categoryLabel: d.categoryLabel || pendingCandidate.categoryLabel,
             tag: d.tag || pendingCandidate.tag,
             desc: descVal,
             summary: descVal,
             recommendation: recVal,
             tips: recVal,
-            highlight: recVal.split("。")[0] || pendingCandidate.highlight,
+            highlight: d.highlight || recVal.split("。")[0] || pendingCandidate.highlight,
+            address: d.address || pendingCandidate.address,
             suggestedTime: d.suggestedTime || pendingCandidate.suggestedTime,
+            cuisineType: d.cuisineType ?? pendingCandidate.cuisineType,
+            signatureDishes: Array.isArray(d.signatureDishes) ? d.signatureDishes : pendingCandidate.signatureDishes,
+            priceRange: d.priceRange ?? pendingCandidate.priceRange,
+            diningAtmosphere: d.diningAtmosphere ?? pendingCandidate.diningAtmosphere,
+            spotType: d.spotType ?? pendingCandidate.spotType,
+            mustSeeHighlights: Array.isArray(d.mustSeeHighlights) ? d.mustSeeHighlights : pendingCandidate.mustSeeHighlights,
+            ticketInfo: d.ticketInfo ?? pendingCandidate.ticketInfo,
+            bestTimeToVisit: d.bestTimeToVisit ?? pendingCandidate.bestTimeToVisit,
           });
           return;
         }
