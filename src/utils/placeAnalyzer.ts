@@ -324,6 +324,17 @@ export interface ClientUnshortenResult {
   address?: string;
   hoursNote?: string;
   categoryClue?: string;
+  neighborhood?: string;
+  yahooCategory?: string;
+  tabelogRating?: string;
+  tabelogReviews?: string;
+  isHyakumeiten?: boolean;
+  foundingYear?: string;
+  menuItems?: string[];
+  priceRangeHint?: string;
+  accessInfo?: string;
+  extraHighlights?: string[];
+  wikiSummary?: string;
 }
 
 /**
@@ -342,6 +353,16 @@ export async function unshortenGoogleMapsLinkClient(shortUrl: string): Promise<C
   let hoursNote = "";
 
   const cleanShort = shortUrl.trim();
+  const isShort =
+    cleanShort.includes("maps.app.goo.gl") ||
+    cleanShort.includes("goo.gl") ||
+    cleanShort.includes("g.co/") ||
+    cleanShort.includes("page.link");
+
+  if (!isShort && cleanShort.startsWith("http")) {
+    resolvedUrl = cleanShort;
+    title = extractPlaceNameFromUrl(cleanShort);
+  }
 
   const unwrapRedirect = (u: string): string => {
     let cur = u;
@@ -360,7 +381,8 @@ export async function unshortenGoogleMapsLinkClient(shortUrl: string): Promise<C
     return cur;
   };
 
-  // 1. Try Jina Reader Proxy (Fast, follows 302 redirects, returns Final URL & rich Maps Markdown)
+  // 1. Try Jina Reader Proxy when URL still needs unshortening/title extraction
+  if (isShort || !title) {
   try {
     const jinaUrl = `https://r.jina.ai/${cleanShort}`;
     const res = await fetch(jinaUrl, {
@@ -454,6 +476,7 @@ export async function unshortenGoogleMapsLinkClient(shortUrl: string): Promise<C
   } catch {
     // Continue to next fallback
   }
+  }
 
   // 2. Try unshorten.me if not resolved yet
   if (!resolvedUrl) {
@@ -546,7 +569,8 @@ export async function unshortenGoogleMapsLinkClient(shortUrl: string): Promise<C
   }
 
   // Client-side Nominatim enrichment when pin coordinates exist and japaneseTitle or address is missing
-  if ((!japaneseTitle || !address || !title) && (resolvedUrl || cleanShort)) {
+  let neighborhood = "";
+  if (resolvedUrl || cleanShort) {
     const coordSource = resolvedUrl || cleanShort;
     const coordMatch = coordSource.match(/!3d(-?[0-9.]+)!4d(-?[0-9.]+)/) || coordSource.match(/@(-?[0-9.]+),(-?[0-9.]+)/);
     if (coordMatch) {
@@ -563,6 +587,7 @@ export async function unshortenGoogleMapsLinkClient(shortUrl: string): Promise<C
           const city = cleanF(addr.city || addr.town || addr.ward);
           const suburb = cleanF(addr.suburb);
           const neigh = cleanF(addr.quarter || addr.neighbourhood);
+          neighborhood = suburb || neigh || city || "";
           const road = cleanF(addr.administrative || addr.road);
           const house = addr.house_number ? `${addr.house_number}號` : "";
           const rawParts = [pref, city, suburb, neigh, road, house].filter(Boolean);
@@ -575,11 +600,20 @@ export async function unshortenGoogleMapsLinkClient(shortUrl: string): Promise<C
             else deduped.push(p);
           }
           if (!address && deduped.length > 0) address = deduped.join("");
-          const jpFromNom = nomData?.namedetails?.["name:ja"] || nomData?.name || "";
-          if (!japaneseTitle && jpFromNom) japaneseTitle = jpFromNom;
-          if (!title && (nomData?.namedetails?.["name:en"] || jpFromNom)) title = nomData?.namedetails?.["name:en"] || jpFromNom;
+          const rawNameCandidate = String(nomData?.name || "");
+          const isGenericBuilding =
+            nomData?.category === "building" ||
+            nomData?.addresstype === "building" ||
+            /(?:ビル|マンション|アパート|住宅|建物)$/.test(rawNameCandidate);
+          const urlExtractedName = extractPlaceNameFromUrl(resolvedUrl || cleanShort);
+          const hasExtractedSpotName = Boolean(title || urlExtractedName);
+          if (!isGenericBuilding && !hasExtractedSpotName) {
+            const jpFromNom = nomData?.namedetails?.["name:ja"] || rawNameCandidate || "";
+            if (!japaneseTitle && jpFromNom) japaneseTitle = jpFromNom;
+            if (!title && (nomData?.namedetails?.["name:en"] || jpFromNom)) title = nomData?.namedetails?.["name:en"] || jpFromNom;
+          }
           if (!hoursNote && nomData?.extratags?.opening_hours) hoursNote = `營業時間 ${nomData.extratags.opening_hours}`;
-          if (!categoryClue && nomData?.type) {
+          if (!categoryClue && !hasExtractedSpotName && nomData?.type) {
             if (/(pastry|bakery|cafe)/.test(nomData.type)) categoryClue = "cafe";
             else if (/(restaurant|fast_food|ramen|sushi|bar|pub)/.test(nomData.type)) categoryClue = "dining";
           }
@@ -590,7 +624,175 @@ export async function unshortenGoogleMapsLinkClient(shortUrl: string): Promise<C
     }
   }
 
-  return { resolvedUrl, title, japaneseTitle, googleCategory, rating, reviewCount, editorialSummary, address, hoursNote, categoryClue };
+  return { resolvedUrl, title, japaneseTitle, googleCategory, rating, reviewCount, editorialSummary, address, hoursNote, categoryClue, neighborhood };
+}
+
+function parseYahooSearchMarkdownClient(text: string): Partial<ClientUnshortenResult> {
+  const out: Partial<ClientUnshortenResult> = {};
+  if (!text || text.trim().startsWith("{") || text.length < 200) return out;
+  // Strip massive Yahoo base64/CDN image URLs & markdown punctuation so organic results stay cleanly inside 18KB
+  const trimmed = text
+    .replace(/!\[([^\]]*)\]\([^)]+\)/g, "$1 ")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1 ")
+    .replace(/\*\*/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 18000);
+
+  const tabMatch = trimmed.match(/評価[：:]\s*(\d\.\d)\s*[-–—]\s*([0-9,]+)\s*件/);
+  if (tabMatch) {
+    out.tabelogRating = tabMatch[1];
+    out.tabelogReviews = tabMatch[2];
+  }
+  const catMatch =
+    trimmed.match(/\/([^/\s|｜\-–\n]{2,15})\s*[|｜]\s*食べログ/i) ||
+    trimmed.match(/食べログ[^/\n]{0,40}\/\s*([^\s|｜\-–\n]{2,15})\s*[-–|｜]/i) ||
+    trimmed.match(/([^\s/\n#]{2,14})\/(?:営業中|営業時間外)/);
+  if (catMatch && catMatch[1]) {
+    out.yahooCategory = catMatch[1].replace(/[*#]/g, "").trim();
+  }
+  if (/百名店/.test(trimmed)) out.isHyakumeiten = true;
+  const yearMatch = trimmed.match(/(1[89]\d{2}|20[0-2]\d)\s*年(?:に)?(?:創業|開業|設立|誕生)/);
+  if (yearMatch) out.foundingYear = `${yearMatch[1]}年創業`;
+  const budgetMatch = trimmed.match(/[¥￥]([0-9,]+)\s*[〜~～\-]\s*[¥￥]?([0-9,]+)/);
+  if (budgetMatch) out.priceRangeHint = `約 ¥${budgetMatch[1]} - ¥${budgetMatch[2]} / 人`;
+
+  const addrMatch = trimmed.match(/((?:東京都|大阪府|京都府|神奈川県|千葉県|埼玉県|北海道|福岡県)[^\s、。,；;()（）「」<>[\]]{3,34}[0-9０-９]{1,3}[-－−丁目番地號号][0-9０-９\-－−]{1,12})/);
+  if (addrMatch && addrMatch[1]) {
+    out.address = addrMatch[1].replace(/－/g, "-").trim();
+  }
+
+  const accessMatch = trimmed.match(/([^\s、。,・/()（）「」[\]]{2,12}駅?(?:東口|西口|南口|北口|中央口)?(?:から)?徒歩[0-9０-９]{1,2}分)/);
+  if (accessMatch && accessMatch[1]) out.accessInfo = accessMatch[1].replace(/[「」]/g, "").trim();
+
+  const ruleParts: string[] = [];
+  const hoursRange = trimmed.match(/(?:営業時間[：:\s]*)?(\d{1,2}:\d{2}\s*[〜~～\-]\s*\d{1,2}:\d{2})/);
+  const closeTime = trimmed.match(/営業終了\s*(\d{1,2}:\d{2})/);
+  if (hoursRange) ruleParts.push(`營業 ${hoursRange[1].replace(/[〜~～]/g, "-")}`);
+  else if (closeTime) ruleParts.push(`營業至 ${closeTime[1]}`);
+  const closedMatch = trimmed.match(/定休日[：:\s]*([^\s。、\n]{2,15})/);
+  if (closedMatch && closedMatch[1] && !/閉じる|確認/.test(closedMatch[1])) {
+    ruleParts.push(
+      closedMatch[1]
+        .replace(/日曜日/, "週日公休")
+        .replace(/月曜日/, "週一公休")
+        .replace(/火曜日/, "週二公休")
+        .replace(/水曜日/, "週三公休")
+        .replace(/木曜日/, "週四公休")
+        .replace(/金曜日/, "週五公休")
+        .replace(/土曜日/, "週六公休")
+        .replace(/なし|年中無休/, "全年無休")
+    );
+  }
+  if (/現金のみ/.test(trimmed)) ruleParts.push("僅收現金");
+  if (/予約不可/.test(trimmed)) ruleParts.push("不接受預約（現場候位）");
+  if (/焼き上がり時間|次回.*焼き上が/.test(trimmed)) ruleParts.push("每日分批現烤出爐");
+  if (ruleParts.length > 0) out.hoursNote = ruleParts.join("・");
+
+  const menuSet = new Set<string>();
+  const pricedRe = /([一-龠ぁ-んァ-ヶー]{2,14})\s*[.．·・\s]{0,4}([0-9,]{3,5})\s*円/g;
+  for (const m of trimmed.matchAll(pricedRe)) {
+    const item = m[1].trim();
+    const price = m[2].trim();
+    if (!/営業時間|アクセス|徒歩|予約|電話|住所|評価|レビュー|地図|創業/.test(item)) {
+      menuSet.add(`${item} ¥${price}`);
+    }
+    if (menuSet.size >= 4) break;
+  }
+  // Also parse Yahoo Gourmet menu bar: [メニュー フレジェ ディアマン ...]
+  const menuPillMatch = trimmed.match(/\[メニュー\s+([^\]]{4,80})\]/);
+  if (menuPillMatch && menuPillMatch[1]) {
+    for (const part of menuPillMatch[1].split(/\s+/)) {
+      if (part.length >= 2 && !/^http/.test(part) && menuSet.size < 4) menuSet.add(part);
+    }
+  }
+  if (menuSet.size > 0) out.menuItems = Array.from(menuSet);
+
+  const hi: string[] = [];
+  if (/シュークリーム/.test(trimmed)) hi.push("招牌現烤酥脆泡芙");
+  if (/胡麻|黒ごま/.test(trimmed)) hi.push("特製黑芝麻脆皮外層");
+  if (/カスタード/.test(trimmed)) hi.push("濃厚香草卡士達內餡");
+  if (/フレジェ|ケーキ|洋菓子|スイーツ/.test(trimmed)) hi.push("每日新鮮手作法式蛋糕甜點");
+  if (/煮干/.test(trimmed)) hi.push("極濃小魚乾煮干湯頭");
+  if (/かぼちゃプリン/.test(trimmed)) hi.push("復古濃郁南瓜布丁");
+  if (/シフォンケーキ/.test(trimmed)) hi.push("綿密紅茶／抹茶戚風蛋糕");
+  if (/ハンドドリップ|ネルドリップ|珈琲|コーヒー/.test(trimmed)) hi.push("職人手沖精品咖啡");
+  if (/焼き鳥|焼鳥/.test(trimmed)) hi.push("備長炭現烤多汁串燒");
+  if (/とんかつ|ロース|ヒレ/.test(trimmed)) hi.push("金黃酥脆厚切炸豬排");
+  if (/カルボナーラ/.test(trimmed)) hi.push("招牌奶油培根烏龍麵");
+  if (out.isHyakumeiten) hi.push("榮獲日本美食指標「Tabelog 百名店」");
+  if (hi.length > 0) out.extraHighlights = hi;
+
+  return out;
+}
+
+/**
+ * Full client-side live web enrichment for pure static deployments (no backend server).
+ * Resolves short links, Nominatim pin metadata, Yahoo Japan / Tabelog snippets, and Wikipedia extracts.
+ */
+export async function enrichPlaceClientSide(rawUrl: string, knownName: string = ""): Promise<ClientUnshortenResult> {
+  const isShort =
+    rawUrl.includes("maps.app.goo.gl") ||
+    rawUrl.includes("goo.gl") ||
+    rawUrl.includes("g.co/") ||
+    rawUrl.includes("page.link");
+
+  let base: ClientUnshortenResult = {
+    resolvedUrl: isShort ? "" : rawUrl,
+    title: knownName,
+  };
+
+  if (isShort || rawUrl.startsWith("http")) {
+    base = await unshortenGoogleMapsLinkClient(rawUrl);
+    if (!base.resolvedUrl) base.resolvedUrl = rawUrl;
+  }
+
+  const effectiveUrl = base.resolvedUrl || rawUrl;
+  const extractedName = base.title || knownName || extractPlaceNameFromUrl(effectiveUrl);
+  const queryTerm = (base.japaneseTitle || extractedName || "").replace(/[()（）]/g, " ").trim();
+  const areaTerm = base.neighborhood || "";
+
+  if (!queryTerm) return base;
+
+  const yahooQuery = `${queryTerm} ${areaTerm || "東京"}`.trim();
+  const yahooUrl = `https://r.jina.ai/https://search.yahoo.co.jp/search?p=${encodeURIComponent(yahooQuery)}`;
+  const wikiUrl = `https://ja.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(queryTerm)}&srlimit=1&format=json&origin=*`;
+
+  const [yahooText, wikiJson] = await Promise.all([
+    fetch(yahooUrl, { signal: AbortSignal.timeout(7500), headers: { Accept: "text/plain" } })
+      .then((r) => (r.ok ? r.text() : ""))
+      .catch(() => ""),
+    fetch(wikiUrl, { signal: AbortSignal.timeout(3000) })
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null),
+  ]);
+
+  const yFacts = parseYahooSearchMarkdownClient(yahooText);
+  let wikiSummary = "";
+  const firstHit = wikiJson?.query?.search?.[0];
+  if (firstHit?.title && firstHit?.snippet) {
+    const snippetClean = String(firstHit.snippet).replace(/<[^>]+>/g, "").trim();
+    if (/(東京|渋谷|新宿|台東|浅草|銀座|日本橋|吉祥寺|駅|喫茶|店|寺|神社|公園|博物館|美術館)/.test(snippetClean)) {
+      wikiSummary = snippetClean;
+    }
+  }
+
+  return {
+    ...base,
+    title: base.title || extractedName,
+    address: yFacts.address || base.address,
+    hoursNote: yFacts.hoursNote || base.hoursNote,
+    yahooCategory: yFacts.yahooCategory || base.yahooCategory,
+    tabelogRating: yFacts.tabelogRating,
+    tabelogReviews: yFacts.tabelogReviews,
+    isHyakumeiten: yFacts.isHyakumeiten,
+    foundingYear: yFacts.foundingYear,
+    menuItems: yFacts.menuItems,
+    priceRangeHint: yFacts.priceRangeHint,
+    accessInfo: yFacts.accessInfo,
+    extraHighlights: yFacts.extraHighlights,
+    wikiSummary: wikiSummary || undefined,
+  };
 }
 
 /**
@@ -804,7 +1006,7 @@ export function synthesizePlaceData(
     }
   }
 
-  // 2. Intelligent Category and Content Deduction based on keywords + protobuf/Google categoryClue
+  // 2. Intelligent Category and Content Deduction based on keywords + protobuf/Google/Yahoo/Tabelog clues
   const district = extraMeta?.address || detectDistrict(combined);
   const rawBaseName = (rawName || rawText || "私房探訪據點").trim();
   const cleanName =
@@ -812,93 +1014,123 @@ export function synthesizePlaceData(
       ? `${rawBaseName} (${extraMeta.japaneseTitle})`
       : rawBaseName;
   const ratingNote = extraMeta?.rating
-    ? `於 Google 地圖獲得 ${extraMeta.rating} ★${extraMeta.reviewCount ? `（${extraMeta.reviewCount} 則評價）` : ""}好評，`
+    ? `於 Google 地圖累積 ${extraMeta.reviewCount ? `${extraMeta.reviewCount} 則評價、` : ""}獲得 ${extraMeta.rating} ★ 好評，`
+    : extraMeta?.tabelogRating
+    ? `${extraMeta.isHyakumeiten ? "曾獲選「Tabelog 百名店」、" : ""}於 Tabelog 累積 ${extraMeta.tabelogReviews ? `${extraMeta.tabelogReviews} 則食評、` : ""}維持 ${extraMeta.tabelogRating} 分高評價，`
+    : "";
+  const foundingNote = extraMeta?.foundingYear
+    ? `${extraMeta.foundingYear}的在地名店，${extraMeta.accessInfo ? `距離${extraMeta.accessInfo}，` : ""}`
+    : extraMeta?.accessInfo
+    ? `鄰近${extraMeta.accessInfo}，`
     : "";
   const hoursSuffix = extraMeta?.hoursNote ? `（${extraMeta.hoursNote}）` : "";
-  const nameAndNotes = `${rawName} ${extraMeta?.japaneseTitle || ""} ${extraMeta?.googleCategory || ""} ${rawText} ${userNotes}`.toLowerCase();
+  const realHighlights = (extraMeta?.extraHighlights || []).filter(Boolean);
+  const highlightSentence = realHighlights.length > 0 ? `以「${realHighlights.slice(0, 3).join("、")}」聞名，` : "";
+  const menuListText = extraMeta?.menuItems && extraMeta.menuItems.length > 0 ? extraMeta.menuItems.slice(0, 3).join("、") : "";
+  const nameAndNotes = `${rawName} ${extraMeta?.japaneseTitle || ""} ${extraMeta?.googleCategory || ""} ${extraMeta?.yahooCategory || ""} ${rawText} ${userNotes}`.toLowerCase();
 
   // Dining Keywords
   if (
     clue === "dining" ||
     clue === "sushi" ||
     clue === "ramen" ||
-    /(拉麵|壽司|燒肉|壽喜燒|牛舌|和牛|居酒屋|食堂|串燒|鰻魚|天婦羅|漢堡排|炸豬排|火鍋|料理|割烹|餐廳|\brestaurant\b|\bsushi\b|\bramen\b|\byakiniku\b|\budon\b|\bsoba\b|\bizakaya\b|\bsteak\b)/i.test(nameAndNotes)
+    /(拉麵|ラーメン|壽司|寿司|鮨|燒肉|焼肉|ホルモン|壽喜燒|すき焼き|牛舌|和牛|居酒屋|酒場|食堂|定食|洋食|中華|義大利|意大利|イタリアン|法式料理|フレンチ|ビストロ|串燒|焼き鳥|焼鳥|もつ焼き|鳥料理|鰻魚|うなぎ|天婦羅|天ぷら|漢堡排|ハンバーグ|炸豬排|とんかつ|火鍋|しゃぶしゃぶ|料理|割烹|烏龍|うどん|蕎麥|そば|海鮮|お好み焼き|もんじゃ|咖哩|カレー|餐廳|\brestaurant\b|\bsushi\b|\bramen\b|\byakiniku\b|\budon\b|\bsoba\b|\bizakaya\b|\byakitori\b|\bsteak\b|\bbistro\b)/i.test(nameAndNotes)
   ) {
-    let highlight = `${cleanName} 嚴選道地風味人氣料理與招牌美食`;
-    let cuisineType = "日式特色料理";
-    let signatureDishes = ["主廚特選料理", "人氣定番菜色"];
-    if (nameAndNotes.includes("拉麵") || clue === "ramen") {
-      highlight = `${cleanName} 濃厚醇郁湯頭與現煮彈牙拉麵`;
+    let highlight = realHighlights[0]
+      ? `${cleanName} ${realHighlights.slice(0, 2).join("・")}`
+      : `${cleanName} 嚴選道地風味人氣料理與招牌美食`;
+    let cuisineType = extraMeta?.yahooCategory || "日式特色料理";
+    let signatureDishes =
+      extraMeta?.menuItems && extraMeta.menuItems.length > 0
+        ? extraMeta.menuItems.slice(0, 3)
+        : realHighlights.length > 0
+        ? realHighlights.slice(0, 3)
+        : ["主廚特選料理", "人氣定番菜色"];
+    if (nameAndNotes.includes("拉麵") || nameAndNotes.includes("ラーメン") || clue === "ramen") {
+      if (!realHighlights[0]) highlight = `${cleanName} 濃厚醇郁湯頭與現煮彈牙拉麵`;
       cuisineType = "道地日式拉麵・沾麵";
-      signatureDishes = ["特製招牌拉麵", "炙燒叉燒糖心蛋"];
-    } else if (nameAndNotes.includes("壽司") || clue === "sushi") {
-      highlight = `${cleanName} 築地直送極鮮魚料與職人握壽司`;
+      if (!extraMeta?.menuItems?.length && !realHighlights.length) signatureDishes = ["特製招牌拉麵", "炙燒叉燒糖心蛋"];
+    } else if (nameAndNotes.includes("壽司") || nameAndNotes.includes("寿司") || clue === "sushi") {
+      if (!realHighlights[0]) highlight = `${cleanName} 築地直送極鮮魚料與職人握壽司`;
       cuisineType = "江戶前壽司・海鮮料理";
-      signatureDishes = ["主廚特選握壽司盛合", "極鮮鮪魚中腹手卷"];
-    } else if (nameAndNotes.includes("燒肉")) {
-      highlight = `${cleanName} 極上頂級油花和牛與秘傳炭烤香氣`;
+      if (!extraMeta?.menuItems?.length && !realHighlights.length) signatureDishes = ["主廚特選握壽司盛合", "極鮮鮪魚中腹手卷"];
+    } else if (nameAndNotes.includes("燒肉") || nameAndNotes.includes("焼肉")) {
+      if (!realHighlights[0]) highlight = `${cleanName} 極上頂級油花和牛與秘傳炭烤香氣`;
       cuisineType = "日式炭火高級燒肉";
-      signatureDishes = ["特上牛五花", "蔥花極厚牛舌", "招牌拌沙拉"];
+      if (!extraMeta?.menuItems?.length && !realHighlights.length) signatureDishes = ["特上牛五花", "蔥花極厚牛舌", "招牌拌沙拉"];
     } else if (nameAndNotes.includes("牛舌")) {
-      highlight = `${cleanName} 極厚切炭烤牛舌、麥飯與清燉牛尾湯`;
+      if (!realHighlights[0]) highlight = `${cleanName} 極厚切炭烤牛舌、麥飯與清燉牛尾湯`;
       cuisineType = "仙台炭火牛舌專門";
-      signatureDishes = ["極厚切牛舌定食", "清燉牛尾湯", "山藥泥麥飯"];
-    } else if (nameAndNotes.includes("壽喜燒")) {
-      highlight = `${cleanName} 百年秘傳高湯割下與柔嫩黑毛和牛`;
+      if (!extraMeta?.menuItems?.length && !realHighlights.length) signatureDishes = ["極厚切牛舌定食", "清燉牛尾湯", "山藥泥麥飯"];
+    } else if (nameAndNotes.includes("壽喜燒") || nameAndNotes.includes("すき焼き")) {
+      if (!realHighlights[0]) highlight = `${cleanName} 百年秘傳高湯割下與柔嫩黑毛和牛`;
       cuisineType = "黑毛和牛壽喜燒・涮涮鍋";
-      signatureDishes = ["特選和牛壽喜燒定食", "百年割下和牛御膳"];
+      if (!extraMeta?.menuItems?.length && !realHighlights.length) signatureDishes = ["特選和牛壽喜燒定食", "百年割下和牛御膳"];
     }
 
     const jpName = extraMeta?.japaneseTitle || cleanName;
+    const recMenu = menuListText ? `推薦必點「${menuListText}」。` : realHighlights.length > 0 ? `推薦必嚐店內人氣「${realHighlights.slice(0, 2).join("、")}」。` : "建議品嚐店內的招牌現做料理；";
     return {
       spotName: cleanName,
-      desc: `${cleanName} 位於${district}，${ratingNote}以道地烹調技藝與新鮮食材聞名，空氣中瀰漫著誘人料理香氣，每一口都感受得到對食材的專注堅持，是旅程中療癒味蕾的極上選擇。`,
-      recommendation: `建議品嚐店內的招牌現做料理；尖峰用餐時段人潮較多，推薦提早前往候位或離峰造訪${hoursSuffix}，以享舒適品嚐空間。`,
+      desc: `${cleanName} 位於${district}，${foundingNote}${ratingNote}${highlightSentence}以道地烹調技藝與新鮮食材聞名，空氣中瀰漫著誘人料理香氣，每一口都感受得到對食材的專注堅持，是旅程中療癒味蕾的極上選擇。`,
+      recommendation: `${recMenu}尖峰用餐時段人潮較多，推薦提早前往候位或離峰造訪${hoursSuffix}。`,
       suggestedTime: "午間定食或晚間用餐時段",
-      tag: `東京散策、在地美食、自由行推薦`,
+      tag: `東京散策、${cuisineType}、自由行推薦`,
       mapUrl: url,
 
       name: cleanName,
       japaneseName: jpName,
       category: "dining",
-      categoryLabel: "餐廳美饌",
+      categoryLabel: extraMeta?.yahooCategory || "餐廳美饌",
       highlight,
-      summary: `${cleanName} 位於${district}，${ratingNote}以道地烹調技藝與新鮮食材聞名，用餐氛圍熱絡溫馨，是旅伴共享美食時光的必嚐首選。`,
+      summary: `${cleanName} 位於${district}，${foundingNote}${ratingNote}${highlightSentence}用餐氛圍熱絡溫馨，是旅伴共享美食時光的必嚐首選。`,
       address: district,
-      tips: `熱門用餐時段建議提早前往或離峰造訪${hoursSuffix}，以享舒適品嚐空間；可點選地圖確認最新菜單與公休日。`,
+      tips: `${recMenu}熱門用餐時段建議提早前往或離峰造訪${hoursSuffix}；可點選地圖確認最新菜單與公休日。`,
       cuisineType,
       signatureDishes,
-      priceRange: "約 ¥1,500 - ¥4,000 / 人",
-      diningAtmosphere: "道地溫馨日式食堂與熱絡用餐氛圍",
+      priceRange: extraMeta?.priceRangeHint || "約 ¥1,500 - ¥4,000 / 人",
+      diningAtmosphere: `${extraMeta?.accessInfo ? `${extraMeta.accessInfo}・` : ""}道地溫馨日式食堂與熱絡用餐氛圍`,
     };
   }
 
   // Cafe & Dessert Keywords
   if (
     clue === "cafe" ||
-    /(咖啡|珈琲|\bcoffee\b|\bcafe\b|甜點|甜品|\bdessert\b|喫茶|生吐司|蛋糕|\bcake\b|\bpastry\b|\bpatisserie\b|\bchoux\b|泡芙|布丁|\bbread\b|\bbakery\b|烘焙|抹茶|菓子)/i.test(nameAndNotes)
+    /(咖啡|珈琲|\bcoffee\b|\bcafe\b|カフェ|喫茶|甘味処|甜點|甜品|\bdessert\b|スイーツ|洋菓子|ケーキ|蛋糕|\bcake\b|\bpastry\b|\bpatisserie\b|\bchoux\b|泡芙|シュー|布丁|プリン|可麗露|ジェラート|\bbread\b|パン|ベーカリー|\bbakery\b|烘焙|抹茶|菓子)/i.test(nameAndNotes)
   ) {
     const jpName = extraMeta?.japaneseTitle || cleanName;
+    const cafeType = extraMeta?.yahooCategory || "精品手沖咖啡・法式手作烘焙甜點";
+    const cafeDishes =
+      extraMeta?.menuItems && extraMeta.menuItems.length > 0
+        ? extraMeta.menuItems.slice(0, 3)
+        : realHighlights.length > 0
+        ? realHighlights.slice(0, 3)
+        : ["招牌手沖精品咖啡", "當季手作烘焙甜點"];
+    const cafeRec = menuListText
+      ? `招牌必點「${menuListText}」，`
+      : realHighlights.length > 0
+      ? `招牌必嚐「${realHighlights.slice(0, 2).join("、")}」，`
+      : "推薦點選招牌手沖咖啡或拿鐵，搭配當日手作烘焙點心；";
     return {
       spotName: cleanName,
-      desc: `${cleanName} 位於${district}，${ratingNote}營造出寧靜溫柔的木質休憩氛圍，現煮精品咖啡香氣流淌，搭配每日手作限定甜點，將旅途中的奔波悄悄撫平，沉浸在優雅愜意的午後時光。`,
-      recommendation: `推薦點選招牌手沖咖啡或拿鐵，搭配當日手作烘焙點心；下午時段甜點常提早售罄建議提早到訪${hoursSuffix}。`,
+      desc: `${cleanName} 位於${district}，${foundingNote}${ratingNote}${highlightSentence}營造出寧靜溫柔的休憩氛圍，現煮咖啡香氣與剛出爐的溫柔甜香交織，將旅途中的奔波悄悄撫平，沉浸在優雅愜意的午後時光。`,
+      recommendation: `${cafeRec}熱門手作甜點常提早售罄建議提早到訪${hoursSuffix}。`,
       suggestedTime: "午後悠閒散策時段 (13:30 - 16:30)",
-      tag: `東京咖啡、手作甜點、午茶散策`,
+      tag: `東京咖啡、${cafeType}、午茶散策`,
       mapUrl: url,
 
       name: cleanName,
       japaneseName: jpName,
       category: "cafe",
-      categoryLabel: "甜點咖啡",
-      highlight: `${cleanName} 手沖芳醇精品咖啡與手作精緻甜點`,
-      summary: `${cleanName} 位於${district}，${ratingNote}營造出溫馨愜意的休憩氛圍，提供現煮精品咖啡與每日限定甜品，是旅途散策中品味時光、放鬆小憩的完美據點。`,
+      categoryLabel: extraMeta?.yahooCategory || "甜點咖啡",
+      highlight: realHighlights[0] ? `${cleanName} ${realHighlights.slice(0, 2).join("・")}` : `${cleanName} 手沖芳醇精品咖啡與手作精緻甜點`,
+      summary: `${cleanName} 位於${district}，${foundingNote}${ratingNote}${highlightSentence}營造出溫馨愜意的休憩氛圍，是旅途散策中品味時光、放鬆小憩的完美據點。`,
       address: district,
-      tips: `推薦點選招牌手沖咖啡或拿鐵，搭配當日手作烘焙點心；下午時段甜點常提早售罄建議提早到訪${hoursSuffix}。`,
-      cuisineType: "精品手沖咖啡・法式手作烘焙甜點",
-      signatureDishes: ["招牌手沖精品咖啡", "當季手作烘焙甜點"],
-      priceRange: "約 ¥800 - ¥1,800 / 人",
-      diningAtmosphere: "優雅放鬆文青空間，適合悠閒歇腳與拍照",
+      tips: `${cafeRec}熱門品項容易提早售罄建議提早到訪${hoursSuffix}。`,
+      cuisineType: cafeType,
+      signatureDishes: cafeDishes,
+      priceRange: extraMeta?.priceRangeHint || "約 ¥800 - ¥1,800 / 人",
+      diningAtmosphere: `${extraMeta?.accessInfo ? `${extraMeta.accessInfo}・` : ""}優雅放鬆空間，適合悠閒歇腳與品味甜點`,
     };
   }
 
@@ -925,10 +1157,11 @@ export function synthesizePlaceData(
     }
 
     const jpName = extraMeta?.japaneseTitle || cleanName;
+    const accessTips = extraMeta?.accessInfo ? `鄰近${extraMeta.accessInfo}，` : "";
     return {
       spotName: cleanName,
-      desc: `${cleanName} 佇立在${district}，${ratingNote}承載著深厚文化與歲月沉澱，微風輕拂綠意，隨處可見歷史與當代生活交織的細膩痕跡，是自由行散策途中最舒心難忘的探訪角落。`,
-      recommendation: `造訪時建議預留彈性時間漫步參觀，欣賞周邊傳統建築風情；晨間造訪人潮最為清幽舒適${hoursSuffix}。`,
+      desc: `${cleanName} 佇立在${district}，${foundingNote}${ratingNote}${highlightSentence}承載著深厚文化與歲月沉澱，微風輕拂綠意，隨處可見歷史與當代生活交織的細膩痕跡，是自由行散策途中最舒心難忘的探訪角落。`,
+      recommendation: `${accessTips}造訪時建議預留彈性時間漫步參觀，欣賞周邊傳統建築風情；晨間造訪人潮最為清幽舒適${hoursSuffix}。`,
       suggestedTime: "清晨參拜或黃昏散策時段",
       tag: `東京名勝、歷史古蹟、散策攝影`,
       mapUrl: url,
@@ -937,10 +1170,10 @@ export function synthesizePlaceData(
       japaneseName: jpName,
       category: "sightseeing",
       categoryLabel: "觀光景點",
-      highlight: `${cleanName} 古典歷史風華與悠閒散策景致`,
-      summary: `${cleanName} 位於${district}，${ratingNote}環境優雅清幽，富含深厚人文底蘊與四季景致，漫步其間令人心曠神怡，非常適合安排在自由行漫遊路線中。`,
+      highlight: realHighlights[0] ? `${cleanName} ${realHighlights.slice(0, 2).join("・")}` : `${cleanName} 古典歷史風華與悠閒散策景致`,
+      summary: `${cleanName} 位於${district}，${foundingNote}${ratingNote}${highlightSentence}環境優雅清幽，富含深厚人文底蘊與四季景致，漫步其間令人心曠神怡，非常適合安排在自由行漫遊路線中。`,
       address: district,
-      tips: `造訪時建議預留彈性時間漫步參觀，欣賞周邊傳統建築風情；晨間造訪人潮最為清幽舒適${hoursSuffix}。`,
+      tips: `${accessTips}造訪時建議預留彈性時間漫步參觀，欣賞周邊傳統建築風情；晨間造訪人潮最為清幽舒適${hoursSuffix}。`,
       spotType,
       mustSeeHighlights,
       ticketInfo: "境內免票或依現場購票規定為準",
@@ -954,10 +1187,11 @@ export function synthesizePlaceData(
     /(\bmall\b|\bmarket\b|商場|百貨|購物|\bstore\b|\bshop\b|\boutlet\b|藥妝|電器)/i.test(nameAndNotes)
   ) {
     const jpName = extraMeta?.japaneseTitle || cleanName;
+    const accessTips = extraMeta?.accessInfo ? `鄰近${extraMeta.accessInfo}，` : "";
     return {
       spotName: cleanName,
-      desc: `${cleanName} 位於${district}，${ratingNote}匯集多元特色品牌與潮流雜貨，動線開闊明亮，逛街採買十分舒適便捷，能一站滿足各類伴手禮與生活選物需求。`,
-      recommendation: `外國旅客可至服務櫃台出示護照確認免稅服務（Tax-Free）與外國人專屬優惠券${hoursSuffix}。`,
+      desc: `${cleanName} 位於${district}，${foundingNote}${ratingNote}${highlightSentence}匯集多元特色品牌與潮流雜貨，動線開闊明亮，逛街採買十分舒適便捷，能一站滿足各類伴手禮與生活選物需求。`,
+      recommendation: `${accessTips}外國旅客可至服務櫃台出示護照確認免稅服務（Tax-Free）與外國人專屬優惠券${hoursSuffix}。`,
       suggestedTime: "午後或晚間採買時段",
       tag: `東京購物、免稅商場、精選伴手禮`,
       mapUrl: url,
@@ -967,9 +1201,9 @@ export function synthesizePlaceData(
       category: "shopping",
       categoryLabel: "購物商場",
       highlight: `${cleanName} 精選品牌專櫃、生活雜貨與免稅購物一站滿足`,
-      summary: `${cleanName} 位於${district}，${ratingNote}匯集多元品牌、潮流服飾、在地伴手禮與人氣餐飲，動線寬敞舒適，逛街採買十分便利。`,
+      summary: `${cleanName} 位於${district}，${foundingNote}${ratingNote}${highlightSentence}匯集多元品牌、潮流服飾、在地伴手禮與人氣餐飲，動線寬敞舒適，逛街採買十分便利。`,
       address: district,
-      tips: `外國旅客可至服務櫃台出示護照確認免稅服務（Tax-Free）與外國人專屬優惠券${hoursSuffix}。`,
+      tips: `${accessTips}外國旅客可至服務櫃台出示護照確認免稅服務（Tax-Free）與外國人專屬優惠券${hoursSuffix}。`,
     };
   }
 
@@ -979,10 +1213,11 @@ export function synthesizePlaceData(
     /(\bhotel\b|旅館|飯店|溫泉宿|\binn\b|\bresort\b|\bhostel\b)/i.test(nameAndNotes)
   ) {
     const jpName = extraMeta?.japaneseTitle || cleanName;
+    const accessTips = extraMeta?.accessInfo ? `鄰近${extraMeta.accessInfo}，` : "";
     return {
       spotName: cleanName,
-      desc: `${cleanName} 位於${district}，${ratingNote}地理位置優越，提供整潔溫馨的住宿環境與齊全設施服務，讓旅人在充實的行程後獲得充分放鬆與舒眠。`,
-      recommendation: `建議留意飯店入住（Check-in）時間，提早抵達通常可先於櫃台免費寄存行李${hoursSuffix}。`,
+      desc: `${cleanName} 位於${district}，${foundingNote}${ratingNote}${highlightSentence}地理位置優越，提供整潔溫馨的住宿環境與齊全設施服務，讓旅人在充實的行程後獲得充分放鬆與舒眠。`,
+      recommendation: `${accessTips}建議留意飯店入住（Check-in）時間，提早抵達通常可先於櫃台免費寄存行李${hoursSuffix}。`,
       suggestedTime: "入住登記時段 (15:00 後)",
       tag: `東京住宿、交通便利、舒適旅宿`,
       mapUrl: url,
@@ -992,18 +1227,19 @@ export function synthesizePlaceData(
       category: "stay",
       categoryLabel: "旅宿飯店",
       highlight: `${cleanName} 舒適客房、生活機能優質與交通便捷據點`,
-      summary: `${cleanName} 位於${district}，${ratingNote}提供整潔溫馨的住宿環境與齊全設施服務，讓旅人在充實的行程後獲得充分放鬆與舒眠。`,
+      summary: `${cleanName} 位於${district}，${foundingNote}${ratingNote}${highlightSentence}提供整潔溫馨的住宿環境與齊全設施服務，讓旅人在充實的行程後獲得充分放鬆與舒眠。`,
       address: district,
-      tips: `建議留意飯店入住（Check-in）時間，提早抵達通常可先於櫃台免費寄存行李${hoursSuffix}。`,
+      tips: `${accessTips}建議留意飯店入住（Check-in）時間，提早抵達通常可先於櫃台免費寄存行李${hoursSuffix}。`,
     };
   }
 
   // Default fallback for any Tokyo spot: Never use "東京精選推薦據點"
   const jpName = extraMeta?.japaneseTitle || cleanName;
+  const accessTips = extraMeta?.accessInfo ? `鄰近${extraMeta.accessInfo}，` : "";
   return {
     spotName: cleanName,
-    desc: `${cleanName} 位於${district}，${ratingNote}以其獨特的在地魅力與熱情氛圍吸引旅人前來探訪，是自由行散策途中值得駐足感受的特色去處。`,
-    recommendation: `前往時可利用 Google 地圖實時步行導航，並可點擊地圖連結確認今日最新營業時間${hoursSuffix}。`,
+    desc: `${cleanName} 位於${district}，${foundingNote}${ratingNote}${highlightSentence}以其獨特的在地魅力與熱情氛圍吸引旅人前來探訪，是自由行散策途中值得駐足感受的特色去處。`,
+    recommendation: `${accessTips}前往時可利用 Google 地圖實時步行導航，並可點擊地圖連結確認今日最新營業時間${hoursSuffix}。`,
     suggestedTime: "午後散策時段",
     tag: `東京散策、自由行推薦、私房清單`,
     mapUrl: url,
@@ -1012,9 +1248,9 @@ export function synthesizePlaceData(
     japaneseName: jpName,
     category: "sightseeing",
     categoryLabel: "觀光景點",
-    highlight: `${cleanName} 自由行私房人氣探訪推薦`,
-    summary: `${cleanName} 位於${district}，${ratingNote}是在地廣受歡迎的探訪點。點擊卡片右上角地圖圖示可直接開啟 Google Maps 查看即時街景、最新評價與步行路線。`,
+    highlight: realHighlights[0] ? `${cleanName} ${realHighlights.slice(0, 2).join("・")}` : `${cleanName} 自由行私房人氣探訪推薦`,
+    summary: `${cleanName} 位於${district}，${foundingNote}${ratingNote}${highlightSentence}是在地廣受歡迎的探訪點。點擊卡片右上角地圖圖示可直接開啟 Google Maps 查看即時街景、最新評價與步行路線。`,
     address: district,
-    tips: `前往時可利用 Google 地圖實時步行導航，並可點擊地圖連結確認今日最新營業時間${hoursSuffix}。`,
+    tips: `${accessTips}前往時可利用 Google 地圖實時步行導航，並可點擊地圖連結確認今日最新營業時間${hoursSuffix}。`,
   };
 }

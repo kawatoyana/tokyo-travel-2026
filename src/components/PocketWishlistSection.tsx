@@ -31,7 +31,7 @@ import {
   Wand2,
 } from "lucide-react";
 import {
-  unshortenGoogleMapsLinkClient,
+  enrichPlaceClientSide,
   extractPlaceNameFromUrl,
   synthesizePlaceData,
   cleanGoogleMapsLink,
@@ -804,35 +804,35 @@ export const PocketWishlistSection: React.FC = () => {
         }
       }
 
-      // 3. High-Fidelity Client-side intelligence pipeline
+      // 3. High-Fidelity Client-side intelligence pipeline (for pure static deployments / backend offline)
       let clientCategoryClue = "";
+      let clientExtraMeta: Awaited<ReturnType<typeof enrichPlaceClientSide>> | undefined;
       if (!analyzed) {
-        let clientExtraMeta: Awaited<ReturnType<typeof unshortenGoogleMapsLinkClient>> | undefined;
-        // If it's a short link and we don't have a place name yet, unshorten client-side via CORS proxies
-        if (!clientExtractedName && (targetUrl.includes("maps.app.goo.gl") || targetUrl.includes("goo.gl") || targetUrl.includes("g.co/") || targetUrl.includes("page.link"))) {
-          try {
-            const unshortened = await unshortenGoogleMapsLinkClient(targetUrl);
-            clientExtraMeta = unshortened;
-            if (unshortened.categoryClue) {
-              clientCategoryClue = unshortened.categoryClue;
-            }
-            if (unshortened.resolvedUrl) {
-              const nameFromUrl = extractPlaceNameFromUrl(unshortened.resolvedUrl);
-              if (nameFromUrl) {
-                clientExtractedName = nameFromUrl;
-              }
-            }
-            if (!clientExtractedName && unshortened.title) {
-              clientExtractedName = unshortened.title;
-            }
-          } catch (unErr) {
-            console.warn("Client unshortening failed:", unErr);
+        try {
+          const enriched = await enrichPlaceClientSide(
+            targetUrl,
+            explicitPlaceName || clientExtractedName || textPart
+          );
+          clientExtraMeta = enriched;
+          if (enriched.categoryClue) {
+            clientCategoryClue = enriched.categoryClue;
           }
+          if (enriched.resolvedUrl) {
+            const nameFromUrl = extractPlaceNameFromUrl(enriched.resolvedUrl);
+            if (nameFromUrl && !clientExtractedName) {
+              clientExtractedName = nameFromUrl;
+            }
+          }
+          if (!clientExtractedName && enriched.title) {
+            clientExtractedName = enriched.title;
+          }
+        } catch (unErr) {
+          console.warn("Client live enrichment failed:", unErr);
         }
 
         const effectiveSearchName = (explicitPlaceName || clientExtractedName || (!targetUrl.startsWith("http") ? targetUrl : "")).trim();
 
-        // Client Landmark DB + Deep Tokyo Taxonomy
+        // Client Landmark DB + Deep Tokyo Taxonomy + Live Yahoo/Tabelog/Nominatim/Wiki facts
         analyzed = synthesizePlaceData(effectiveSearchName, targetUrl, rawUrlInput, inputNotes, clientCategoryClue, clientExtraMeta);
       }
 
@@ -999,23 +999,38 @@ export const PocketWishlistSection: React.FC = () => {
       console.warn("Regenerate via server failed, using local synthesizer:", e);
     }
 
-    // Fallback: local high-fidelity synthesizer
+    // Fallback: live client enrichment + local high-fidelity synthesizer
+    let clientMeta: Awaited<ReturnType<typeof enrichPlaceClientSide>> | undefined;
+    try {
+      clientMeta = await enrichPlaceClientSide(pendingCandidate.url || "", trimmed);
+    } catch {
+      // Non-blocking fallback
+    }
     const fresh = synthesizePlaceData(
       trimmed,
       pendingCandidate.url,
       trimmed,
-      pendingCandidate.notes
+      pendingCandidate.notes,
+      clientMeta?.categoryClue || "",
+      clientMeta
     );
+    const freshDesc = fresh.desc || fresh.summary;
+    const freshRec = fresh.recommendation || fresh.tips;
     setPendingCandidate({
       ...pendingCandidate,
-      name: fresh.name,
+      name: fresh.spotName || fresh.name,
+      spotName: fresh.spotName || fresh.name,
       japaneseName: fresh.japaneseName,
       category: fresh.category,
       categoryLabel: fresh.categoryLabel,
+      tag: fresh.tag || pendingCandidate.tag,
+      desc: freshDesc,
+      summary: freshDesc,
+      recommendation: freshRec,
+      tips: freshRec,
       highlight: fresh.highlight,
-      summary: fresh.summary,
       address: fresh.address,
-      tips: fresh.tips,
+      suggestedTime: fresh.suggestedTime || pendingCandidate.suggestedTime,
       cuisineType: fresh.cuisineType ?? pendingCandidate.cuisineType,
       signatureDishes: fresh.signatureDishes ?? pendingCandidate.signatureDishes,
       priceRange: fresh.priceRange ?? pendingCandidate.priceRange,

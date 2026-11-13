@@ -527,23 +527,172 @@ function translateEditorialHighlights(summary: string, googleCategory: string): 
   if (!summary && !googleCategory) return { dishTraits: "", isLongLines: false };
   const lower = `${summary} ${googleCategory}`.toLowerCase();
   const traits: string[] = [];
-  if (/choux|cream puff|pastry|pastries/.test(lower)) traits.push("招牌法式現烤泡芙與香醇卡士達內餡");
-  if (/cake|mille|tart/.test(lower)) traits.push("細緻手作蛋糕與甜品");
-  if (/bakery|bread|croissant|toast/.test(lower)) traits.push("每日現烤手作烘焙");
-  if (/coffee|espresso|roast|latte/.test(lower)) traits.push("現煮職人手沖與精品咖啡");
-  if (/sushi|omakase|nigiri|seafood|fish/.test(lower)) traits.push("嚴選新鮮魚獲與江戶前壽司手藝");
-  if (/ramen|noodle|broth|tsukemen|nibo|tonkotsu/.test(lower)) traits.push("慢火熬製濃厚湯頭與彈牙麵條");
-  if (/wagyu|yakiniku|grill|charcoal|bbq/.test(lower)) traits.push("嚴選優質肉品與炭火炙烤香氣");
-  if (/tempura|tonkatsu|fried/.test(lower)) traits.push("金黃酥脆職人炸物料理");
-  if (/izakaya|sake|yakitori|skewer/.test(lower)) traits.push("下町居酒屋炭烤與微醺酒肴");
-  if (/oldest|645|historic|century|edo|heritage/.test(lower)) traits.push("深具年代感與歷史傳承的文化底蘊");
-  if (/kannon|buddhist|temple/.test(lower)) traits.push("莊嚴清幽的古剎參拜氛圍");
-  if (/shinto|shrine/.test(lower)) traits.push("傳統鳥居與靜謐神社境內");
-  if (/garden|scenic|park|maple|cherry/.test(lower)) traits.push("四季皆美的庭園綠意");
-  if (/art|museum|exhibit|gallery|architecture/.test(lower)) traits.push("結合空間美學與珍貴館藏的藝術殿堂");
-  if (/emperor|imperial|castle|palace/.test(lower)) traits.push("歷史遺構與護城河景致");
-  const isLongLines = /long lines|popular|famed|famous|renowned/.test(lower);
+  if (/choux|cream puff|pastry|pastries|シュークリーム/.test(lower)) traits.push("招牌法式現烤泡芙與香醇卡士達內餡");
+  if (/cake|mille|tart|ケーキ|洋菓子|スイーツ/.test(lower)) traits.push("細緻手作蛋糕與甜品");
+  if (/bakery|bread|croissant|toast|パン|ベーカリー/.test(lower)) traits.push("每日現烤手作烘焙");
+  if (/coffee|espresso|roast|latte|珈琲|コーヒー|喫茶/.test(lower)) traits.push("現煮職人手沖與精品咖啡");
+  if (/sushi|omakase|nigiri|seafood|fish|寿司|鮨|海鮮/.test(lower)) traits.push("嚴選新鮮魚獲與江戶前壽司手藝");
+  if (/ramen|noodle|broth|tsukemen|nibo|tonkotsu|ラーメン|煮干|つけ麺/.test(lower)) traits.push("慢火熬製濃厚湯頭與彈牙麵條");
+  if (/udon|手打ち|うどん/.test(lower)) traits.push("職人現場手打彈牙烏龍麵");
+  if (/soba|蕎麦|そば/.test(lower)) traits.push("香氣濃郁的手工蕎麥麵");
+  if (/wagyu|yakiniku|grill|charcoal|bbq|焼肉|和牛/.test(lower)) traits.push("嚴選優質肉品與炭火炙烤香氣");
+  if (/tempura|tonkatsu|fried|とんかつ|天ぷら/.test(lower)) traits.push("金黃酥脆職人炸物料理");
+  if (/izakaya|sake|yakitori|skewer|焼き鳥|焼鳥|居酒屋|酒場/.test(lower)) traits.push("下町居酒屋炭烤與微醺酒肴");
+  if (/oldest|645|historic|century|edo|heritage|創業|老舗|重要文化財/.test(lower)) traits.push("深具年代感與歷史傳承的文化底蘊");
+  if (/kannon|buddhist|temple|寺院|お寺/.test(lower)) traits.push("莊嚴清幽的古剎參拜氛圍");
+  if (/shinto|shrine|神社/.test(lower)) traits.push("傳統鳥居與靜謐神社境內");
+  if (/garden|scenic|park|maple|cherry|庭園|公園/.test(lower)) traits.push("四季皆美的庭園綠意");
+  if (/art|museum|exhibit|gallery|architecture|美術館|博物館/.test(lower)) traits.push("結合空間美學與珍貴館藏的藝術殿堂");
+  if (/emperor|imperial|castle|palace|城|皇居/.test(lower)) traits.push("歷史遺構與護城河景致");
+  const isLongLines = /long lines|popular|famed|famous|renowned|行列|百名店|売り切れ|人気/.test(lower);
   return { dishTraits: traits.join("、"), isLongLines };
+}
+
+interface YahooPlaceFacts {
+  yahooCategory?: string;
+  tabelogRating?: string;
+  tabelogReviews?: string;
+  isHyakumeiten?: boolean;
+  foundingYear?: string;
+  exactAddress?: string;
+  accessInfo?: string;
+  hoursAndRules?: string;
+  menuItems?: string[];
+  priceRangeHint?: string;
+  extraHighlights?: string[];
+  rawSnippetText?: string;
+}
+
+function parseYahooJapanSearchText(plainText: string): YahooPlaceFacts {
+  const facts: YahooPlaceFacts = {};
+  if (!plainText || plainText.length < 100) return facts;
+
+  const trimmed = plainText.slice(0, 28000);
+  facts.rawSnippetText = trimmed;
+
+  // Tabelog rating & review count: 評価： 3.8 - 1,807件
+  const tabMatch = trimmed.match(/評価[：:]\s*(\d\.\d)\s*[-–—]\s*([0-9,]+)\s*件/);
+  if (tabMatch) {
+    facts.tabelogRating = tabMatch[1];
+    facts.tabelogReviews = tabMatch[2];
+  }
+
+  // Tabelog / Yahoo category clues (e.g. "渋谷/喫茶店 | 食べログ" or "食べログ - ... / ケーキ")
+  const catMatch =
+    trimmed.match(/\/([^/\s|｜\-–\n]{2,15})\s*[|｜]\s*食べログ/i) ||
+    trimmed.match(/食べログ[^/\n]{0,40}\/\s*([^\s|｜\-–\n]{2,15})\s*[-–|｜]/i) ||
+    trimmed.match(/([^\s/\n]{2,14})\/(?:営業中|営業時間外)/);
+  if (catMatch && catMatch[1]) {
+    facts.yahooCategory = catMatch[1].trim();
+  }
+
+  if (/百名店/.test(trimmed)) {
+    facts.isHyakumeiten = true;
+  }
+
+  const yearMatch = trimmed.match(/(1[89]\d{2}|20[0-2]\d)\s*年(?:に)?(?:創業|開業|設立|誕生)/);
+  if (yearMatch) {
+    facts.foundingYear = `${yearMatch[1]}年創業`;
+  }
+
+  // Exact street address in Japan
+  const addrMatch = trimmed.match(/((?:東京都|大阪府|京都府|神奈川県|千葉県|埼玉県|北海道|福岡県)[^\s、。,；;()（）「」<>]{3,34}[0-9０-９]{1,3}[-－−丁目番地號号][0-9０-９\-－−]{1,12})/);
+  if (addrMatch && addrMatch[1]) {
+    facts.exactAddress = addrMatch[1].replace(/－/g, "-").trim();
+  }
+
+  // Station access
+  const accessMatch = trimmed.match(/([^\s、。,・/()（）「」]{2,12}駅?(?:東口|西口|南口|北口|中央口)?(?:から)?徒歩[0-9０-９]{1,2}分)/);
+  if (accessMatch && accessMatch[1]) {
+    facts.accessInfo = accessMatch[1].replace(/[「」]/g, "").trim();
+  }
+
+  // Hours, closed day, payment/reservation rules
+  const ruleParts: string[] = [];
+  const hoursRange = trimmed.match(/(?:営業時間[：:\s]*)?(\d{1,2}:\d{2}\s*[〜~～\-]\s*\d{1,2}:\d{2})/);
+  const closeTime = trimmed.match(/営業終了\s*(\d{1,2}:\d{2})/);
+  if (hoursRange) ruleParts.push(`營業 ${hoursRange[1].replace(/[〜~～]/g, "-")}`);
+  else if (closeTime) ruleParts.push(`營業至 ${closeTime[1]}`);
+
+  const closedMatch = trimmed.match(/定休日[：:\s]*([^\s。、\n]{2,15})/);
+  if (closedMatch && closedMatch[1] && !/閉じる|確認/.test(closedMatch[1])) {
+    const c = closedMatch[1].replace(/日曜日/, "週日公休").replace(/月曜日/, "週一公休").replace(/火曜日/, "週二公休").replace(/水曜日/, "週三公休").replace(/木曜日/, "週四公休").replace(/金曜日/, "週五公休").replace(/土曜日/, "週六公休").replace(/なし|年中無休/, "全年無休");
+    ruleParts.push(c);
+  }
+  if (/現金のみ/.test(trimmed)) ruleParts.push("僅收現金");
+  if (/予約不可/.test(trimmed)) ruleParts.push("不接受預約（現場候位）");
+  if (/焼き上がり時間|次回.*焼き上が/.test(trimmed)) ruleParts.push("每日分批現烤出爐");
+  if (ruleParts.length > 0) facts.hoursAndRules = ruleParts.join("・");
+
+  // Menu items with optional yen prices (e.g. かぼちゃプリン. 500円)
+  const menuSet = new Set<string>();
+  const pricedRe = /([一-龠ぁ-んァ-ヶー]{2,14})\s*[.．·・\s]{0,4}([0-9,]{3,5})\s*円/g;
+  for (const m of trimmed.matchAll(pricedRe)) {
+    const item = m[1].trim();
+    const price = m[2].trim();
+    if (!/営業時間|アクセス|徒歩|予約|電話|住所|評価|レビュー|地図|創業/.test(item)) {
+      menuSet.add(`${item} ¥${price}`);
+    }
+    if (menuSet.size >= 4) break;
+  }
+  if (menuSet.size > 0) {
+    facts.menuItems = Array.from(menuSet);
+    const nums = Array.from(menuSet)
+      .map((s) => parseInt(s.replace(/[^0-9]/g, ""), 10))
+      .filter((n) => n >= 200 && n <= 30000);
+    if (nums.length > 0) {
+      const minP = Math.min(...nums);
+      const maxP = Math.max(...nums);
+      facts.priceRangeHint = minP === maxP ? `約 ¥${minP.toLocaleString()}` : `約 ¥${minP.toLocaleString()} - ¥${(maxP * 1.5).toLocaleString()} / 人`;
+    }
+  }
+
+  // Domain-specific culinary/sightseeing highlights
+  const hi: string[] = [];
+  if (/シュークリーム/.test(trimmed)) hi.push("招牌現烤酥脆泡芙");
+  if (/胡麻|黒ごま/.test(trimmed)) hi.push("特製黑芝麻脆皮外層");
+  if (/カスタード/.test(trimmed)) hi.push("濃厚香草卡士達內餡");
+  if (/フレジェ|ショートケーキ|ケーキ/.test(trimmed)) hi.push("每日新鮮手作法式蛋糕");
+  if (/煮干/.test(trimmed)) hi.push("極濃小魚乾煮干湯頭");
+  if (/一反木綿/.test(trimmed)) hi.push("特色寬扁「一反木綿」麵條");
+  if (/かぼちゃプリン/.test(trimmed)) hi.push("復古濃郁南瓜布丁");
+  if (/シフォンケーキ/.test(trimmed)) hi.push("綿密紅茶／抹茶戚風蛋糕");
+  if (/ハンドドリップ|ネルドリップ|珈琲|コーヒー/.test(trimmed)) hi.push("職人手沖／法蘭絨濾泡咖啡");
+  if (/焼き鳥|焼鳥/.test(trimmed)) hi.push("備長炭現烤多汁串燒");
+  if (/とんかつ|ロース|ヒレ/.test(trimmed)) hi.push("金黃酥脆厚切炸豬排");
+  if (/カルボナーラ/.test(trimmed)) hi.push("招牌奶油培根烏龍麵");
+  if (facts.isHyakumeiten) hi.push("榮獲日本美食指標「Tabelog 百名店」");
+  if (hi.length > 0) facts.extraHighlights = hi;
+
+  return facts;
+}
+
+async function fetchYahooJapanPlaceFacts(queryName: string, areaHint: string): Promise<YahooPlaceFacts> {
+  if (!queryName || queryName === "日本精選散策據點") return {};
+  try {
+    const q = `${queryName} ${areaHint || ""}`.trim();
+    const res = await fetch(`https://search.yahoo.co.jp/search?p=${encodeURIComponent(q)}`, {
+      signal: AbortSignal.timeout(3200),
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Accept-Language": "ja,zh-TW;q=0.9,en;q=0.7",
+      },
+    });
+    if (!res.ok) return {};
+    const html = await res.text();
+    const cleaned = html
+      .replace(/<script[\s\S]*?<\/script>/gi, " ")
+      .replace(/<style[\s\S]*?<\/style>/gi, " ")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/&amp;/g, "&")
+      .replace(/&nbsp;/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    return parseYahooJapanSearchText(cleaned);
+  } catch {
+    return {};
+  }
 }
 
 // Scrape HTML Title, Open Graph (og:title, og:description, og:image), and Schema.org JSON-LD
@@ -1160,6 +1309,14 @@ export async function analyzePlaceWithRobustPipeline(params: {
 
   let effectivePlaceName = realExtractedName || "日本精選散策據點";
 
+  // In keyless published mode, fetch real-time Yahoo Japan / Tabelog facts for accurate categories, menus, hours, ratings, and addresses
+  let yahooFacts: YahooPlaceFacts = {};
+  if (!process.env.GEMINI_API_KEY && realExtractedName) {
+    const yQuery = jinaInfo.japaneseTitle || realExtractedName || nominatimInfo.japaneseName || "";
+    const yArea = nominatimInfo.neighborhood || inferredCityOrArea;
+    yahooFacts = await fetchYahooJapanPlaceFacts(yQuery, yArea);
+  }
+
   // If targetUrl is not HTTP, format standard Google Maps search URL
   if (!targetUrl.startsWith("http://") && !targetUrl.startsWith("https://")) {
     targetUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(effectivePlaceName)}`;
@@ -1325,11 +1482,16 @@ export async function analyzePlaceWithRobustPipeline(params: {
     }
   }
 
-  // 5b. Upstream AI Intelligence Pipeline (14s timeout allows full Gemini search grounding, passes extracted name + Japanese name + area)
+  // 5b. Upstream AI Intelligence Pipeline (14s timeout allows full Gemini search grounding, passes extracted name + Japanese name + Yahoo category/station + area)
   if (!aiData) {
     try {
       const resolvedJpName = jinaInfo.japaneseTitle || nominatimInfo.japaneseName || "";
-      const searchHintName = [realExtractedName, resolvedJpName].filter(Boolean).join(" ").trim();
+      const factHints = [
+        yahooFacts.yahooCategory,
+        yahooFacts.accessInfo,
+        yahooFacts.isHyakumeiten ? "Tabelog百名店" : "",
+      ].filter(Boolean).join(" ");
+      const searchHintName = [realExtractedName, resolvedJpName, factHints].filter(Boolean).join(" ").trim();
       const upstreamPayload: Record<string, string> = {
         mapsUrl: cleanResolvedUrl,
         mapUrl: cleanResolvedUrl,
@@ -1382,14 +1544,15 @@ export async function analyzePlaceWithRobustPipeline(params: {
   // 6. Safeguard & Fact-Grounded Literary Synthesizer (Word-Boundary & Real Metadata Backed)
   let finalCategory = (aiData?.category || "other").toLowerCase();
   let finalCategoryLabel = aiData?.categoryLabel || "";
-  // Inspect ONLY name, Google category, Japanese subtitle, category labels, OSM tags, and URL clues (NEVER prose description!)
-  const inspectText = `${realExtractedName} ${jinaInfo.japaneseTitle || ""} ${nominatimInfo.japaneseName || ""} ${jinaInfo.googleCategory || ""} ${nominatimInfo.osmType || ""} ${nominatimInfo.cuisine || ""} ${ogTitle} ${categoryClueFromUrl} ${aiData?.spotName || ""} ${aiData?.categoryLabel || ""}`.toLowerCase();
+  // Inspect ONLY name, Google category, Japanese subtitle, Yahoo/Tabelog category, category labels, OSM tags (only if name wasn't extracted or matches), and URL clues
+  const useNominatimCat = !realExtractedName || (nominatimInfo.japaneseName && realExtractedName.includes(nominatimInfo.japaneseName));
+  const inspectText = `${realExtractedName} ${jinaInfo.japaneseTitle || ""} ${jinaInfo.googleCategory || ""} ${yahooFacts.yahooCategory || ""} ${useNominatimCat ? `${nominatimInfo.japaneseName || ""} ${nominatimInfo.osmType || ""} ${nominatimInfo.cuisine || ""}` : ""} ${ogTitle} ${categoryClueFromUrl} ${aiData?.spotName || ""} ${aiData?.categoryLabel || ""} ${aiData?.tag || ""}`.toLowerCase();
 
   const isDining =
     categoryClueFromUrl === "sushi" ||
     categoryClueFromUrl === "ramen" ||
     categoryClueFromUrl === "dining" ||
-    /(壽喜燒|すき焼き|sukiyaki|燒肉|烤肉|焼肉|yakiniku|\bbbq\b|壽司|寿司|鮨|すし|sushi|拉麵|ラーメン|ramen|沾麵|つけ麺|つけめん|烏龍麵|うどん|\budon\b|蕎麥麵|そば|\bsoba\b|炸豬排|とんかつ|tonkatsu|炸牛排|牛かつ|牛舌|牛たん|和牛|wagyu|天婦羅|天ぷら|tempura|天丼|tendon|串燒|焼き鳥|焼鳥|yakitori|串かつ|居酒屋|izakaya|食堂|定食|丼飯|洋食|咖哩|カレー|\bcurry\b|火鍋|しゃぶしゃぶ|もつ鍋|漢堡排|ハンバーグ|hamburg|牛排|ステーキ|\bsteak\b|餃子|gyoza|割烹|kappo|懷石|懐石|kaiseki|和食|washoku|海鮮|海鮮丼|\bseafood\b|餐廳|餐館|\brestaurant\b|\bbistro\b|\bdining\b|\bpizza\b|\bpasta\b|義大利麵|燒鳥|鰻魚|うなぎ|今半|叙々苑|敘敘苑|利久|afuri|一蘭|一風堂|六厘舍|六厘舎|金子半之助|根室花丸|美登利|鳥貴族|挽肉と米|挽肉與米|すしざんまい)/i.test(
+    /(壽喜燒|すき焼き|sukiyaki|燒肉|烤肉|焼肉|yakiniku|\bbbq\b|壽司|寿司|鮨|すし|sushi|拉麵|ラーメン|ramen|沾麵|つけ麺|つけめん|烏龍麵|うどん|\budon\b|蕎麥麵|そば|\bsoba\b|炸豬排|とんかつ|tonkatsu|炸牛排|牛かつ|牛舌|牛たん|和牛|wagyu|天婦羅|天ぷら|tempura|天丼|tendon|串燒|焼き鳥|焼鳥|yakitori|雞肉料理|鳥料理|鳥元|串かつ|居酒屋|izakaya|酒場|酒館|食堂|定食|丼飯|洋食|咖哩|カレー|\bcurry\b|火鍋|しゃぶしゃぶ|もつ鍋|漢堡排|ハンバーグ|hamburg|牛排|ステーキ|\bsteak\b|餃子|gyoza|割烹|kappo|懷石|懐石|kaiseki|和食|washoku|海鮮|海鮮丼|\bseafood\b|餐廳|餐館|\brestaurant\b|\bbistro\b|\bdining\b|\bpizza\b|\bpasta\b|義大利麵|燒鳥|鰻魚|うなぎ|今半|叙々苑|敘敘苑|利久|afuri|一蘭|一風堂|六厘舍|六厘舎|金子半之助|根室花丸|美登利|鳥貴族|挽肉と米|挽肉與米|すしざんまい)/i.test(
       inspectText
     );
 
@@ -1398,7 +1561,7 @@ export async function analyzePlaceWithRobustPipeline(params: {
     nominatimInfo.osmType === "pastry" ||
     nominatimInfo.osmType === "bakery" ||
     nominatimInfo.osmType === "cafe" ||
-    /(咖啡|珈琲|\bcoffee\b|\bcafe\b|喫茶|kissaten|甜點|甜品|\bdessert\b|蛋糕|\bcake\b|cake shop|泡芙|シュー|chou|布丁|プリン|purin|pudding|千層|mille|可麗露|canele|生吐司|\btoast\b|鬆餅|pancake|舒芙蕾|souffle|冰淇淋|ice cream|霜淇淋|抹茶|matcha|焙茶|hojicha|下午茶|\btea\b|烘焙|麵包|\bbakery\b|\bpastry\b|\bpatisserie\b|菓子|茶屋|甘味|パフェ|parfait|harbs|blue bottle|藍瓶|dixans|sucre-rie|シュークリー)/i.test(
+    /(咖啡|珈琲|\bcoffee\b|\bcafe\b|カフェ|喫茶|kissaten|甜點|甜品|\bdessert\b|スイーツ|洋菓子|ケーキ|蛋糕|\bcake\b|cake shop|泡芙|シュー|chou|布丁|プリン|purin|pudding|千層|mille|可麗露|canele|生吐司|\btoast\b|鬆餅|pancake|舒芙蕾|souffle|冰淇淋|ice cream|霜淇淋|抹茶|matcha|焙茶|hojicha|下午茶|\btea\b|烘焙|麵包|パン|ベーカリー|\bbakery\b|\bpastry\b|\bpatisserie\b|菓子|茶屋|甘味|パフェ|parfait|harbs|blue bottle|藍瓶|dixans|sucre-rie|シュークリー)/i.test(
       inspectText
     );
 
@@ -1461,7 +1624,7 @@ export async function analyzePlaceWithRobustPipeline(params: {
     else finalCategory = "sightseeing";
   }
 
-  const resolvedJpCandidate = jinaInfo.japaneseTitle || nominatimInfo.japaneseName || "";
+  const resolvedJpCandidate = jinaInfo.japaneseTitle || (!realExtractedName ? nominatimInfo.japaneseName : "") || "";
   const baseSpotName = aiData?.spotName || aiData?.name || (
     resolvedJpCandidate && realExtractedName && !realExtractedName.includes(resolvedJpCandidate)
       ? `${realExtractedName} (${resolvedJpCandidate})`
@@ -1469,53 +1632,84 @@ export async function analyzePlaceWithRobustPipeline(params: {
   );
   const parenMatch = String(baseSpotName).match(/[（(]([^()（）]*[\u3040-\u30ff\u4e00-\u9fa5][^()（）]*)[)）]/);
   const finalSpotName = baseSpotName;
-  const finalJapaneseName = aiData?.japaneseName || resolvedJpCandidate || parenMatch?.[1]?.trim() || realExtractedName || finalSpotName;
+  const rawAiJpName = String(aiData?.japaneseName || "").trim();
+  const isSuspiciousNeighborJp =
+    rawAiJpName &&
+    /(?:神社|寺院|神宮|駅(?:北|南|東|西|中央)?口?|公園|通り|バス停)$/.test(rawAiJpName) &&
+    !String(finalSpotName).includes(rawAiJpName) &&
+    !realExtractedName.includes(rawAiJpName);
+  const cleanAiJpName = isSuspiciousNeighborJp ? "" : rawAiJpName;
+  const finalJapaneseName = cleanAiJpName || jinaInfo.japaneseTitle || parenMatch?.[1]?.trim() || realExtractedName || finalSpotName;
   const finalCategoryTitle = finalCategoryLabel || (finalCategory === "dining" ? "餐廳美饌" : finalCategory === "cafe" ? "甜點咖啡" : finalCategory === "shopping" ? "購物商場" : finalCategory === "stay" ? "旅宿飯店" : "觀光景點");
   const areaLabel = nominatimInfo.neighborhood ? `${inferredCityOrArea}${nominatimInfo.neighborhood}` : inferredCityOrArea;
   const finalTag = aiData?.tag || `${areaLabel}、${finalCategoryTitle}、自由行推薦`;
 
-  // Grounded fallback prose when neither GEMINI_API_KEY nor upstream returned rich text
-  const { dishTraits, isLongLines } = translateEditorialHighlights(jinaInfo.editorialSummary || ogDesc, `${jinaInfo.googleCategory || ""} ${nominatimInfo.cuisine || ""}`);
+  // Grounded fallback prose + verified Yahoo/Tabelog enrichment (never scan noisy raw search HTML for landmark words)
+  const { dishTraits, isLongLines } = translateEditorialHighlights(
+    `${jinaInfo.editorialSummary || ""} ${ogDesc}`,
+    `${jinaInfo.googleCategory || ""} ${yahooFacts.yahooCategory || ""}`
+  );
+  const combinedHighlights = Array.from(
+    new Set([...(yahooFacts.extraHighlights || []), ...(dishTraits ? dishTraits.split("、") : [])])
+  ).filter(Boolean);
+  const highlightText = combinedHighlights.slice(0, 3).join("、");
+
   const ratingBadge = jinaInfo.rating
     ? `於 Google 地圖累積 ${jinaInfo.reviewCount ? `${jinaInfo.reviewCount} 則旅人評價、` : ""}獲得 ${jinaInfo.rating} ★ 的高度口碑，`
+    : yahooFacts.tabelogRating
+    ? `${yahooFacts.isHyakumeiten ? "曾獲選「Tabelog 百名店」、" : ""}於日本美食評鑑 Tabelog 累積 ${yahooFacts.tabelogReviews ? `${yahooFacts.tabelogReviews} 則食評、` : ""}維持 ${yahooFacts.tabelogRating} 分高評價，`
     : "";
-  const effectiveHoursNote = jinaInfo.hoursNote || (nominatimInfo.openingHours ? `營業時間 ${nominatimInfo.openingHours}` : "");
-  const hoursTip = effectiveHoursNote ? `營業時間參考：${effectiveHoursNote}；` : "";
-  const queueNote = isLongLines ? "由於平日常出現排隊人潮，" : "";
+  const foundingClause = yahooFacts.foundingYear ? `${yahooFacts.foundingYear}的在地名店，${yahooFacts.accessInfo ? `距離${yahooFacts.accessInfo}，` : ""}` : yahooFacts.accessInfo ? `鄰近${yahooFacts.accessInfo}，` : "";
+  const effectiveHoursNote = yahooFacts.hoursAndRules || jinaInfo.hoursNote || (nominatimInfo.openingHours ? `營業時間 ${nominatimInfo.openingHours}` : "");
+  const hoursTip = effectiveHoursNote ? `實用提醒：${effectiveHoursNote}；` : "";
+  const queueNote = isLongLines || /排隊/.test(highlightText) ? "由於平日常出現排隊人潮，" : "";
 
   const finalDesc =
     aiData?.desc ||
     aiData?.summary ||
     (finalCategory === "dining"
-      ? `佇立於${areaLabel}的「${finalSpotName}」，${ratingBadge}是在地深具代表性的${finalCategoryTitle}。${dishTraits ? `店內以「${dishTraits}」深受饕客推崇，` : ""}推開暖簾便能感受到料理職人的用心與溫度，每一道現做佳餚皆展現出對食材原味的專注堅持，為旅程增添難忘的味蕾記憶。`
+      ? `佇立於${areaLabel}的「${finalSpotName}」，${foundingClause}${ratingBadge}是在地深具代表性的${finalCategoryTitle}。${highlightText ? `店內以「${highlightText}」深受饕客推崇，` : ""}推開暖簾便能感受到料理職人的用心與溫度，每一道現做佳餚皆展現出對食材原味的專注堅持，為旅程增添難忘的味蕾記憶。`
       : finalCategory === "cafe"
-      ? `隱身在${areaLabel}靜謐街角的「${finalSpotName}」，${ratingBadge}是旅人散策途中不可多得的${finalCategoryTitle}。${dishTraits ? `店內以「${dishTraits}」聞名，` : ""}空氣中瀰漫著剛出爐的溫柔甜香與醇厚茶咖韻味，讓人放慢腳步，細細品味專屬於當地的悠閒午後時光。`
-      : `座落於${areaLabel}的「${finalSpotName}」，${ratingBadge}是值得放慢腳步細細品味的${finalCategoryTitle}。${dishTraits ? `此處蘊含「${dishTraits}」，` : ""}歷史建築與都市風景在此交織出獨特氛圍，在四季光影流轉間感受道地日式風情，是自由行途中不可錯過的亮點。`);
+      ? `隱身在${areaLabel}靜謐街角的「${finalSpotName}」，${foundingClause}${ratingBadge}是旅人散策途中不可多得的${finalCategoryTitle}。${highlightText ? `店內以「${highlightText}」聞名，` : ""}空氣中瀰漫著剛出爐的溫柔甜香與醇厚茶咖韻味，讓人放慢腳步，細細品味專屬於當地的悠閒午後時光。`
+      : `座落於${areaLabel}的「${finalSpotName}」，${foundingClause}${ratingBadge}是值得放慢腳步細細品味的${finalCategoryTitle}。${highlightText ? `此處蘊含「${highlightText}」，` : ""}歷史建築與都市風景在此交織出獨特氛圍，在四季光影流轉間感受道地日式風情，是自由行途中不可錯過的亮點。`);
 
-  const finalRecommendation =
+  let baseRec =
     aiData?.recommendation ||
     aiData?.tips ||
     (finalCategory === "dining"
-      ? `${dishTraits ? `推薦必點店內人氣「${dishTraits}」。` : "建議點選店家招牌定番料理與季節限定菜色。"}${hoursTip}${queueNote}建議避開正餐尖峰時段前往候位。`
+      ? `${highlightText ? `推薦必點店內人氣「${highlightText}」。` : "建議點選店家招牌定番料理與季節限定菜色。"}${hoursTip}${queueNote}建議避開正餐尖峰時段前往候位。`
       : finalCategory === "cafe"
-      ? `${dishTraits ? `招牌必嚐「${dishTraits}」，` : "首推店內每日限量手作甜點與特調飲品，"}搭配一杯手沖咖啡或茶飲最為合拍。${hoursTip}${queueNote}熱門烘焙品項容易提早完售，推薦盡早造訪。`
-      : `${dishTraits ? `建議重點欣賞「${dishTraits}」，` : "建議預留寬裕散步時間細細感受空間與周邊巷弄風情。"}${hoursTip}晨間或黃昏時段光影最為迷人且人潮相對舒適。`);
+      ? `${highlightText ? `招牌必嚐「${highlightText}」，` : "首推店內每日限量手作甜點與特調飲品，"}搭配一杯手沖咖啡或茶飲最為合拍。${hoursTip}${queueNote}熱門烘焙品項容易提早完售，推薦盡早造訪。`
+      : `${highlightText ? `建議重點欣賞「${highlightText}」，` : "建議預留寬裕散步時間細細感受空間與周邊巷弄風情。"}${hoursTip}晨間或黃昏時段光影最為迷人且人潮相對舒適。`);
+
+  // Enrich upstream AI recommendation with verified factual access/hours/Tabelog tips if missing
+  if (aiData?.recommendation && !process.env.GEMINI_API_KEY) {
+    const extraFacts: string[] = [];
+    if (yahooFacts.accessInfo && !baseRec.includes("徒歩")) extraFacts.push(`交通：${yahooFacts.accessInfo}`);
+    if (yahooFacts.hoursAndRules && !baseRec.includes("現金") && !baseRec.includes("公休")) extraFacts.push(yahooFacts.hoursAndRules);
+    if (yahooFacts.tabelogRating && !baseRec.includes("Tabelog")) extraFacts.push(`Tabelog ${yahooFacts.tabelogRating}★${yahooFacts.isHyakumeiten ? " 百名店" : ""}`);
+    if (extraFacts.length > 0) {
+      baseRec = `${baseRec.replace(/[。.]\s*$/, "")}。（${extraFacts.join("｜")}）`;
+    }
+  }
+  const finalRecommendation = baseRec;
 
   const finalSuggestedTime = aiData?.suggestedTime || (finalCategory === "dining" ? "午間定食或晚間用餐時段" : finalCategory === "cafe" ? "午後悠閒散策時段 (13:30 - 16:30)" : "清晨參拜或黃昏散策時段");
   const genericAddr = !aiData?.address || /^(東京|大阪|京都)?市區$/.test(String(aiData.address).trim());
-  const finalAddress = (!genericAddr ? aiData?.address : undefined) || nominatimInfo.formattedAddress || jinaInfo.address || ogData.schemaAddress || (areaLabel || "日本都會商圈");
+  const finalAddress = yahooFacts.exactAddress || (!genericAddr ? aiData?.address : undefined) || nominatimInfo.formattedAddress || jinaInfo.address || ogData.schemaAddress || (areaLabel || "日本都會商圈");
 
-  // Extract quoted specialties 「...」 from AI/prose recommendation & desc so structured card fields are always populated
+  // Extract quoted specialties 「...」 from AI/prose recommendation & desc + real Yahoo menu items
   const quotedItems = Array.from(
     new Set(
       [...`${finalRecommendation} ${finalDesc}`.matchAll(/「([^」]{2,18})」/g)]
         .map((m) => m[1].trim())
-        .filter((s) => s !== finalSpotName && !finalSpotName.includes(s))
+        .filter((s) => s !== finalSpotName && !finalSpotName.includes(s) && !/Tabelog 百名店/.test(s))
     )
   ).slice(0, 3);
 
   const inferredDiningPrice =
-    /(燒肉|焼肉|壽喜燒|すき焼き|懷石|割烹)/.test(inspectText)
+    yahooFacts.priceRangeHint ||
+    (/(燒肉|焼肉|壽喜燒|すき焼き|懷石|割烹)/.test(inspectText)
       ? "約 ¥4,000 - ¥10,000 / 人"
       : /(壽司|寿司|鮨|sushi|海鮮)/.test(inspectText)
       ? "約 ¥2,000 - ¥6,000 / 人"
@@ -1523,16 +1717,30 @@ export async function analyzePlaceWithRobustPipeline(params: {
       ? "約 ¥1,000 - ¥1,800 / 人"
       : finalCategory === "cafe"
       ? "約 ¥600 - ¥1,800 / 人"
-      : "約 ¥1,500 - ¥3,500 / 人";
+      : "約 ¥1,500 - ¥3,500 / 人");
+
+  const mergedDishes = Array.from(
+    new Set([
+      ...(quotedItems || []),
+      ...(yahooFacts.menuItems || []),
+      ...(combinedHighlights || []),
+    ])
+  ).slice(0, 3);
+
+  const rawAiDishes: string[] = Array.isArray(aiData?.signatureDishes)
+    ? aiData.signatureDishes.filter(
+        (d: any) =>
+          typeof d === "string" &&
+          !/(?:古剎參拜|鳥居與靜謐神社|神社境內|四季皆美的庭園)/.test(d)
+      )
+    : [];
 
   const derivedSignatureDishes =
-    Array.isArray(aiData?.signatureDishes) && aiData.signatureDishes.length > 0
-      ? aiData.signatureDishes
-      : finalCategory === "dining" || finalCategory === "cafe"
-      ? quotedItems.length > 0
-        ? quotedItems
-        : dishTraits
-        ? dishTraits.split("、").slice(0, 3)
+    finalCategory === "dining" || finalCategory === "cafe"
+      ? rawAiDishes.length > 0
+        ? Array.from(new Set([...(yahooFacts.menuItems || []), ...rawAiDishes])).slice(0, 3)
+        : mergedDishes.length > 0
+        ? mergedDishes
         : [`${finalCategoryTitle}招牌品項`, "季節限定人氣推薦"]
       : undefined;
 
@@ -1540,10 +1748,8 @@ export async function analyzePlaceWithRobustPipeline(params: {
     Array.isArray(aiData?.mustSeeHighlights) && aiData.mustSeeHighlights.length > 0
       ? aiData.mustSeeHighlights
       : finalCategory === "sightseeing"
-      ? quotedItems.length > 0
-        ? quotedItems
-        : dishTraits
-        ? dishTraits.split("、").slice(0, 3)
+      ? mergedDishes.length > 0
+        ? mergedDishes
         : ["特色建築與景觀美學", "周邊歷史巷弄散策"]
       : undefined;
 
@@ -1580,7 +1786,7 @@ export async function analyzePlaceWithRobustPipeline(params: {
       ogDescription: ogDesc || undefined,
       ogImage: ogData.image || undefined,
       placesApiMatched: true,
-      geminiEnhanced: !!aiData?.desc,
+      geminiEnhanced: !!(aiData?.desc || yahooFacts.tabelogRating || yahooFacts.menuItems?.length),
     },
   };
 }
