@@ -858,17 +858,17 @@ export const PocketWishlistSection: React.FC = () => {
           safeCategory = "cafe";
         } else if (
           clientCategoryClue === "sightseeing" ||
-          /(神社|\bshrine\b|寺|\btemple\b|神宮|\bjingu\b|公園|\bpark\b|庭園|\bgarden\b|展望台|\bobservatory\b|\btower\b|鐵塔|晴空塔|\bcastle\b|水族館|\baquarium\b|美術館|\bmuseum\b|博物館|歷史古蹟|觀光|景點|\battraction\b|skytree|roppongi hills|二重橋|雷門|皇居|御苑)/i.test(nameCheckText)
+          /(神社|\bshrine\b|寺院?|お寺|\btemple\b|神宮|\bjingu\b|大社|稲荷|公園|\bpark\b(?!ing)|庭園|\bgarden\b|植物園|\bbotanical\b|展望台|\bobservatory\b|\btower\b|鐵塔|晴空塔|\bcastle\b|\bpalace\b|水族館|\baquarium\b|美術館|博物館|記念館|資料館|\bmuseum\b|art gallery|遺跡|歷史古蹟|skytree|roppongi hills|二重橋|雷門|皇居|御苑)/i.test(nameCheckText)
         ) {
           safeCategory = "sightseeing";
         } else if (
           clientCategoryClue === "shopping" ||
-          /(購物|百貨|商店街|藥妝|唐吉訶德|大丸|bic|免稅|商場|\bmall\b)/i.test(nameCheckText)
+          /(購物|百貨|百貨店|商場|\bmall\b|\bdepartment store\b|\boutlet\b|商店街|shopping street|文具|文房具|stationery|雜貨|雑貨|選物|選品|廚具|道具|包丁|cutlery|kitchen supply|kitchenware|書店|本屋|bookstore|書局|古著|服飾|clothing|apparel|vintage|boutique|藥妝|唐吉訶德|don quijote|大丸|bic|家電|electronics|camera|免稅|variety store|general store|gift shop|shop|store|loft|itoya|kakimori|muji|uniqlo|釜浅|釜淺)/i.test(nameCheckText)
         ) {
           safeCategory = "shopping";
         } else if (
           clientCategoryClue === "stay" ||
-          /(飯店|旅館|民宿|溫泉宿|\bhotel\b|\binn\b)/i.test(nameCheckText)
+          /(飯店|旅館|民宿|溫泉宿|\bhotel\b|\binn\b|\bryokan\b|\bhostel\b)/i.test(nameCheckText)
         ) {
           safeCategory = "stay";
         } else {
@@ -1039,8 +1039,15 @@ export const PocketWishlistSection: React.FC = () => {
     );
     const freshDesc = fresh.desc || fresh.summary;
     const freshRec = fresh.recommendation || fresh.tips;
+    const nextRegenUrl = cleanGoogleMapsLink(
+      fresh.resolvedUrl || fresh.mapUrl || pendingCandidate.mapUrl || pendingCandidate.url,
+      fresh.spotName || fresh.name,
+      fresh.address || pendingCandidate.address
+    );
     setPendingCandidate({
       ...pendingCandidate,
+      url: nextRegenUrl,
+      mapUrl: nextRegenUrl,
       name: fresh.spotName || fresh.name,
       spotName: fresh.spotName || fresh.name,
       japaneseName: fresh.japaneseName,
@@ -1090,7 +1097,7 @@ export const PocketWishlistSection: React.FC = () => {
       }
     } catch {}
 
-    const safeFinalUrl = cleanGoogleMapsLink(pendingCandidate.url || "", trimmedName);
+    const safeFinalUrl = cleanGoogleMapsLink(pendingCandidate.mapUrl || pendingCandidate.url || "", trimmedName, pendingCandidate.address);
 
     const finalizedPlace: SavedPlace = {
       ...pendingCandidate,
@@ -1326,6 +1333,8 @@ export const PocketWishlistSection: React.FC = () => {
       const updatedDesc = editSummary.trim().slice(0, 1000);
       const updatedRec = editTips.trim().slice(0, 500);
 
+      const safeEditUrl = cleanGoogleMapsLink(editUrl.trim() || editingPlace.mapUrl || editingPlace.url, trimmedName, editAddress).slice(0, 1000);
+
       const updatedFields: Partial<SavedPlace> = {
         name: trimmedName.slice(0, 200),
         spotName: trimmedName.slice(0, 200),
@@ -1341,7 +1350,8 @@ export const PocketWishlistSection: React.FC = () => {
         tag: editTag.trim().slice(0, 200),
         suggestedTime: editSuggestedTime.trim().slice(0, 100),
         notes: editNotes.trim().slice(0, 1000),
-        url: (editUrl.trim() || editingPlace.url).slice(0, 1000),
+        url: safeEditUrl,
+        mapUrl: safeEditUrl,
         cuisineType: editCuisineType.trim().slice(0, 100),
         signatureDishes: editSignatureDishes
           ? editSignatureDishes.split(/[、,，\n]+/).map((s) => s.trim()).filter(Boolean)
@@ -1380,7 +1390,8 @@ export const PocketWishlistSection: React.FC = () => {
             summary: updatedDesc,
             tips: updatedRec,
             notes: editNotes.trim().slice(0, 1000),
-            url: (editUrl.trim() || editingPlace.url).slice(0, 1000),
+            url: safeEditUrl,
+            mapUrl: safeEditUrl,
             updatedAt: new Date().toISOString(),
           };
           await updateDoc(doc(db, "savedPlaces", editingPlace.id), firestoreUpdateFields);
@@ -1946,7 +1957,7 @@ export const PocketWishlistSection: React.FC = () => {
                     </div>
 
                     <a
-                      href={cleanGoogleMapsLink(place.url, place.spotName || place.name)}
+                      href={cleanGoogleMapsLink(place.mapUrl || place.url, place.spotName || place.name, place.address)}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-1 text-xs font-bold text-[#992545] hover:text-[#70152e] hover:underline cursor-pointer"
@@ -2337,7 +2348,7 @@ export const PocketWishlistSection: React.FC = () => {
                     {pendingCandidate.url}
                   </span>
                   <a
-                    href={cleanGoogleMapsLink(pendingCandidate.url, pendingCandidate.spotName || pendingCandidate.name)}
+                    href={cleanGoogleMapsLink(pendingCandidate.mapUrl || pendingCandidate.url, pendingCandidate.spotName || pendingCandidate.name, pendingCandidate.address)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 text-[#992545] hover:underline font-bold shrink-0 ml-2"
@@ -2685,7 +2696,7 @@ export const PocketWishlistSection: React.FC = () => {
                     </label>
                     {editUrl && (
                       <a
-                        href={cleanGoogleMapsLink(editUrl, editName)}
+                        href={cleanGoogleMapsLink(editUrl, editName, editAddress)}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="inline-flex items-center gap-1 text-[#992545] hover:underline font-bold text-[11px]"

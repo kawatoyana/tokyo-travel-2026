@@ -324,6 +324,8 @@ export interface ClientUnshortenResult {
   accessInfo?: string;
   extraHighlights?: string[];
   wikiSummary?: string;
+  osmCategory?: string;
+  osmType?: string;
 }
 
 export function toJapaneseAreaHint(str: string): string {
@@ -366,7 +368,8 @@ const KNOWN_AREA_BRANCH_TOKENS = [
   "池袋", "上野", "浅草", "西浅草", "秋葉原", "神田", "日本橋", "人形町", "築地", "丸の内", "東京駅", "有楽町", "日比谷",
   "品川", "五反田", "目黒", "新橋", "浜松町", "大門", "押上", "スカイツリー", "錦糸町", "両国", "門前仲町", "清澄白河",
   "豊洲", "有明", "台場", "お台場", "吉祥寺", "三鷹", "中野", "高円寺", "下北沢", "自由が丘", "二子玉川", "飯田橋",
-  "神楽坂", "水道橋", "九段下", "駒込", "巣鴨", "千駄ヶ谷", "北千住", "横浜", "鎌倉", "道頓堀", "難波", "心斎橋", "梅田", "京都", "祇園",
+  "神楽坂", "水道橋", "九段下", "駒込", "巣鴨", "千駄ヶ谷", "北千住", "谷中", "根津", "千駄木", "蔵前", "合羽橋",
+  "横浜", "鎌倉", "道頓堀", "難波", "心斎橋", "梅田", "京都", "祇園",
 ];
 
 export function extractAreaBranchTokens(text: string): string[] {
@@ -385,11 +388,54 @@ export function extractAreaBranchTokens(text: string): string[] {
     ariake: "有明", odaiba: "お台場", kichijoji: "吉祥寺", nakano: "中野", shimokitazawa: "下北沢",
     jiyugaoka: "自由が丘", kagurazaka: "神楽坂", yokohama: "横浜", namba: "難波", umeda: "梅田", kyoto: "京都",
     kiyosumi: "清澄白河", azabudai: "麻布台", sendagaya: "千駄ヶ谷", kudanshita: "九段下", suidobashi: "水道橋",
+    yanaka: "谷中", nezu: "根津", sendagi: "千駄木", kuramae: "蔵前", kappabashi: "合羽橋",
   };
   for (const [en, jp] of Object.entries(enMap)) {
     if (new RegExp(`\\b${en}\\b`, "i").test(norm)) found.add(jp);
   }
   return Array.from(found);
+}
+
+function normalizeVariantCjkClient(str: string): string {
+  return str
+    .replace(/淺/g, "浅").replace(/廣/g, "広").replace(/藏/g, "蔵").replace(/惠/g, "恵")
+    .replace(/壽/g, "寿").replace(/麵/g, "麺").replace(/燒/g, "焼").replace(/雞/g, "鶏")
+    .replace(/鐵/g, "鉄").replace(/櫻/g, "桜").replace(/龜/g, "亀").replace(/龍/g, "竜")
+    .replace(/圓/g, "円").replace(/國/g, "国").replace(/區/g, "区").replace(/驛/g, "駅")
+    .replace(/站/g, "駅").replace(/鋪/g, "舗").replace(/實/g, "実").replace(/樂/g, "楽")
+    .replace(/藝/g, "芸").replace(/萬/g, "万").replace(/與/g, "と").replace(/澀/g, "渋")
+    .replace(/澤/g, "沢").replace(/豐/g, "豊").replace(/濱/g, "浜").replace(/雜/g, "雑");
+}
+
+function extractCoreEntityTokensClient(name: string): string[] {
+  const norm = normalizeVariantCjkClient(name).toLowerCase();
+  const stopWords = new Set([
+    "tokyo", "osaka", "kyoto", "japan", "ginza", "shibuya", "shinjuku", "asakusa", "ueno", "harajuku",
+    "ebisu", "nakameguro", "kuramae", "yanaka", "nihonbashi", "store", "shop", "shrine", "temple",
+    "park", "garden", "museum", "tower", "station", "hotel", "inn", "cafe", "coffee", "restaurant",
+    "the", "and", "of", "at", "in", "東京", "大阪", "京都", "日本", "銀座", "渋谷", "新宿", "浅草",
+    "本店", "支店", "店舗", "神社", "寺院", "公園", "庭園", "美術館", "博物館", "商店", "店",
+  ]);
+  const tokens = new Set<string>();
+  for (const m of norm.matchAll(/[a-z0-9]{2,}/g)) {
+    if (!stopWords.has(m[0])) tokens.add(m[0]);
+  }
+  for (const m of norm.matchAll(/[\u30a0-\u30ffー]{2,}/g)) {
+    tokens.add(m[0]);
+  }
+  for (const m of norm.matchAll(/[\u4e00-\u9fa5]{2,}/g)) {
+    const w = m[0];
+    if (!stopWords.has(w)) {
+      tokens.add(w);
+      if (w.length >= 3) {
+        for (let i = 0; i <= w.length - 2; i++) {
+          const bi = w.slice(i, i + 2);
+          if (!stopWords.has(bi)) tokens.add(bi);
+        }
+      }
+    }
+  }
+  return Array.from(tokens);
 }
 
 interface ClientLandmarkGuard {
@@ -469,8 +515,9 @@ export async function unshortenGoogleMapsLinkClient(shortUrl: string): Promise<C
     return cur;
   };
 
-  // 1. Try Jina Reader Proxy when URL still needs unshortening/title extraction
-  if (isShort || !title) {
+  // 1. Try Jina Reader Proxy for short links OR Google Maps URLs needing category/editorial metadata
+  const isMapsHttp = cleanShort.includes("google.") && cleanShort.includes("/maps");
+  if (isShort || !title || (isMapsHttp && !cleanShort.includes("!15s"))) {
   try {
     const jinaUrl = `https://r.jina.ai/${cleanShort}`;
     const res = await fetch(jinaUrl, {
@@ -613,13 +660,32 @@ export async function unshortenGoogleMapsLinkClient(shortUrl: string): Promise<C
           if (!needsResolve(candidate) || !resolvedUrl) resolvedUrl = candidate;
         }
         if (data?.contents && typeof data.contents === "string") {
-          const placeUrlMatch = data.contents.match(/https?:\/\/(?:www\.)?google\.[^/\s"'<>]+\/maps\/place\/[^"'\s<>\\]+/i);
-          if (placeUrlMatch && placeUrlMatch[0] && needsResolve(resolvedUrl)) {
-            resolvedUrl = unwrapRedirect(placeUrlMatch[0].replace(/&amp;/g, "&"));
+          const normHtml = data.contents
+            .replace(/\\\//g, "/")
+            .replace(/\\u0026/gi, "&")
+            .replace(/\\u003d/gi, "=")
+            .replace(/\\x26/gi, "&")
+            .replace(/\\x3d/gi, "=")
+            .replace(/&amp;/g, "&");
+          const placeUrlMatch =
+            normHtml.match(/https?:\/\/(?:www\.)?google\.[^/\s"'<>]+\/maps\/place\/[^"'\s<>\\]+/i) ||
+            normHtml.match(/https?:\/\/(?:www\.|maps\.)?google\.[^/\s"'<>]+\/maps\/search\/[^"'\s<>\\]+/i) ||
+            normHtml.match(/https?:\/\/(?:www\.|maps\.)?google\.[^/\s"'<>]+\/maps\?[^"'\s<>\\]*(?:cid=\d+|ftid=0x[0-9a-f:]+)[^"'\s<>\\]*/i) ||
+            normHtml.match(/<meta[^>]+property=["']og:url["'][^>]+content=["'](https?:\/\/[^"']*google\.[^"']+\/maps[^"']+)["']/i);
+          if (placeUrlMatch && needsResolve(resolvedUrl)) {
+            const picked = (placeUrlMatch[1] || placeUrlMatch[0] || "").replace(/[\\'",;)]+$/g, "").trim();
+            if (picked) resolvedUrl = unwrapRedirect(picked);
           }
-          const titleMatch = data.contents.match(/<title[^>]*>([^<]+)<\/title>/i);
+          const itempropMatch =
+            normHtml.match(/<meta[^>]+itemprop=["']name["'][^>]+content=["']([^"']+)["']/i) ||
+            normHtml.match(/<meta[^>]+content=["']([^"']+)["'][^>]+itemprop=["']name["']/i);
+          if (itempropMatch && itempropMatch[1] && !title) {
+            const cand = itempropMatch[1].split(/\s*[·・]\s*/)[0].trim();
+            if (cand && !cand.includes("Google")) title = cand;
+          }
+          const titleMatch = normHtml.match(/<title[^>]*>([^<]+)<\/title>/i);
           if (titleMatch && titleMatch[1]) {
-            const rawT = titleMatch[1].replace(/&amp;/g, "&").trim();
+            const rawT = titleMatch[1].trim();
             if (rawT.includes("/maps/place/") && needsResolve(resolvedUrl)) {
               resolvedUrl = unwrapRedirect(rawT);
             }
@@ -645,9 +711,9 @@ export async function unshortenGoogleMapsLinkClient(shortUrl: string): Promise<C
     categoryClue = "cafe";
   } else if (/(sushi|ramen|restaurant|izakaya|yakitori|yakiniku|udon|soba|tonkatsu|tempura|seafood|steak|bar|pub|dining|bistro)/.test(catLower)) {
     categoryClue = "dining";
-  } else if (/(shrine|temple|museum|park|garden|tourist attraction|castle|aquarium|zoo|landmark|observatory)/.test(catLower)) {
+  } else if (/(shrine|shinto|temple|buddhist|museum|art gallery|park|garden|tourist attraction|historical landmark|castle|aquarium|zoo|landmark|observatory|monument|botanical)/.test(catLower)) {
     categoryClue = "sightseeing";
-  } else if (/(shopping mall|department store|store|shop|market|bookstore)/.test(catLower)) {
+  } else if (/(shopping mall|department store|stationery|book store|bookstore|cutlery|kitchen supply|hardware|variety store|general store|gift shop|clothing store|home goods|furniture|electronics|drugstore|pharmacy|store|shop|market|outlet|florist|boutique|jewelry)/.test(catLower)) {
     categoryClue = "shopping";
   } else if (/(hotel|lodging|inn|ryokan|hostel)/.test(catLower)) {
     categoryClue = "stay";
@@ -663,9 +729,9 @@ export async function unshortenGoogleMapsLinkClient(shortUrl: string): Promise<C
           categoryClue = "cafe";
         } else if (/(sushi|ramen|restaurant|izakaya|yakitori|yakiniku|udon|soba|tonkatsu|tempura|seafood|steak|bar|pub|food|dining)/.test(protoAscii)) {
           categoryClue = "dining";
-        } else if (/(shrine|temple|museum|park|garden|tourist_attraction|castle|aquarium|zoo|landmark|observatory)/.test(protoAscii)) {
+        } else if (/(shrine|shinto|temple|buddhist|museum|art_gallery|park|garden|tourist_attraction|historical_landmark|castle|aquarium|zoo|landmark|observatory|monument)/.test(protoAscii)) {
           categoryClue = "sightseeing";
-        } else if (/(shopping_mall|department_store|store|shop|market)/.test(protoAscii)) {
+        } else if (/(shopping_mall|department_store|stationery|book_store|clothing_store|gift_shop|variety_store|home_goods|hardware_store|kitchen_supply|cutlery|store|shop|market|boutique|drugstore|pharmacy|electronics)/.test(protoAscii)) {
           categoryClue = "shopping";
         } else if (/(hotel|lodging|inn|ryokan|hostel)/.test(protoAscii)) {
           categoryClue = "stay";
@@ -678,6 +744,8 @@ export async function unshortenGoogleMapsLinkClient(shortUrl: string): Promise<C
   let neighborhood = "";
   let lat: number | undefined;
   let lng: number | undefined;
+  let osmCategory: string | undefined;
+  let osmType: string | undefined;
   if (resolvedUrl || cleanShort) {
     const coordSource = resolvedUrl || cleanShort;
     const coordMatch = coordSource.match(/!3d(-?[0-9.]+)!4d(-?[0-9.]+)/) || coordSource.match(/@(-?[0-9.]+),(-?[0-9.]+)/);
@@ -710,11 +778,19 @@ export async function unshortenGoogleMapsLinkClient(shortUrl: string): Promise<C
             else deduped.push(p);
           }
           if (!address && deduped.length > 0) address = deduped.join("");
+          osmCategory = nomData?.category || undefined;
+          osmType = nomData?.type || undefined;
           const rawNameCandidate = String(nomData?.name || "");
+          const nonPoiCats = new Set(["building", "highway", "railway", "place", "boundary", "landuse", "waterway", "natural"]);
+          const nonPoiTypes = new Set(["residential", "apartments", "house", "detached", "road", "footway", "pedestrian", "path", "street", "bus_stop", "platform", "parking", "suburb", "quarter", "neighbourhood"]);
+          const isRealPoi = Boolean(nomData?.category && /^(shop|tourism|amenity|historic|leisure|craft)$/i.test(String(nomData.category)));
           const isGenericBuilding =
-            nomData?.category === "building" ||
-            nomData?.addresstype === "building" ||
-            /(?:ビル|マンション|アパート|住宅|建物)$/.test(rawNameCandidate);
+            !rawNameCandidate ||
+            !isRealPoi ||
+            nonPoiCats.has(String(nomData?.category || "")) ||
+            nonPoiCats.has(String(nomData?.addresstype || "")) ||
+            nonPoiTypes.has(String(nomData?.type || "")) ||
+            /(?:ビル|マンション|アパート|住宅|建物|丁目|通り)$/.test(rawNameCandidate);
           const urlExtractedName = extractPlaceNameFromUrl(resolvedUrl || cleanShort);
           const hasExtractedSpotName = Boolean(title || urlExtractedName);
           if (!isGenericBuilding && !hasExtractedSpotName) {
@@ -723,9 +799,12 @@ export async function unshortenGoogleMapsLinkClient(shortUrl: string): Promise<C
             if (!title && (nomData?.namedetails?.["name:en"] || jpFromNom)) title = nomData?.namedetails?.["name:en"] || jpFromNom;
           }
           if (!hoursNote && nomData?.extratags?.opening_hours) hoursNote = `營業時間 ${nomData.extratags.opening_hours}`;
-          if (!categoryClue && !hasExtractedSpotName && nomData?.type) {
-            if (/(pastry|bakery|cafe)/.test(nomData.type)) categoryClue = "cafe";
-            else if (/(restaurant|fast_food|ramen|sushi|bar|pub)/.test(nomData.type)) categoryClue = "dining";
+          const poiMatchesSpot = !hasExtractedSpotName || (rawNameCandidate && normalizeVariantCjkClient(`${title} ${urlExtractedName}`).toLowerCase().includes(normalizeVariantCjkClient(rawNameCandidate).toLowerCase()));
+          if (!categoryClue && poiMatchesSpot) {
+            if (osmCategory === "shop") categoryClue = "shopping";
+            else if (osmCategory === "historic" || (osmCategory === "tourism" && /(museum|gallery|attraction|viewpoint)/.test(osmType || "")) || (osmCategory === "leisure" && /(park|garden)/.test(osmType || ""))) categoryClue = "sightseeing";
+            else if (nomData?.type && /(pastry|bakery|cafe)/.test(nomData.type)) categoryClue = "cafe";
+            else if (nomData?.type && /(restaurant|fast_food|ramen|sushi|bar|pub)/.test(nomData.type)) categoryClue = "dining";
           }
         }
       } catch {
@@ -734,42 +813,68 @@ export async function unshortenGoogleMapsLinkClient(shortUrl: string): Promise<C
     }
   }
 
-  return { resolvedUrl, title, japaneseTitle, googleCategory, rating, reviewCount, editorialSummary, address, hoursNote, categoryClue, neighborhood, lat, lng };
+  return { resolvedUrl, title, japaneseTitle, googleCategory, rating, reviewCount, editorialSummary, address, hoursNote, categoryClue, neighborhood, lat, lng, osmCategory, osmType };
 }
 
-function parseYahooSearchMarkdownClient(text: string, expectedAreaTokens: string[] = []): Partial<ClientUnshortenResult> {
+function parseYahooSearchMarkdownClient(text: string, expectedAreaTokens: string[] = [], queryName: string = ""): Partial<ClientUnshortenResult> {
   const out: Partial<ClientUnshortenResult> = {};
   if (!text || text.trim().startsWith("{") || text.length < 200) return out;
-  // Strip massive Yahoo base64/CDN image URLs & markdown punctuation so organic results stay cleanly inside 24KB
-  const trimmed = text
+
+  // Strip massive Yahoo CDN image URLs & markdown links line-by-line so organic result chunks stay separated
+  const cleanedLines = text
     .replace(/!\[([^\]]*)\]\([^)]+\)/g, "$1 ")
     .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1 ")
     .replace(/\*\*/g, "")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 24000);
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l && !/^https?:\/\//.test(l) && !/^Title:|^URL Source:|^Markdown Content:/.test(l));
 
-  const tabMatch = trimmed.match(/評価[：:]\s*(\d\.\d)\s*[-–—]\s*([0-9,]+)\s*件/);
-  if (tabMatch) {
-    out.tabelogRating = tabMatch[1];
-    out.tabelogReviews = tabMatch[2];
+  const trimmed = cleanedLines.join(" ").replace(/\s+/g, " ").trim().slice(0, 26000);
+
+  // Isolate ONLY paragraphs/blocks relevant to queryName so unrelated nearby restaurant ads never pollute highlights/category!
+  const coreTokens = extractCoreEntityTokensClient(queryName);
+  let scopedText = "";
+  if (coreTokens.length > 0) {
+    const matchedChunks: string[] = [];
+    for (let i = 0; i < cleanedLines.length; i++) {
+      const lineNorm = normalizeVariantCjkClient(cleanedLines[i]).toLowerCase();
+      if (coreTokens.some((tok) => lineNorm.includes(tok))) {
+        const chunk = cleanedLines.slice(Math.max(0, i), Math.min(cleanedLines.length, i + 4)).join(" ");
+        matchedChunks.push(chunk);
+      }
+    }
+    if (matchedChunks.length > 0) {
+      scopedText = matchedChunks.join(" | ").replace(/\s+/g, " ").slice(0, 12000);
+    }
   }
-  const catMatch =
-    trimmed.match(/\/([^/\s|｜\-–\n]{2,25})\s*[|｜]\s*食べログ/i) ||
-    trimmed.match(/食べログ[^/\n]{0,40}\/\s*([^\s|｜\-–\n]{2,20})\s*[-–|｜]/i) ||
-    trimmed.match(/([^\s/\n#]{2,16})\/(?:営業中|営業時間外)/);
-  if (catMatch && catMatch[1]) {
-    out.yahooCategory = catMatch[1].replace(/[*#]/g, "").trim();
+  const safeHighlightScope = scopedText || "";
+
+  const isObviouslyNonFoodQuery = /(神社|寺|神宮|大社|\bshrine\b|\btemple\b|\bmuseum\b|美術館|博物館|\bgallery\b|\bpark\b|\bgarden\b|stationery|文具|書店|bookstore|cutlery|kitchen\s*supply|百貨|\bmall\b|\bhotel\b|\binn\b|kama-?asa|商店街|shopping street|谷中銀座)/i.test(queryName);
+  if (safeHighlightScope) {
+    if (!isObviouslyNonFoodQuery) {
+      const tabMatch = safeHighlightScope.match(/評価[：:]\s*(\d\.\d)\s*[-–—]\s*([0-9,]+)\s*件/);
+      if (tabMatch) {
+        out.tabelogRating = tabMatch[1];
+        out.tabelogReviews = tabMatch[2];
+      }
+      const catMatch =
+        safeHighlightScope.match(/\/([^/\s|｜\-–\n]{2,25})\s*[|｜]\s*食べログ/i) ||
+        safeHighlightScope.match(/食べログ[^/\n]{0,40}\/\s*([^\s|｜\-–\n]{2,20})\s*[-–|｜]/i);
+      if (catMatch && catMatch[1]) {
+        out.yahooCategory = catMatch[1].replace(/[*#]/g, "").trim();
+      }
+      if (/百名店/.test(safeHighlightScope)) out.isHyakumeiten = true;
+    }
+    const yearMatch = safeHighlightScope.match(/(1[89]\d{2}|20[0-2]\d)\s*年(?:に)?(?:創業|開業|設立|誕生|創建)/);
+    if (yearMatch) out.foundingYear = `${yearMatch[1]}年創業`;
+    const budgetMatch = safeHighlightScope.match(/[¥￥]([0-9,]+)\s*[〜~～\-]\s*[¥￥]?([0-9,]+)/);
+    if (budgetMatch) out.priceRangeHint = `約 ¥${budgetMatch[1]} - ¥${budgetMatch[2]} / 人`;
   }
-  if (/百名店/.test(trimmed)) out.isHyakumeiten = true;
-  const yearMatch = trimmed.match(/(1[89]\d{2}|20[0-2]\d)\s*年(?:に)?(?:創業|開業|設立|誕生)/);
-  if (yearMatch) out.foundingYear = `${yearMatch[1]}年創業`;
-  const budgetMatch = trimmed.match(/[¥￥]([0-9,]+)\s*[〜~～\-]\s*[¥￥]?([0-9,]+)/);
-  if (budgetMatch) out.priceRangeHint = `約 ¥${budgetMatch[1]} - ¥${budgetMatch[2]} / 人`;
 
   // Score all candidate Japanese street addresses against expectedAreaTokens so another branch never wins
-  const addrRe = /((?:東京都|大阪府|京都府|神奈川県|千葉県|埼玉県|北海道|福岡県)[^\s、。,；;()（）「」<>[\]]{3,34}[0-9０-９]{1,3}[-－−丁目番地號号][0-9０-９\-－−]{1,12})/g;
-  const addrCandidates = Array.from(trimmed.matchAll(addrRe)).map((m) => m[1].replace(/－/g, "-").trim());
+  const addrSource = safeHighlightScope ? `${safeHighlightScope} ${trimmed}` : trimmed;
+  const addrRe = /((?:東京都|大阪府|京都府|神奈川県|千葉県|埼玉県|北海道|福岡県)\s?[^\s、。,；;()（）「」<>[\]]{2,34}[0-9０-９]{1,3}[-－−丁目番地號号][0-9０-９\-－−]{1,12})/g;
+  const addrCandidates = Array.from(addrSource.matchAll(addrRe)).map((m) => m[1].replace(/－/g, "-").replace(/\s+/g, "").trim());
   if (addrCandidates.length > 0) {
     if (expectedAreaTokens.length > 0) {
       let bestAddr = "";
@@ -799,8 +904,9 @@ function parseYahooSearchMarkdownClient(text: string, expectedAreaTokens: string
     }
   }
 
+  const accessSource = safeHighlightScope || trimmed;
   const accessRe = /(?:▶︎|▸|►|：|:|\s|^)([A-Za-z0-9一-龠ぁ-んァ-ヶー]{2,14}駅(?:[東西南北中央]*口)?(?:から)?徒歩[0-9０-９]{1,2}分)/g;
-  const accessCandidates = Array.from(trimmed.matchAll(accessRe)).map((m) => m[1].replace(/[「」]/g, "").trim());
+  const accessCandidates = Array.from(accessSource.matchAll(accessRe)).map((m) => m[1].replace(/[「」]/g, "").trim());
   if (accessCandidates.length > 0) {
     if (expectedAreaTokens.length > 0) {
       const matched = accessCandidates.find((a) => expectedAreaTokens.some((t) => a.includes(t) || t.includes(a.replace(/駅.*$/, ""))));
@@ -810,63 +916,86 @@ function parseYahooSearchMarkdownClient(text: string, expectedAreaTokens: string
     }
   }
 
-  const ruleParts: string[] = [];
-  const hoursRange = trimmed.match(/(?:営業時間[：:\s]*)?(\d{1,2}:\d{2}\s*[〜~～\-]\s*\d{1,2}:\d{2})/);
-  const closeTime = trimmed.match(/営業終了\s*(\d{1,2}:\d{2})/);
-  if (hoursRange) ruleParts.push(`營業 ${hoursRange[1].replace(/[〜~～]/g, "-")}`);
-  else if (closeTime) ruleParts.push(`營業至 ${closeTime[1]}`);
-  const closedMatch = trimmed.match(/定休日[：:\s]*([^\s。、\n]{2,15})/);
-  if (closedMatch && closedMatch[1] && !/閉じる|確認/.test(closedMatch[1])) {
-    ruleParts.push(
-      closedMatch[1]
-        .replace(/日曜日/, "週日公休")
-        .replace(/月曜日/, "週一公休")
-        .replace(/火曜日/, "週二公休")
-        .replace(/水曜日/, "週三公休")
-        .replace(/木曜日/, "週四公休")
-        .replace(/金曜日/, "週五公休")
-        .replace(/土曜日/, "週六公休")
-        .replace(/なし|年中無休/, "全年無休")
-    );
-  }
-  if (/現金のみ/.test(trimmed)) ruleParts.push("僅收現金");
-  if (/予約不可/.test(trimmed)) ruleParts.push("不接受預約（現場候位）");
-  if (/焼き上がり時間|次回.*焼き上が/.test(trimmed)) ruleParts.push("每日分批現烤出爐");
-  if (ruleParts.length > 0) out.hoursNote = ruleParts.join("・");
-
-  const menuSet = new Set<string>();
-  const pricedRe = /([一-龠ぁ-んァ-ヶー]{2,14})\s*[.．·・\s]{0,4}([0-9,]{3,5})\s*円/g;
-  for (const m of trimmed.matchAll(pricedRe)) {
-    const item = m[1].trim();
-    const price = m[2].trim();
-    if (!/営業時間|アクセス|徒歩|予約|電話|住所|評価|レビュー|地図|創業/.test(item)) {
-      menuSet.add(`${item} ¥${price}`);
+  if (safeHighlightScope) {
+    const ruleParts: string[] = [];
+    const hoursRange = safeHighlightScope.match(/(?:営業時間[：:\s]*)?(\d{1,2}:\d{2}\s*[〜~～\-]\s*\d{1,2}:\d{2})/);
+    const closeTime = safeHighlightScope.match(/営業終了\s*(\d{1,2}:\d{2})/);
+    if (hoursRange) ruleParts.push(`營業 ${hoursRange[1].replace(/[〜~～]/g, "-")}`);
+    else if (closeTime) ruleParts.push(`營業至 ${closeTime[1]}`);
+    const closedMatch = safeHighlightScope.match(/定休日[：:\s]*([^\s。、\n]{2,15})/);
+    if (closedMatch && closedMatch[1] && !/閉じる|確認/.test(closedMatch[1])) {
+      ruleParts.push(
+        closedMatch[1]
+          .replace(/日曜日/, "週日公休")
+          .replace(/月曜日/, "週一公休")
+          .replace(/火曜日/, "週二公休")
+          .replace(/水曜日/, "週三公休")
+          .replace(/木曜日/, "週四公休")
+          .replace(/金曜日/, "週五公休")
+          .replace(/土曜日/, "週六公休")
+          .replace(/なし|年中無休/, "全年無休")
+      );
     }
-    if (menuSet.size >= 4) break;
-  }
-  // Also parse Yahoo Gourmet menu bar: [メニュー フレジェ ディアマン ...]
-  const menuPillMatch = trimmed.match(/\[メニュー\s+([^\]]{4,80})\]/);
-  if (menuPillMatch && menuPillMatch[1]) {
-    for (const part of menuPillMatch[1].split(/\s+/)) {
-      if (part.length >= 2 && !/^http/.test(part) && menuSet.size < 4) menuSet.add(part);
-    }
-  }
-  if (menuSet.size > 0) out.menuItems = Array.from(menuSet);
+    if (/現金のみ/.test(safeHighlightScope)) ruleParts.push("僅收現金");
+    if (/予約不可/.test(safeHighlightScope)) ruleParts.push("不接受預約（現場候位）");
+    if (/免税|TAX[- ]?FREE/i.test(safeHighlightScope)) ruleParts.push("支援免稅購物 (Tax-Free)");
+    if (/焼き上がり時間|次回.*焼き上が/.test(safeHighlightScope)) ruleParts.push("每日分批現烤出爐");
+    if (ruleParts.length > 0) out.hoursNote = ruleParts.join("・");
 
-  const hi: string[] = [];
-  if (/シュークリーム/.test(trimmed)) hi.push("招牌現烤酥脆泡芙");
-  if (/胡麻|黒ごま/.test(trimmed)) hi.push("特製黑芝麻脆皮外層");
-  if (/カスタード/.test(trimmed)) hi.push("濃厚香草卡士達內餡");
-  if (/フレジェ|ケーキ|洋菓子|スイーツ/.test(trimmed)) hi.push("每日新鮮手作法式蛋糕甜點");
-  if (/煮干/.test(trimmed)) hi.push("極濃小魚乾煮干湯頭");
-  if (/かぼちゃプリン/.test(trimmed)) hi.push("復古濃郁南瓜布丁");
-  if (/シフォンケーキ/.test(trimmed)) hi.push("綿密紅茶／抹茶戚風蛋糕");
-  if (/ハンドドリップ|ネルドリップ|珈琲|コーヒー/.test(trimmed)) hi.push("職人手沖精品咖啡");
-  if (/焼き鳥|焼鳥/.test(trimmed)) hi.push("備長炭現烤多汁串燒");
-  if (/とんかつ|ロース|ヒレ/.test(trimmed)) hi.push("金黃酥脆厚切炸豬排");
-  if (/カルボナーラ/.test(trimmed)) hi.push("招牌奶油培根烏龍麵");
-  if (out.isHyakumeiten) hi.push("榮獲日本美食指標「Tabelog 百名店」");
-  if (hi.length > 0) out.extraHighlights = hi;
+    const isFoodBlock = Boolean(out.tabelogRating || out.yahooCategory || /食べログ|ぐるなび|ホットペッパー|ランチ|ディナー/.test(safeHighlightScope));
+    const menuSet = new Set<string>();
+    if (isFoodBlock) {
+      const pricedRe = /([一-龠ぁ-んァ-ヶー]{2,14})\s*[.．·・\s]{0,4}([0-9,]{3,5})\s*円/g;
+      for (const m of safeHighlightScope.matchAll(pricedRe)) {
+        const item = m[1].trim();
+        const price = m[2].trim();
+        if (!/営業時間|アクセス|徒歩|予約|電話|住所|評価|レビュー|地図|創業|入園|拝観|入場/.test(item)) {
+          menuSet.add(`${item} ¥${price}`);
+        }
+        if (menuSet.size >= 4) break;
+      }
+      const menuPillMatch = safeHighlightScope.match(/\[メニュー\s+([^\]]{4,80})\]/);
+      if (menuPillMatch && menuPillMatch[1]) {
+        for (const part of menuPillMatch[1].split(/\s+/)) {
+          if (part.length >= 2 && !/^http/.test(part) && menuSet.size < 4) menuSet.add(part);
+        }
+      }
+    }
+    if (menuSet.size > 0) out.menuItems = Array.from(menuSet);
+
+    const hi: string[] = [];
+    if (!isObviouslyNonFoodQuery) {
+      if (/シュークリーム/.test(safeHighlightScope)) hi.push("招牌現烤酥脆泡芙");
+      if (/胡麻|黒ごま/.test(safeHighlightScope)) hi.push("特製黑芝麻脆皮外層");
+      if (/カスタード/.test(safeHighlightScope)) hi.push("濃厚香草卡士達內餡");
+      if (/フレジェ|ケーキ|洋菓子|スイーツ/.test(safeHighlightScope)) hi.push("每日新鮮手作法式蛋糕甜點");
+      if (/煮干/.test(safeHighlightScope)) hi.push("極濃小魚乾煮干湯頭");
+      if (/かぼちゃプリン/.test(safeHighlightScope)) hi.push("復古濃郁南瓜布丁");
+      if (/シフォンケーキ/.test(safeHighlightScope)) hi.push("綿密紅茶／抹茶戚風蛋糕");
+      if (/ハンドドリップ|ネルドリップ|珈琲|コーヒー/.test(safeHighlightScope)) hi.push("職人手沖精品咖啡");
+      if (/焼き鳥|焼鳥/.test(safeHighlightScope)) hi.push("備長炭現烤多汁串燒");
+      if (isFoodBlock && /とんかつ|ロース|ヒレ/.test(safeHighlightScope)) hi.push("金黃酥脆厚切炸豬排");
+      if (/カルボナーラ/.test(safeHighlightScope)) hi.push("招牌奶油培根烏龍麵");
+    }
+
+    if (/文具|文房具|万年筆|ノート|インク|オーダーノート/.test(safeHighlightScope)) hi.push("原創手帳文具與精品書寫墨水");
+    if (/包丁|料理道具|鉄鍋|キッチン用品|釜浅|kitchen supply|cutlery/i.test(safeHighlightScope)) hi.push("職人鍛造料理刀具與專業和食廚具");
+    if (/生活雑貨|雑貨|セレクトショップ|ライフスタイル/.test(safeHighlightScope)) hi.push("高質感生活雜貨與日系風格選物");
+    if (/商店街|shopping street/i.test(safeHighlightScope)) hi.push("充滿昭和懷舊人情味的下町商店街");
+    if (/百貨店|ショッピングモール|免税|TAX[- ]?FREE/i.test(safeHighlightScope)) hi.push("人氣專櫃雜貨與免稅購物優惠");
+    if (/古着|ヴィンテージ|ファッション/.test(safeHighlightScope)) hi.push("日系潮流服飾與精選單品");
+    if (/書店|本屋|書籍/.test(safeHighlightScope)) hi.push("主題精選藏書與生活提案空間");
+
+    if (/千本鳥居/.test(safeHighlightScope)) hi.push("朱紅連綿千本鳥居景觀");
+    if (/つつじ/.test(safeHighlightScope)) hi.push("東京著名百年杜鵑花賞花勝地");
+    if (/重要文化財|国宝/.test(safeHighlightScope)) hi.push("日本國家指定重要文化財歷史建築");
+    if (/御朱印|縁結び|厄除|金運/.test(safeHighlightScope)) hi.push("人氣特色御朱印與開運祈福參拜");
+    if (/日本庭園|枯山水|回遊式/.test(safeHighlightScope)) hi.push("雅致傳統日式山水庭園景觀");
+    if (/美術館|博物館|展示|ギャラリー/.test(safeHighlightScope)) hi.push("精選典藏與建築美學展覽空間");
+
+    if (out.isHyakumeiten) hi.push("榮獲日本美食指標「Tabelog 百名店」");
+    if (hi.length > 0) out.extraHighlights = Array.from(new Set(hi));
+  }
 
   return out;
 }
@@ -907,7 +1036,7 @@ export async function enrichPlaceClientSide(rawUrl: string, knownName: string = 
       ? queryTerm
       : `${queryTerm} ${jpAreaHint || "東京"}`.trim();
   const yahooUrl = `https://r.jina.ai/https://search.yahoo.co.jp/search?p=${encodeURIComponent(yahooQuery)}`;
-  const wikiUrl = `https://ja.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(queryTerm)}&srlimit=1&format=json&origin=*`;
+  const wikiUrl = `https://ja.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(queryTerm)}&srlimit=3&format=json&origin=*`;
 
   const [yahooText, wikiJson] = await Promise.all([
     fetch(yahooUrl, { signal: AbortSignal.timeout(7500), headers: { Accept: "text/plain" } })
@@ -918,13 +1047,18 @@ export async function enrichPlaceClientSide(rawUrl: string, knownName: string = 
       .catch(() => null),
   ]);
 
-  const yFacts = parseYahooSearchMarkdownClient(yahooText, expectedAreaTokens);
+  const yFacts = parseYahooSearchMarkdownClient(yahooText, expectedAreaTokens, `${extractedName} ${base.japaneseTitle || ""}`);
   let wikiSummary = "";
-  const firstHit = wikiJson?.query?.search?.[0];
-  if (firstHit?.title && firstHit?.snippet) {
-    const snippetClean = String(firstHit.snippet).replace(/<[^>]+>/g, "").trim();
-    if (/(東京|渋谷|新宿|台東|浅草|銀座|日本橋|吉祥寺|駅|喫茶|店|寺|神社|公園|博物館|美術館)/.test(snippetClean)) {
+  const wikiHits: any[] = wikiJson?.query?.search || [];
+  const coreEntityTokens = extractCoreEntityTokensClient(`${extractedName} ${base.japaneseTitle || ""}`);
+  for (const hit of wikiHits) {
+    const hitTitleNorm = normalizeVariantCjkClient(String(hit?.title || "")).toLowerCase();
+    const snippetClean = String(hit?.snippet || "").replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+    const titleMatches = coreEntityTokens.length > 0 && coreEntityTokens.some((tok) => hitTitleNorm.includes(tok));
+    const isJapanSpot = /(東京|大阪|京都|神奈川|文京|台東|中央|渋谷|新宿|港|目黒|駅|商店街|文具|店|神社|寺院|公園|博物館|美術館|百貨)/.test(snippetClean);
+    if (titleMatches && isJapanSpot) {
       wikiSummary = snippetClean;
+      break;
     }
   }
 
@@ -953,13 +1087,13 @@ export async function enrichPlaceClientSide(rawUrl: string, knownName: string = 
 export function cleanGoogleMapsLink(rawUrl: string, fallbackName?: string, fallbackAddress?: string): string {
   const cleanName = (fallbackName || "").trim();
   const cleanAddr = (fallbackAddress || "").trim();
-  const isGenericAddr = !cleanAddr || /^(東京都內精華商圈|東京都內|日本都會商圈|東京|大阪|京都)$/.test(cleanAddr);
+  const isGenericAddr = !cleanAddr || /^(東京都內精華商圈|東京都內|東京都中心商圈|日本都會商圈|東京|大阪|京都)$/.test(cleanAddr);
   const queryTarget =
     cleanName && !isGenericAddr && !cleanName.includes(cleanAddr)
       ? `${cleanName} ${cleanAddr}`
       : cleanName || (!isGenericAddr ? cleanAddr : "") || "東京";
 
-  let clean = (rawUrl || "").trim();
+  let clean = (rawUrl || "").replace(/[\\'",;)]+$/g, "").trim();
 
   // Unwrap consent / sorry wrappers before checking if we have a real resolved URL
   for (let i = 0; i < 3; i++) {
@@ -979,6 +1113,8 @@ export function cleanGoogleMapsLink(rawUrl: string, fallbackName?: string, fallb
   if (
     queryTarget &&
     (!clean ||
+      clean === "undefined" ||
+      clean === "null" ||
       clean.includes("maps.app.goo.gl") ||
       clean.includes("goo.gl") ||
       clean.includes("g.co/") ||
@@ -1073,39 +1209,55 @@ export function extractPlaceNameFromUrl(url: string): string {
  * District detection helper from address or text
  */
 function detectDistrict(text: string): string {
-  const t = text.toLowerCase();
-  if (t.includes("台東") || t.includes("淺草") || t.includes("上野") || t.includes("藏前") || t.includes("入谷")) {
-    return "東京都台東區（淺草／上野）";
+  const t = toJapaneseAreaHint(text).toLowerCase();
+  // Check specific compound neighborhoods FIRST (e.g. 谷中銀座 -> Taito, NOT Chuo Ginza!)
+  if (t.includes("谷中") || t.includes("yanaka") || t.includes("千駄木") || t.includes("sendagi")) {
+    return "東京都台東區（谷中／谷根千）";
   }
-  if (t.includes("墨田") || t.includes("押上") || t.includes("晴空塔") || t.includes("錦糸町")) {
+  if (t.includes("根津") || t.includes("nezu")) {
+    return "東京都文京區（根津／谷根千）";
+  }
+  if (t.includes("台東") || t.includes("浅草") || t.includes("上野") || t.includes("蔵前") || t.includes("入谷") || t.includes("合羽橋") || /\b(asakusa|ueno|kuramae|kappabashi|kama-asa)\b/.test(t)) {
+    return "東京都台東區（淺草／上野／藏前）";
+  }
+  if (t.includes("墨田") || t.includes("押上") || t.includes("晴空塔") || t.includes("錦糸町") || /\b(oshiage|skytree)\b/.test(t)) {
     return "東京都墨田區（晴空塔周邊）";
   }
-  if (t.includes("中央") || t.includes("日本橋") || t.includes("銀座") || t.includes("築地") || t.includes("人形町")) {
+  if (t.includes("築地") || /\btsukiji\b/.test(t)) {
+    return "東京都中央區（築地／銀座）";
+  }
+  if (t.includes("中央") || t.includes("日本橋") || t.includes("銀座") || t.includes("人形町") || /\b(ginza|nihonbashi|ningyocho)\b/.test(t)) {
     return "東京都中央區（日本橋／銀座）";
   }
-  if (t.includes("千代田") || t.includes("神田") || t.includes("秋葉原") || t.includes("丸之內") || t.includes("有樂町")) {
-    return "東京都千代田區（神田／秋葉原）";
+  if (t.includes("千代田") || t.includes("神田") || t.includes("秋葉原") || t.includes("丸の内") || t.includes("有楽町") || /\b(kanda|akihabara|marunouchi|yurakucho)\b/.test(t)) {
+    return "東京都千代田區（神田／秋葉原／丸之內）";
   }
-  if (t.includes("港區") || t.includes("六本木") || t.includes("麻布") || t.includes("赤坂") || t.includes("白金")) {
+  if (t.includes("港区") || t.includes("六本木") || t.includes("麻布") || t.includes("赤坂") || t.includes("白金") || /\b(roppongi|azabu|akasaka)\b/.test(t)) {
     return "東京都港區（六本木／赤坂）";
   }
-  if (t.includes("新宿") || t.includes("大久保") || t.includes("歌舞伎町") || t.includes("高田馬場")) {
+  if (t.includes("新宿") || t.includes("大久保") || t.includes("歌舞伎町") || t.includes("高田馬場") || /\bshinjuku\b/.test(t)) {
     return "東京都新宿區";
   }
-  if (t.includes("澀谷") || t.includes("渋谷") || t.includes("原宿") || t.includes("表參道") || t.includes("代官山")) {
+  if (t.includes("渋谷") || t.includes("原宿") || t.includes("表参道") || t.includes("代官山") || t.includes("恵比寿") || /\b(shibuya|harajuku|omotesando|daikanyama|ebisu)\b/.test(t)) {
     return "東京都澀谷區";
   }
-  if (t.includes("江東") || t.includes("有明") || t.includes("豐洲") || t.includes("台場") || t.includes("門前仲町")) {
-    return "東京都江東區（有明／台場）";
+  if (t.includes("江東") || t.includes("有明") || t.includes("豊洲") || t.includes("台場") || t.includes("門前仲町") || t.includes("清澄白河") || /\b(ariake|toyosu|odaiba|kiyosumi)\b/.test(t)) {
+    return "東京都江東區（有明／台場／清澄白河）";
   }
-  if (t.includes("文京") || t.includes("本鄉") || t.includes("後樂園") || t.includes("駒込")) {
+  if (t.includes("文京") || t.includes("本郷") || t.includes("後楽園") || t.includes("駒込") || /\bkomagome\b/.test(t)) {
     return "東京都文京區";
   }
-  if (t.includes("豐島") || t.includes("池袋") || t.includes("目白")) {
+  if (t.includes("豊島") || t.includes("池袋") || t.includes("目白") || /\bikebukuro\b/.test(t)) {
     return "東京都豐島區（池袋）";
   }
-  if (t.includes("目黑") || t.includes("中目黑") || t.includes("祐天寺")) {
-    return "東京都目黑區";
+  if (t.includes("目黒") || t.includes("中目黒") || t.includes("祐天寺") || t.includes("自由が丘") || /\b(nakameguro|jiyugaoka|meguro)\b/.test(t)) {
+    return "東京都目黑區（中目黑／自由之丘）";
+  }
+  if (t.includes("武蔵野") || t.includes("吉祥寺") || /\bkichijoji\b/.test(t)) {
+    return "東京都武藏野市（吉祥寺）";
+  }
+  if (t.includes("世田谷") || t.includes("下北沢") || /\bshimokitazawa\b/.test(t)) {
+    return "東京都世田谷區（下北澤）";
   }
   return "東京都內精華商圈";
 }
@@ -1206,6 +1358,9 @@ export function synthesizePlaceData(
       : rawBaseName;
   const ratingNote = extraMeta?.rating
     ? `於 Google 地圖累積 ${extraMeta.reviewCount ? `${extraMeta.reviewCount} 則評價、` : ""}獲得 ${extraMeta.rating} ★ 好評，`
+    : "";
+  const foodRatingNote = ratingNote
+    ? ratingNote
     : extraMeta?.tabelogRating
     ? `${extraMeta.isHyakumeiten ? "曾獲選「Tabelog 百名店」、" : ""}於 Tabelog 累積 ${extraMeta.tabelogReviews ? `${extraMeta.tabelogReviews} 則食評、` : ""}維持 ${extraMeta.tabelogRating} 分高評價，`
     : "";
@@ -1215,17 +1370,42 @@ export function synthesizePlaceData(
     ? `鄰近${extraMeta.accessInfo}，`
     : "";
   const hoursSuffix = extraMeta?.hoursNote ? `（${extraMeta.hoursNote}）` : "";
-  const realHighlights = (extraMeta?.extraHighlights || []).filter(Boolean);
+
+  // Extract domain traits from Google Maps category, Editorial summary, and Wikipedia summary
+  const groundSource = `${extraMeta?.googleCategory || ""} ${extraMeta?.editorialSummary || ""} ${extraMeta?.wikiSummary || ""}`.toLowerCase();
+  const wikiTraits: string[] = [];
+  if (/stationery|notebook|fountain pen|paper|文具|手帳|万年筆|インク/.test(groundSource)) wikiTraits.push("原創設計文具與精品紙品");
+  if (/cutlery|knife|knives|kitchen supply|kitchenware|包丁|厨具|廚具|鉄鍋|料理道具/.test(groundSource)) wikiTraits.push("職人鍛造料理刀具與專業廚具");
+  if (/variety store|general store|lifestyle|zakka|home goods|雑貨|生活道具/.test(groundSource)) wikiTraits.push("日系設計生活雜貨與日常選物");
+  if (/bookstore|book store|書店|本屋/.test(groundSource)) wikiTraits.push("精選藏書與風格企劃展區");
+  if (/shopping street|商店街|昔ながら|昭和/.test(groundSource)) wikiTraits.push("濃郁昭和下町人情味的懷舊商店街");
+  if (/shrine|shinto|つつじ|神社|鳥居/.test(groundSource)) {
+    if (/つつじ/.test(groundSource)) wikiTraits.push("百年杜鵑花勝景與傳統社殿鳥居");
+    else wikiTraits.push("歷史悠久的傳統鳥居與靜謐神社境內");
+  }
+  if (/temple|buddhist|寺院/.test(groundSource)) wikiTraits.push("莊嚴清幽的古剎參拜境內");
+  if (/museum|art gallery|美術館|博物館/.test(groundSource)) wikiTraits.push("典藏展覽與空間建築美學");
+  if (/garden|park|庭園|公園/.test(groundSource)) wikiTraits.push("四季景致宜人的都會庭園綠意");
+
+  const realHighlights = Array.from(new Set([...(extraMeta?.extraHighlights || []), ...wikiTraits])).filter(Boolean);
   const highlightSentence = realHighlights.length > 0 ? `以「${realHighlights.slice(0, 3).join("、")}」聞名，` : "";
   const menuListText = extraMeta?.menuItems && extraMeta.menuItems.length > 0 ? extraMeta.menuItems.slice(0, 3).join("、") : "";
-  const nameAndNotes = `${rawName} ${extraMeta?.japaneseTitle || ""} ${extraMeta?.googleCategory || ""} ${extraMeta?.yahooCategory || ""} ${(extraMeta?.menuItems || []).join(" ")} ${(extraMeta?.extraHighlights || []).join(" ")} ${rawText} ${userNotes}`.toLowerCase();
+  const osmShopTag = extraMeta?.osmCategory === "shop" ? "shopping shop" : "";
+  const nameAndNotes = `${rawName} ${extraMeta?.japaneseTitle || ""} ${extraMeta?.googleCategory || ""} ${extraMeta?.yahooCategory || ""} ${osmShopTag} ${extraMeta?.osmType || ""} ${(extraMeta?.menuItems || []).join(" ")} ${realHighlights.join(" ")} ${extraMeta?.editorialSummary || ""} ${extraMeta?.wikiSummary || ""} ${rawText} ${userNotes}`.toLowerCase();
+  const isExplicitShop =
+    clue === "shopping" ||
+    extraMeta?.osmCategory === "shop" ||
+    /(kitchen supply|cutlery|stationery|variety store|general store|book\s*store|bookstore|shopping mall|department store|商店街|shopping street|谷中銀座|kama-?asa|shoten|itoya|kakimori|traveler's factory)/i.test(
+      `${rawName} ${extraMeta?.japaneseTitle || ""} ${extraMeta?.googleCategory || ""}`
+    );
 
-  // Dining Keywords
+  // Dining Keywords (exclude kitchen supply / kitchenware / cutlery store / explicit shops!)
   if (
-    clue === "dining" ||
-    clue === "sushi" ||
-    clue === "ramen" ||
-    /(拉麵|ラーメン|らーめん|壽司|寿司|鮨|回転寿司|燒肉|焼き肉|焼肉|ホルモン|壽喜燒|すき焼き|すき焼|牛舌|牛たん|牛タン|ねぎし|和牛|wagyu|居酒屋|酒場|立ち飲み|ダイニングバー|食堂|定食|洋食|中華|義大利|意大利|イタリアン|法式料理|フレンチ|ビストロ|串燒|焼き鳥|焼鳥|もつ焼き|鳥料理|鰻魚|うなぎ|\bunagi\b|天婦羅|天ぷら|\btempura\b|天丼|tendon|漢堡排|ハンバーグ|hamburg|炸豬排|とんかつ|豚カツ|\btonkatsu\b|炸牛排|牛かつ|gyukatsu|火鍋|しゃぶしゃぶ|\bshabu\b|もつ鍋|鐵板燒|鉄板焼|teppanyaki|關東煮|おでん|\boden\b|料理|割烹|kappo|懷石|懐石|kaiseki|omakase|おまかせ|烏龍|うどん|蕎麥|そば|蕎麦|海鮮|お好み焼き|okonomiyaki|もんじゃ|\bmonja\b|咖哩|カレー|\bcurry\b|餐廳|\bafuri\b|一風堂|山頭火|大戸屋|やよい軒|サイゼリヤ|\brestaurant\b|\bsushi\b|\bramen\b|\byakiniku\b|\budon\b|\bsoba\b|\bizakaya\b|\byakitori\b|\bsteak\b|\bbistro\b|\btrattoria\b|\bosteria\b|\bpizzeria\b|\bkitchen\b|\bgrill\b|\btavern\b)/i.test(nameAndNotes)
+    !isExplicitShop &&
+    (clue === "dining" ||
+      clue === "sushi" ||
+      clue === "ramen" ||
+      /(拉麵|ラーメン|らーめん|壽司|寿司|鮨|回転寿司|燒肉|焼き肉|焼肉|ホルモン|壽喜燒|すき焼き|すき焼|牛舌|牛たん|牛タン|ねぎし|和牛|wagyu|居酒屋|酒場|立ち飲み|ダイニングバー|食堂|定食|洋食|中華|義大利|意大利|イタリアン|法式料理|フレンチ|ビストロ|串燒|焼き鳥|焼鳥|もつ焼き|鳥料理|鰻魚|うなぎ|\bunagi\b|天婦羅|天ぷら|\btempura\b|天丼|tendon|漢堡排|ハンバーグ|hamburg|炸豬排|とんかつ|豚カツ|\btonkatsu\b|炸牛排|牛かつ|gyukatsu|火鍋|しゃぶしゃぶ|\bshabu\b|もつ鍋|鐵板燒|鉄板焼|teppanyaki|關東煮|おでん|\boden\b|料理(?!道具|刀具|器具)|和食(?!廚具|道具|器)|割烹|kappo|懷石|懐石|kaiseki|omakase|おまかせ|烏龍|うどん|蕎麥|そば|蕎麦|海鮮|お好み焼き|okonomiyaki|もんじゃ|\bmonja\b|咖哩|カレー|\bcurry\b|餐廳|\bafuri\b|一風堂|山頭火|大戸屋|やよい軒|サイゼリヤ|\brestaurant\b|\bsushi\b|\bramen\b|\byakiniku\b|\budon\b|\bsoba\b|\bizakaya\b|\byakitori\b|\bsteak\b|\bbistro\b|\btrattoria\b|\bosteria\b|\bpizzeria\b|\bkitchen\b(?!\s*(?:supply|ware|knife|knives|tool|utensil|goods|store|shop))|\bgrill\b|\btavern\b)/i.test(nameAndNotes))
   ) {
     let highlight = realHighlights[0]
       ? `${cleanName} ${realHighlights.slice(0, 2).join("・")}`
@@ -1264,7 +1444,7 @@ export function synthesizePlaceData(
     const resolvedMap = cleanGoogleMapsLink(resolvedPinUrl, cleanName, district);
     return {
       spotName: cleanName,
-      desc: `${cleanName} 位於${district}，${foundingNote}${ratingNote}${highlightSentence}以道地烹調技藝與新鮮食材聞名，空氣中瀰漫著誘人料理香氣，每一口都感受得到對食材的專注堅持，是旅程中療癒味蕾的極上選擇。`,
+      desc: `${cleanName} 位於${district}，${foundingNote}${foodRatingNote}${highlightSentence}以道地烹調技藝與新鮮食材聞名，空氣中瀰漫著誘人料理香氣，每一口都感受得到對食材的專注堅持，是旅程中療癒味蕾的極上選擇。`,
       recommendation: `${recMenu}尖峰用餐時段人潮較多，推薦提早前往候位或離峰造訪${hoursSuffix}。`,
       suggestedTime: "午間定食或晚間用餐時段",
       tag: `東京散策、${cuisineType}、自由行推薦`,
@@ -1276,7 +1456,7 @@ export function synthesizePlaceData(
       category: "dining",
       categoryLabel: extraMeta?.yahooCategory || "餐廳美饌",
       highlight,
-      summary: `${cleanName} 位於${district}，${foundingNote}${ratingNote}${highlightSentence}用餐氛圍熱絡溫馨，是旅伴共享美食時光的必嚐首選。`,
+      summary: `${cleanName} 位於${district}，${foundingNote}${foodRatingNote}${highlightSentence}用餐氛圍熱絡溫馨，是旅伴共享美食時光的必嚐首選。`,
       address: district,
       tips: `${recMenu}熱門用餐時段建議提早前往或離峰造訪${hoursSuffix}；可點選地圖確認最新菜單與公休日。`,
       cuisineType,
@@ -1286,10 +1466,11 @@ export function synthesizePlaceData(
     };
   }
 
-  // Cafe & Dessert Keywords
+  // Cafe & Dessert Keywords (exclude explicit shopping stores & shopping streets!)
   if (
-    clue === "cafe" ||
-    /(咖啡|珈琲|\bcoffee\b|\bcafe\b|\broastery\b|\bespresso\b|カフェ|喫茶|甘味処|甜點|甜品|\bdessert\b|\bsweets\b|スイーツ|洋菓子|和菓子|ケーキ|蛋糕|\bcake\b|\bpastry\b|\bpatisserie\b|\bchocolatier\b|\bchoux\b|泡芙|シュー|布丁|プリン|可麗露|ジェラート|\bgelato\b|\bwaffle\b|\bcrepe\b|\bparlor\b|フルーツパーラー|\btea house\b|\btea room\b|\bbread\b|パン|ベーカリー|\bbakery\b|\bboulangerie\b|烘焙|抹茶|焙茶|菓子)/i.test(nameAndNotes)
+    !isExplicitShop &&
+    (clue === "cafe" ||
+      /(咖啡|珈琲|\bcoffee\b|\bcafe\b|\broastery\b|\bespresso\b|カフェ|喫茶|甘味処|甜點|甜品|\bdessert\b|\bsweets\b|スイーツ|洋菓子|和菓子|ケーキ|蛋糕|\bcake\b|\bpastry\b|\bpatisserie\b|\bchocolatier\b|\bchoux\b|泡芙|シュー|布丁|プリン|可麗露|ジェラート|\bgelato\b|\bwaffle\b|\bcrepe\b|\bparlor\b|フルーツパーラー|\btea house\b|\btea room\b|\bbread\b|パン|ベーカリー|\bbakery\b|\bboulangerie\b|烘焙|抹茶|焙茶|菓子)/i.test(nameAndNotes))
   ) {
     const jpName = extraMeta?.japaneseTitle || cleanName;
     const cafeType = extraMeta?.yahooCategory || "精品手沖咖啡・法式手作烘焙甜點";
@@ -1307,7 +1488,7 @@ export function synthesizePlaceData(
     const resolvedMap = cleanGoogleMapsLink(resolvedPinUrl, cleanName, district);
     return {
       spotName: cleanName,
-      desc: `${cleanName} 位於${district}，${foundingNote}${ratingNote}${highlightSentence}營造出寧靜溫柔的休憩氛圍，現煮咖啡香氣與剛出爐的溫柔甜香交織，將旅途中的奔波悄悄撫平，沉浸在優雅愜意的午後時光。`,
+      desc: `${cleanName} 位於${district}，${foundingNote}${foodRatingNote}${highlightSentence}營造出寧靜溫柔的休憩氛圍，現煮咖啡香氣與剛出爐的溫柔甜香交織，將旅途中的奔波悄悄撫平，沉浸在優雅愜意的午後時光。`,
       recommendation: `${cafeRec}熱門手作甜點常提早售罄建議提早到訪${hoursSuffix}。`,
       suggestedTime: "午後悠閒散策時段 (13:30 - 16:30)",
       tag: `東京咖啡、${cafeType}、午茶散策`,
@@ -1319,7 +1500,7 @@ export function synthesizePlaceData(
       category: "cafe",
       categoryLabel: extraMeta?.yahooCategory || "甜點咖啡",
       highlight: realHighlights[0] ? `${cleanName} ${realHighlights.slice(0, 2).join("・")}` : `${cleanName} 手沖芳醇精品咖啡與手作精緻甜點`,
-      summary: `${cleanName} 位於${district}，${foundingNote}${ratingNote}${highlightSentence}營造出溫馨愜意的休憩氛圍，是旅途散策中品味時光、放鬆小憩的完美據點。`,
+      summary: `${cleanName} 位於${district}，${foundingNote}${foodRatingNote}${highlightSentence}營造出溫馨愜意的休憩氛圍，是旅途散策中品味時光、放鬆小憩的完美據點。`,
       address: district,
       tips: `${cafeRec}熱門品項容易提早售罄建議提早到訪${hoursSuffix}。`,
       cuisineType: cafeType,
@@ -1329,26 +1510,26 @@ export function synthesizePlaceData(
     };
   }
 
-  // Sightseeing Keywords
+  // Strict Sightseeing Landmarks (Shrines, Temples, Museums, Parks, Towers)
   if (
     clue === "sightseeing" ||
     clue === "shrine" ||
-    /(神社|\bshrine\b|寺|\btemple\b|神宮|\bjingu\b|公園|\bpark\b|庭園|\bgarden\b|展望台|\bobservatory\b|\btower\b|鐵塔|晴空塔|美術館|\bmuseum\b|博物館|\bcastle\b|\bpalace\b|\blandmark\b)/i.test(nameAndNotes)
+    /(神社|\bshrine\b|寺院?|お寺|\btemple\b|神宮|\bjingu\b|大社|稲荷|観音|八幡|公園|\bpark\b(?!ing)|庭園|\bgarden\b|植物園|\bbotanical\b|展望台|\bobservatory\b|\btower\b|鐵塔|晴空塔|美術館|博物館|記念館|資料館|\bmuseum\b|art gallery|\bcastle\b|\bpalace\b|遺跡|渓谷|\bvalley\b)/i.test(nameAndNotes)
   ) {
     let spotType = "歷史古蹟 / 名勝古剎";
-    let mustSeeHighlights = ["傳統建築工藝", "四季景致庭園"];
-    if (nameAndNotes.includes("神社") || nameAndNotes.includes("寺") || /\btemple\b|\bshrine\b/.test(nameAndNotes)) {
+    let mustSeeHighlights = realHighlights.length > 0 ? realHighlights.slice(0, 3) : ["傳統建築工藝", "四季景致庭園"];
+    if (/(神社|神宮|寺|temple|shrine|大社|稲荷|観音)/.test(nameAndNotes)) {
       spotType = "古老神社寺院 / 祈福名所";
-      mustSeeHighlights = ["壯麗鳥居與山門", "御守祈福參拜", "境內歷史造景"];
-    } else if (nameAndNotes.includes("展望台") || nameAndNotes.includes("塔") || /\btower\b|\bobservatory\b/.test(nameAndNotes)) {
+      if (realHighlights.length === 0) mustSeeHighlights = ["壯麗鳥居與山門", "御守與御朱印祈福參拜", "境內歷史造景"];
+    } else if (/(展望台|塔|tower|observatory)/.test(nameAndNotes)) {
       spotType = "高空展望台 / 都會地標";
-      mustSeeHighlights = ["360度東京天際線俯瞰", "夕陽與璀璨百萬夜景"];
-    } else if (nameAndNotes.includes("公園") || nameAndNotes.includes("庭園") || /\bpark\b|\bgarden\b/.test(nameAndNotes)) {
+      if (realHighlights.length === 0) mustSeeHighlights = ["360度東京天際線俯瞰", "夕陽與璀璨百萬夜景"];
+    } else if (/(公園|庭園|park|garden|植物園)/.test(nameAndNotes)) {
       spotType = "都會綠洲 / 悠閒日式庭園";
-      mustSeeHighlights = ["迴遊式庭園水景", "四季櫻花與紅葉步道"];
-    } else if (nameAndNotes.includes("美術館") || nameAndNotes.includes("博物館") || /\bmuseum\b/.test(nameAndNotes)) {
+      if (realHighlights.length === 0) mustSeeHighlights = ["迴遊式庭園水景", "四季櫻花與紅葉步道"];
+    } else if (/(美術館|博物館|記念館|museum|gallery)/.test(nameAndNotes)) {
       spotType = "藝術文化 / 典藏美術館";
-      mustSeeHighlights = ["精選常設與特展", "建築空間光影美學"];
+      if (realHighlights.length === 0) mustSeeHighlights = ["精選常設與特展", "建築空間光影美學"];
     }
 
     const jpName = extraMeta?.japaneseTitle || cleanName;
@@ -1357,52 +1538,75 @@ export function synthesizePlaceData(
     return {
       spotName: cleanName,
       desc: `${cleanName} 佇立在${district}，${foundingNote}${ratingNote}${highlightSentence}承載著深厚文化與歲月沉澱，微風輕拂綠意，隨處可見歷史與當代生活交織的細膩痕跡，是自由行散策途中最舒心難忘的探訪角落。`,
-      recommendation: `${accessTips}造訪時建議預留彈性時間漫步參觀，欣賞周邊傳統建築風情；晨間造訪人潮最為清幽舒適${hoursSuffix}。`,
-      suggestedTime: "清晨參拜或黃昏散策時段",
-      tag: `東京名勝、歷史古蹟、散策攝影`,
+      recommendation: `${accessTips}造訪時建議預留彈性時間漫步參觀，欣賞周邊傳統建築與四季風情${hoursSuffix}。`,
+      suggestedTime: /(美術館|博物館|gallery|museum)/.test(nameAndNotes) ? "日間開館展期時段 (10:30 - 16:30)" : "清晨參拜或黃昏散策時段",
+      tag: `東京名勝、${spotType.split(" / ")[0]}、散策攝影`,
       mapUrl: resolvedMap,
       resolvedUrl: resolvedPinUrl,
 
       name: cleanName,
       japaneseName: jpName,
       category: "sightseeing",
-      categoryLabel: "觀光景點",
+      categoryLabel: spotType.split(" / ")[0] || "觀光景點",
       highlight: realHighlights[0] ? `${cleanName} ${realHighlights.slice(0, 2).join("・")}` : `${cleanName} 古典歷史風華與悠閒散策景致`,
       summary: `${cleanName} 位於${district}，${foundingNote}${ratingNote}${highlightSentence}環境優雅清幽，富含深厚人文底蘊與四季景致，漫步其間令人心曠神怡，非常適合安排在自由行漫遊路線中。`,
       address: district,
-      tips: `${accessTips}造訪時建議預留彈性時間漫步參觀，欣賞周邊傳統建築風情；晨間造訪人潮最為清幽舒適${hoursSuffix}。`,
+      tips: `${accessTips}造訪時建議預留彈性時間漫步參觀，欣賞周邊建築與風景；清晨或離峰時段最為舒適${hoursSuffix}。`,
       spotType,
       mustSeeHighlights,
-      ticketInfo: "境內免票或依現場購票規定為準",
-      bestTimeToVisit: "清晨 08:30 前或黃昏日落時段",
+      ticketInfo: extraMeta?.hoursNote || "境內免票或依現場購票規定為準",
+      bestTimeToVisit: "清晨或午後柔和光影時段",
     };
   }
 
-  // Shopping Keywords
+  // Shopping Keywords (Department stores, indie stationery, cutlery, zakka, bookstores, shopping streets, boutiques)
   if (
     clue === "shopping" ||
-    /(\bmall\b|\bmarket\b|商場|百貨|購物|\bstore\b|\bshop\b|\boutlet\b|藥妝|電器)/i.test(nameAndNotes)
+    extraMeta?.osmCategory === "shop" ||
+    /(\bmall\b|\bmarket\b|商場|百貨|購物|\bstore\b|\bshop\b|\boutlet\b|department store|variety store|general store|stationery|文具|文房具|手帳|鋼筆|書局|書店|本屋|\bbookstore\b|雜貨|雑貨|選物|選品|生活道具|廚具|道具街|刀具|包丁|刃物|陶器|cutlery|kitchen supply|kitchenware|hardware|home goods|gift shop|souvenir|伴手禮|商店|商会|専門店|\bshoten\b|\bzakka\b|\bgoods\b|古著|服飾|精品|clothing|apparel|vintage|boutique|藥妝|drugstore|pharmacy|電器|electronics|camera|loft|ロフト|itoya|伊東屋|kakimori|カキモリ|muji|無印|don quijote|uniqlo|traveler's factory|kama-?asa|釜浅|釜淺|谷中銀座|商店街|shopping street)/i.test(nameAndNotes)
   ) {
+    let shopLabel = "特色選物商店";
+    let shopHighlightFallback = "質感生活雜貨、日系選物與在地限定好物";
+    if (/(文具|文房具|stationery|itoya|kakimori|traveler's factory)/.test(nameAndNotes)) {
+      shopLabel = "質感文具・手帳選物店";
+      shopHighlightFallback = "原創設計手帳、鋼筆墨水與客製紙品專區";
+    } else if (/(包丁|刀具|廚具|道具|cutlery|kitchen|hardware|kama-?asa|釜浅|釜淺)/.test(nameAndNotes)) {
+      shopLabel = "百年職人廚具道具店";
+      shopHighlightFallback = "職人鍛造料理刀具、鐵鍋與和食專業器皿";
+    } else if (/(書店|本屋|bookstore)/.test(nameAndNotes)) {
+      shopLabel = "主題精選書店";
+      shopHighlightFallback = "精選風格書牆、文化雜貨與生活提案選品";
+    } else if (/(商店街|谷中銀座|shopping street)/.test(nameAndNotes)) {
+      shopLabel = "懷舊下町商店街";
+      shopHighlightFallback = "濃厚昭和下町氛圍、特色老鋪小店與散策好物";
+    } else if (/(百貨|商場|\bmall\b|department store|\boutlet\b)/.test(nameAndNotes)) {
+      shopLabel = "購物商場・百貨";
+      shopHighlightFallback = "精選品牌專櫃、生活雜貨與免稅購物一站滿足";
+    } else if (/(古著|服飾|clothing|apparel|vintage|boutique)/.test(nameAndNotes)) {
+      shopLabel = "風格服飾・古著選品";
+      shopHighlightFallback = "日系潮流服飾、精選單品與質感配飾";
+    }
+
     const jpName = extraMeta?.japaneseTitle || cleanName;
     const accessTips = extraMeta?.accessInfo ? `鄰近${extraMeta.accessInfo}，` : "";
     const resolvedMap = cleanGoogleMapsLink(resolvedPinUrl, cleanName, district);
     return {
       spotName: cleanName,
-      desc: `${cleanName} 位於${district}，${foundingNote}${ratingNote}${highlightSentence}匯集多元特色品牌與潮流雜貨，動線開闊明亮，逛街採買十分舒適便捷，能一站滿足各類伴手禮與生活選物需求。`,
-      recommendation: `${accessTips}外國旅客可至服務櫃台出示護照確認免稅服務（Tax-Free）與外國人專屬優惠券${hoursSuffix}。`,
-      suggestedTime: "午後或晚間採買時段",
-      tag: `東京購物、免稅商場、精選伴手禮`,
+      desc: `${cleanName} 位於${district}，${foundingNote}${ratingNote}${highlightSentence}以充滿職人巧思與日系美學的選品陳列備受旅人推崇，動線輕鬆愜意，適合放慢步調挖掘別具紀念價值的限定好物。`,
+      recommendation: `${accessTips}建議預留充裕時間細看特色商品，若單筆達免稅標準可出示護照確認 Tax-Free 退稅服務${hoursSuffix}。`,
+      suggestedTime: "午後或傍晚質感散策採買時段 (13:00 - 18:00)",
+      tag: `東京購物、${shopLabel}、自由行選物`,
       mapUrl: resolvedMap,
       resolvedUrl: resolvedPinUrl,
 
       name: cleanName,
       japaneseName: jpName,
       category: "shopping",
-      categoryLabel: "購物商場",
-      highlight: `${cleanName} 精選品牌專櫃、生活雜貨與免稅購物一站滿足`,
-      summary: `${cleanName} 位於${district}，${foundingNote}${ratingNote}${highlightSentence}匯集多元品牌、潮流服飾、在地伴手禮與人氣餐飲，動線寬敞舒適，逛街採買十分便利。`,
+      categoryLabel: shopLabel,
+      highlight: realHighlights[0] ? `${cleanName} ${realHighlights.slice(0, 2).join("・")}` : `${cleanName} ${shopHighlightFallback}`,
+      summary: `${cleanName} 位於${district}，${foundingNote}${ratingNote}${highlightSentence}匯集多元品牌、特色日常道具與旅途選物，逛街散策十分舒適。`,
       address: district,
-      tips: `${accessTips}外國旅客可至服務櫃台出示護照確認免稅服務（Tax-Free）與外國人專屬優惠券${hoursSuffix}。`,
+      tips: `${accessTips}外國旅客可留意門市免稅服務（Tax-Free）與限量限定商品；可點選地圖確認最新營業時間${hoursSuffix}。`,
     };
   }
 
@@ -1440,7 +1644,7 @@ export function synthesizePlaceData(
   const resolvedMap = cleanGoogleMapsLink(resolvedPinUrl, cleanName, district);
   return {
     spotName: cleanName,
-    desc: `${cleanName} 位於${district}，${foundingNote}${ratingNote}${highlightSentence}以其獨特的在地魅力與熱情氛圍吸引旅人前來探訪，是自由行散策途中值得駐足感受的特色去處。`,
+    desc: `${cleanName} 位於${district}，${foundingNote}${ratingNote}${highlightSentence}以其獨特的在地魅力與人文風采吸引旅人前來探訪，是自由行散策途中值得駐足細細感受的特色去處。`,
     recommendation: `${accessTips}前往時可利用 Google 地圖實時步行導航，並可點擊地圖連結確認今日最新營業時間${hoursSuffix}。`,
     suggestedTime: "午後散策時段",
     tag: `東京散策、自由行推薦、私房清單`,
