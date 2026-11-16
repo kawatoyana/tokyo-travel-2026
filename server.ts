@@ -512,16 +512,18 @@ async function startServer() {
   // API Route: Osaka-trip-2027 standard spot-enrich endpoint
   app.post("/api/gemini/spot-enrich", async (req, res) => {
     try {
-      const { rawInput, spotName, mapsUrl, cityOrArea } = req.body;
-      const target = (mapsUrl || rawInput || spotName || "").trim();
+      const { url, rawInput, spotName, mapsUrl, cityOrArea, rawText, clientExtractedName } = req.body;
+      const target = (mapsUrl || url || rawInput || spotName || "").trim();
       if (!target) {
         return res.status(400).json({ success: false, error: "請提供地點名稱或 Google Maps 連結" });
       }
 
       const analyzed = await analyzePlaceWithRobustPipeline({
-        url: mapsUrl || (target.startsWith("http") ? target : undefined),
+        url: mapsUrl || url || (target.startsWith("http") ? target : undefined),
         placeName: spotName || (!target.startsWith("http") ? target : undefined),
         rawInput,
+        rawText,
+        clientExtractedName,
         cityOrArea: cityOrArea || "東京",
       });
 

@@ -751,11 +751,14 @@ export const PocketWishlistSection: React.FC = () => {
     try {
       let analyzed: any = null;
 
-      // 1. First try /api/gemini/spot-enrich (Osaka-trip-2027 standard pipeline)
+      // 1. First try /api/gemini/spot-enrich (primary server endpoint)
+      let skipSecondaryBackendCall = false;
       try {
         const enrichPayload: Record<string, string> = {
           rawInput: originalUserUrl || targetUrl || rawUrlInput,
           mapsUrl: originalUserUrl || (targetUrl.startsWith("http") ? targetUrl : ""),
+          rawText: effectiveNotes || explicitPlaceName,
+          clientExtractedName: clientExtractedName,
           cityOrArea: "東京",
         };
         if (explicitPlaceName || clientExtractedName) {
@@ -765,7 +768,7 @@ export const PocketWishlistSection: React.FC = () => {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
-          signal: AbortSignal.timeout(25000),
+          signal: AbortSignal.timeout(22000),
           body: JSON.stringify(enrichPayload),
         });
 
@@ -775,19 +778,24 @@ export const PocketWishlistSection: React.FC = () => {
           if (enrichJson?.success && enrichJson?.data) {
             analyzed = enrichJson.data;
           }
+        } else if (enrichRes.status === 404 || enrichRes.status === 405 || !enrichContentType.includes("application/json")) {
+          // Pure static hosting (e.g. GitHub Pages returns 404 or index.html): go straight to client live enrichment
+          skipSecondaryBackendCall = true;
         }
       } catch (enrichErr) {
         console.warn("spot-enrich fetch skipped:", enrichErr);
+        // If backend timed out or failed network connection, fall through directly to client intelligence
+        skipSecondaryBackendCall = true;
       }
 
-      // 2. If not obtained, call /api/analyze-place
-      if (!analyzed) {
+      // 2. Fallback to /api/analyze-place only if backend exists and returned non-404 invalid data
+      if (!analyzed && !skipSecondaryBackendCall) {
         try {
           const res = await fetch("/api/analyze-place", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             credentials: "include",
-            signal: AbortSignal.timeout(20000),
+            signal: AbortSignal.timeout(15000),
             body: JSON.stringify({
               url: originalUserUrl || targetUrl,
               placeName: explicitPlaceName,
@@ -836,7 +844,7 @@ export const PocketWishlistSection: React.FC = () => {
 
         const effectiveSearchName = (explicitPlaceName || clientExtractedName || (!targetUrl.startsWith("http") ? targetUrl : "")).trim();
 
-        // Client Landmark DB + Deep Tokyo Taxonomy + Live Yahoo/Tabelog/Nominatim/Wiki facts
+        // Client Landmark DB + Deep Tokyo Taxonomy + Live Yahoo/Tabelog/Photon/Wiki facts
         analyzed = synthesizePlaceData(effectiveSearchName, targetUrl, rawUrlInput, inputNotes, clientCategoryClue, clientExtraMeta);
       }
 
@@ -848,12 +856,12 @@ export const PocketWishlistSection: React.FC = () => {
       if (!hasValidServerCategory) {
         if (
           clientCategoryClue === "dining" ||
-          /(壽喜燒|すき焼き|すき焼|sukiyaki|燒肉|焼き肉|烤肉|焼肉|yakiniku|\bbbq\b|壽司|寿司|鮨|すし|回転寿司|\bsushi\b|拉麵|ラーメン|らーめん|\bramen\b|沾麵|つけ麺|つけめん|烏龍麵|うどん|\budon\b|蕎麥麵|そば|蕎麦|\bsoba\b|炸豬排|とんかつ|豚カツ|tonkatsu|炸牛排|牛かつ|gyukatsu|牛舌|牛たん|牛タン|ねぎし|和牛|wagyu|天婦羅|天ぷら|tempura|天丼|tendon|串燒|焼き鳥|焼鳥|yakitori|串かつ|居酒屋|\bizakaya\b|酒場|立ち飲み|ダイニングバー|食堂|定食|丼飯|洋食|咖哩|カレー|\bcurry\b|火鍋|しゃぶしゃぶ|\bshabu\b|もつ鍋|漢堡排|ハンバーグ|hamburg|牛排|ステーキ|\bsteak\b|鐵板燒|鉄板焼|teppanyaki|文字燒|もんじゃ|\bmonja\b|大阪燒|お好み焼き|okonomiyaki|關東煮|おでん|\boden\b|餃子|gyoza|割烹|kappo|懷石|懐石|kaiseki|おまかせ|omakase|和食(?!廚具|道具|器)|washoku|海鮮|海鮮丼|\bseafood\b|餐廳|餐館|料理(?!道具|刀具|器具)|\brestaurant\b|\bbistro\b|\bdining\b|\btrattoria\b|\bosteria\b|\bpizzeria\b|\bkitchen\b(?!\s*(?:supply|ware|knife|knives|tool|utensil|goods|store|shop))|\bgrill\b|\btavern\b|鰻魚|うなぎ|\bunagi\b|今半|叙々苑|敘敘苑|利久|\bafuri\b|一蘭|一風堂|山頭火|大戸屋|やよい軒|六厘舍|六厘舎|金子半之助|根室花丸|美登利|鳥貴族|挽肉と米|挽肉與米|すしざんまい)/i.test(nameCheckText)
+          /(壽喜燒|すき焼き|すき焼|sukiyaki|燒肉|焼き肉|烤肉|焼肉|yakiniku|\bbbq\b|壽司|寿司|鮨|すし|回転寿司|\bsushi\b|拉麵|ラーメン|らーめん|\bramen\b|沾麵|つけ麺|つけめん|tsukemen|mazemen|烏龍麵|うどん|\budon\b|蕎麥麵|そば|蕎麦|\bsoba\b|炸豬排|とんかつ|豚カツ|tonkatsu|炸牛排|牛かつ|gyukatsu|牛舌|牛たん|牛タン|ねぎし|和牛|wagyu|天婦羅|天ぷら|tempura|天丼|tendon|串燒|焼き鳥|焼鳥|yakitori|yakiton|motsuyaki|kushikatsu|鳥元|torigen|串かつ|居酒屋|\bizakaya\b|酒場|立ち飲み|ダイニングバー|食堂|shokudo|定食|teishoku|丼飯|\bkaisen(?:don)?\b|\bdonburi\b|\bgyudon\b|\bunadon\b|\bkatsudon\b|\boyakodon\b|tsujihan|つじ半|洋食|yoshoku|咖哩|カレー|\bcurry\b|火鍋|しゃぶしゃぶ|\bshabu(?:-?shabu)?\b|もつ鍋|漢堡排|ハンバーグ|hamburg|牛排|ステーキ|\bsteak\b|鐵板燒|鉄板焼|teppanyaki|teppan|文字燒|もんじゃ|\bmonja\b|大阪燒|お好み焼き|okonomiyaki|takoyaki|yakisoba|關東煮|おでん|\boden\b|餃子|gyoza|割烹|kappo|懷石|懐石|kaiseki|おまかせ|omakase|和食(?!廚具|道具|器)|washoku|海鮮|海鮮丼|\bseafood\b|餐廳|餐館|料理(?!道具|刀具|器具)|\brestaurant\b|\bbistro\b|\bdining\b|\btrattoria\b|\bosteria\b|\bpizzeria\b|\bkitchen\b(?!\s*(?:supply|ware|knife|knives|tool|utensil|goods|store|shop))|\bgrill\b|\btavern\b|鰻魚|うなぎ|\bunagi\b|今半|叙々苑|敘敘苑|利久|\bafuri\b|一蘭|一風堂|山頭火|大戸屋|やよい軒|六厘舍|六厘舎|金子半之助|根室花丸|美登利|鳥貴族|挽肉と米|挽肉與米|すしざんまい)/i.test(nameCheckText)
         ) {
           safeCategory = "dining";
         } else if (
           clientCategoryClue === "cafe" ||
-          /(咖啡|珈琲|\bcoffee\b|\bcafe\b|\broastery\b|\bespresso\b|カフェ|コーヒースタンド|コーヒー|ロースター|喫茶|kissaten|甜點|甜品|\bdessert\b|\bsweets\b|和菓子|洋菓子|蛋糕|\bcake\b|甜甜圈|ドーナツ|生ドーナツ|\bdonut\b|\bdoughnut\b|泡芙|シュー|\bchou\b|布丁|プリン|purin|pudding|千層|mille|可麗露|カヌレ|canele|貝果|ベーグル|\bbagel\b|可頌|クロワッサン|\bcroissant\b|生吐司|食パン|\btoast\b|鬆餅|pancake|\bwaffle\b|\bcrepe\b|舒芙蕾|souffle|冰淇淋|ice cream|\bgelato\b|霜淇淋|抹茶|matcha|焙茶|hojicha|下午茶|\btea\b|\btea house\b|\btea room\b|\bparlor\b|フルーツパーラー|烘焙|麵包|\bbread\b|パン|ベーカリー|\bbakery\b|\bboulangerie\b|\bpastry\b|\bpatisserie\b|\bchocolatier\b|茶屋|甘味|パフェ|parfait|harbs|blue bottle|藍瓶|dixans|sucre-rie|シュークリー)/i.test(nameCheckText)
+          /(咖啡|珈琲|\bcoffee\b|\bcafe\b|\broastery\b|\bespresso\b|カフェ|コーヒースタンド|コーヒー|ロースター|喫茶|kissaten|甜點|甜品|\bdessert\b|\bsweets\b|和菓子|洋菓子|wagashi|dorayaki|taiyaki|mochi|蛋糕|\bcake\b|甜甜圈|ドーナツ|生ドーナツ|\bdonut\b|\bdoughnut\b|泡芙|シュー|\bchou\b|布丁|プリン|purin|pudding|千層|mille|可麗露|カヌレ|canele|貝果|ベーグル|\bbagel\b|可頌|クロワッサン|\bcroissant\b|生吐司|食パン|\btoast\b|鬆餅|pancake|\bwaffle\b|\bcrepe\b|舒芙蕾|souffle|冰淇淋|ice cream|\bgelato\b|霜淇淋|抹茶|matcha|焙茶|hojicha|下午茶|\btea\b|\btea house\b|\btea room\b|\bparlor\b|フルーツパーラー|烘焙|麵包|\bbread\b|パン|ベーカリー|\bbakery\b|\bboulangerie\b|\bpastry\b|\bpatisserie\b|\bchocolatier\b|茶屋|甘味|パフェ|parfait|harbs|blue bottle|藍瓶|dixans|sucre-rie|シュークリー|\bkoffee\b)/i.test(nameCheckText)
         ) {
           safeCategory = "cafe";
         } else if (
@@ -863,7 +871,7 @@ export const PocketWishlistSection: React.FC = () => {
           safeCategory = "sightseeing";
         } else if (
           clientCategoryClue === "shopping" ||
-          /(購物|百貨|百貨店|商場|\bmall\b|\bdepartment store\b|\boutlet\b|商店街|shopping street|文具|文房具|stationery|雜貨|雑貨|選物|選品|廚具|道具|包丁|cutlery|kitchen supply|kitchenware|書店|本屋|bookstore|書局|古著|服飾|clothing|apparel|vintage|boutique|藥妝|唐吉訶德|don quijote|大丸|bic|家電|electronics|camera|免稅|variety store|general store|gift shop|shop|store|loft|itoya|kakimori|muji|uniqlo|釜浅|釜淺)/i.test(nameCheckText)
+          /(購物|百貨|百貨店|商場|\bmall\b|\bdepartment store\b|\bdepartment\b|\boutlet\b|商店街|shopping street|文具|文房具|stationery|雜貨|雑貨|選物|選品|生活提案|設計選物|長效設計|家具|工藝|廚具|道具|包丁|cutlery|kitchen supply|kitchenware|書店|本屋|書房|選書|藏書|\bhonya\b|\bbookstore\b|\btsutaya\b|蔦屋|書局|古著|服飾|clothing|apparel|vintage|boutique|藥妝|唐吉訶德|don quijote|大丸|bic|家電|electronics|camera|免稅|variety store|general store|gift shop|shop|store|loft|itoya|kakimori|muji|uniqlo|\bhands\b|tokyu hands|d&department|\bcibone\b|\bbeams\b|\bparco\b|\blumine\b|\bhikarie\b|釜浅|釜淺)/i.test(nameCheckText)
         ) {
           safeCategory = "shopping";
         } else if (
