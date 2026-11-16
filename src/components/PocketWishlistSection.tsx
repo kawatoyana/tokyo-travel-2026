@@ -57,6 +57,9 @@ import {
   handleFirestoreError,
 } from "../services/firebase";
 
+const API_BASE_URL = String(import.meta.env.VITE_API_BASE_URL || "").trim().replace(/\/+$/, "");
+const buildApiUrl = (routePath: string) => (API_BASE_URL ? `${API_BASE_URL}${routePath}` : routePath);
+
 export interface SavedPlace {
   id: string;
   url: string;
@@ -764,10 +767,10 @@ export const PocketWishlistSection: React.FC = () => {
         if (explicitPlaceName || clientExtractedName) {
           enrichPayload.spotName = explicitPlaceName || clientExtractedName;
         }
-        const enrichRes = await fetch("/api/gemini/spot-enrich", {
+        const enrichRes = await fetch(buildApiUrl("/api/gemini/spot-enrich"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          credentials: "include",
+          credentials: API_BASE_URL ? "omit" : "include",
           signal: AbortSignal.timeout(22000),
           body: JSON.stringify(enrichPayload),
         });
@@ -791,10 +794,10 @@ export const PocketWishlistSection: React.FC = () => {
       // 2. Fallback to /api/analyze-place only if backend exists and returned non-404 invalid data
       if (!analyzed && !skipSecondaryBackendCall) {
         try {
-          const res = await fetch("/api/analyze-place", {
+          const res = await fetch(buildApiUrl("/api/analyze-place"), {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            credentials: "include",
+            credentials: API_BASE_URL ? "omit" : "include",
             signal: AbortSignal.timeout(15000),
             body: JSON.stringify({
               url: originalUserUrl || targetUrl,
@@ -973,10 +976,10 @@ export const PocketWishlistSection: React.FC = () => {
 
     try {
       // 1. Query server spot-enrich API
-      const res = await fetch("/api/gemini/spot-enrich", {
+      const res = await fetch(buildApiUrl("/api/gemini/spot-enrich"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "include",
+        credentials: API_BASE_URL ? "omit" : "include",
         signal: AbortSignal.timeout(20000),
         body: JSON.stringify({
           spotName: trimmed,

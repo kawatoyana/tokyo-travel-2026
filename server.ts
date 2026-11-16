@@ -478,7 +478,7 @@ function getPort(): number {
   // The app must bind to port 3000 to accept reverse-proxied traffic.
   if (process.env.PORT) {
     const parsed = parseInt(process.env.PORT, 10);
-    if (!isNaN(parsed) && parsed > 0 && parsed !== 8080) {
+    if (!isNaN(parsed) && parsed > 0 && (parsed !== 8080 || process.env.ALLOW_PORT_8080 === "true")) {
       return parsed;
     }
   }
@@ -492,9 +492,23 @@ async function startServer() {
 
   app.use(express.json());
 
-  // CORS middleware - allows requests from formal published domains, local preview, and external web hosts
+  // CORS middleware - allows requests from formal published domains, static GitHub Pages, local preview, and configured origins
+  const allowedOrigins = (process.env.ALLOWED_ORIGIN || "")
+    .split(",")
+    .map((o) => o.trim())
+    .filter(Boolean);
   app.use((req, res, next) => {
-    res.header("Access-Control-Allow-Origin", req.headers.origin || "*");
+    const reqOrigin = req.headers.origin;
+    if (allowedOrigins.length > 0) {
+      if (reqOrigin && allowedOrigins.includes(reqOrigin)) {
+        res.header("Access-Control-Allow-Origin", reqOrigin);
+      } else {
+        res.header("Access-Control-Allow-Origin", allowedOrigins[0]);
+      }
+    } else {
+      res.header("Access-Control-Allow-Origin", reqOrigin || "*");
+    }
+    res.header("Vary", "Origin");
     res.header("Access-Control-Allow-Credentials", "true");
     res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
     res.header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With");
