@@ -2127,8 +2127,17 @@ export async function analyzePlaceWithRobustPipeline(params: {
   let aiData: any = null;
   if (process.env.GEMINI_API_KEY) {
     const coordHint = coordLat && coordLng ? `經緯度座標：${coordLat}, ${coordLng}` : "經緯度座標：無";
-    const prompt = `你是一位精通日本（包含東京、關西、日本各地）自由行、在地風土與深度飲食文化的旅行文學作家（風格如同《旅の手帖》與日系質感散策刊物）。
-請先透過搜尋確認目標地點的真實營業資訊、料理或景點類型，再進行深度、正確且富含人文溫度的繁體中文旅行手帖分析：
+    const systemInstruction = `你是專業的日本地理位置解析與《旅の手帖》風格深度導覽 AI 助手。
+你的任務是接收 Google 地點名稱、地址、座標或 Google Maps 網址，透過聯網搜尋或地圖檢索精準確認「完全對應的分店／門市與座標地點」，並以繁體中文輸出結構化 JSON 分析。
+
+【核心規範】
+1. 若輸入含 Google Maps 網址、座標或簡短店名，務必先透過聯網工具確認實際地點名稱、完整日本地址與正確分店（絕不可將分店 A 錯換為旗艦店或其他分店）。
+2. 嚴格區分餐飲（dining）、咖啡甜點烘焙（cafe）、神社美術館公園景點（sightseeing）、書店雜貨百貨購物（shopping）、住宿（stay），不得混淆餐廳與景點。
+3. 若為明確真實店家或景點，請提供 80–130 字具現場畫面感與人文溫度的介紹（desc），並於 recommendation 列出具體必吃／必逛亮點。
+4. 若輸入無任何可辨識之地名、座標或地點線索且搜尋無果，請勿胡亂猜測，回傳 {"success":false,"error":"無法識別此地址，請提供更詳細的地名或完整地址"}。
+5. 必須嚴格回傳合法的純 JSON 物件，不要包含 \`\`\`json 或任何 Markdown 語法外框。`;
+
+    const prompt = `請分析以下目標地點並依系統指示的純 JSON 格式回傳完整旅行手帖資訊：
 - 目標店家/景點名稱：${realExtractedName || "請根據連結與座標確認真實店名"}
 - 日文名稱參考：${jinaInfo.japaneseTitle || nominatimInfo.japaneseName || nominatimInfo.osmName || "無"}
 - 地區參考：${nominatimInfo.formattedAddress || (nominatimInfo.neighborhood ? `${inferredCityOrArea} ${nominatimInfo.neighborhood}` : inferredCityOrArea)}
@@ -2140,35 +2149,20 @@ export async function analyzePlaceWithRobustPipeline(params: {
 - 類別線索：${categoryClueFromUrl || "無"}
 - 使用者備註：${explicitText || "無"}
 
-【嚴格類別與屬性規範 — 絕對不允許餐廳與景點混淆】：
-1. 凡是餐飲美食（壽喜燒、燒肉、壽司、拉麵、牛舌、和牛、炸豬排、天婦羅、居酒屋、串燒、火鍋、食堂、洋食、丼飯、漢堡、咖哩、海鮮、餃子、餐廳）：
-   - category 必須為 "dining"
-   - categoryLabel 必須為具體的料理特徵，如「百年老鋪稻荷壽司」、「炭火燒肉名門」、「頂級黑毛和牛壽喜燒」、「道地濃郁拉麵」等。
-   - 必須提供餐飲專屬：cuisineType (料理種類), signatureDishes (招牌推薦清單陣列), priceRange (人均消費預算), diningAtmosphere (用餐氛圍)
-2. 凡是甜點、泡芙、蛋糕、精品咖啡、生吐司、喫茶店、千層蛋糕、布丁、抹茶菓子、麵包烘焙：
-   - category 必須為 "cafe"
-   - categoryLabel 如「法式手作甜點店」、「手作甜點」、「老派喫茶店」、「精品咖啡」等。
-3. 凡是神社、寺廟、公園、庭園、展望台、博物館、歷史古蹟、觀光景點：
-   - category 必須為 "sightseeing"
-   - categoryLabel 如「歷史名勝古剎」、「靈驗祈願神社」、「360度露天高空展望台」等。
-   - 必須提供景點專屬：spotType (景點類型), mustSeeHighlights (必看重點亮點陣列), ticketInfo (門票/參拜資訊), bestTimeToVisit (最佳造訪時段)
-4. 凡是購物中心、百貨、商店街、免稅商場：
-   - category 必須為 "shopping"
-   - categoryLabel 如「流行購物商場」、「免稅百貨」等。
-5. 凡是飯店、旅館、溫泉宿：
-   - category 必須為 "stay"
-   - categoryLabel 如「旅宿溫泉飯店」等。
-
-【寫作風格要求（旅の手帖風格）】：
+【欄位規格】：
 - spotName: 真實正確的店家或景點名稱含日文（如：Sucre-rie (シュークリー) 或 志乃多壽司）
+- category: 僅限 "dining" | "cafe" | "sightseeing" | "shopping" | "stay"
+- categoryLabel: 具體分類特徵（如「產地直送極上海鮮丼」、「主題精選書店」、「都會日式庭園」）
 - tag: 3-4 個關鍵詞，以頓號連接
-- desc: 80至130字，充滿畫面感與人文溫度的散文，切合該店或景點的真實特色
-- recommendation: 50至80字，具體列出該店的招牌必吃餐點或景點必看亮點，以及實用的賞味或探訪建議
+- desc: 80至130字繁體中文散文介紹，貼合真實特色
+- recommendation: 50至80字具體必點推薦、必看亮點或造訪建議
 - suggestedTime: 推薦造訪時段
-- address: 所在區域或具體地址
+- address: 完整或標準日本地址
+- 餐飲甜點另附 cuisineType, signatureDishes (陣列), priceRange, diningAtmosphere；景點另附 spotType, mustSeeHighlights (陣列), ticketInfo, bestTimeToVisit。
 
-請只輸出合法的純 JSON 格式（不要加 markdown 標記）：
+請只輸出合法純 JSON 物件：
 {
+  "success": true,
   "spotName": "地點名稱 (日文原名)",
   "category": "dining",
   "categoryLabel": "具體分類名稱",
@@ -2176,7 +2170,7 @@ export async function analyzePlaceWithRobustPipeline(params: {
   "desc": "散文介紹...",
   "recommendation": "必點與建議...",
   "suggestedTime": "推薦時段",
-  "address": "具體地址或區域",
+  "address": "完整標準地址",
   "cuisineType": "若為餐飲甜點填寫種類",
   "signatureDishes": ["招牌1", "招牌2"],
   "priceRange": "￥1,000 ~ ￥2,000 / 人",
@@ -2189,7 +2183,11 @@ export async function analyzePlaceWithRobustPipeline(params: {
       const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
       if (!jsonMatch) return null;
       const parsed = JSON.parse(jsonMatch[0]);
-      if (parsed && (parsed.spotName || parsed.name) && (parsed.desc || parsed.summary)) {
+      if (parsed && parsed.success === false) return null;
+      if (parsed && (parsed.spotName || parsed.name || parsed.locationName) && (parsed.desc || parsed.summary || parsed.introduction)) {
+        if (!parsed.spotName && parsed.locationName) parsed.spotName = parsed.locationName;
+        if (!parsed.address && parsed.formattedAddress) parsed.address = parsed.formattedAddress;
+        if (!parsed.desc && parsed.introduction) parsed.desc = parsed.introduction;
         return parsed;
       }
       return null;
@@ -2200,6 +2198,7 @@ export async function analyzePlaceWithRobustPipeline(params: {
         model: "gemini-4-hydrogen",
         contents: prompt,
         config: {
+          systemInstruction,
           tools: [{ googleSearch: {} }],
         },
       });
@@ -2207,7 +2206,47 @@ export async function analyzePlaceWithRobustPipeline(params: {
         aiData = parseJsonSafe(res.text);
       }
     } catch (searchAiErr: any) {
-      console.warn("Grounded Gemini call fallback to JSON mode:", searchAiErr?.message);
+      console.warn("Grounded Gemini Search call fallback:", searchAiErr?.message);
+    }
+
+    // Coordinate-anchored Google Maps Grounding fallback (no responseMimeType per SDK constraints)
+    if (!aiData && coordLat && coordLng) {
+      try {
+        const mapsRes: any = await aiClient.models.generateContent({
+          model: "gemini-4-hydrogen",
+          contents: `請透過 Google 地圖檢索座標 (${coordLat}, ${coordLng}) 附近「${realExtractedName || ogTitle || "此地點"}」的真實名稱、完整日本地址、營業類別與特色亮點。${cleanResolvedUrl}`,
+          config: {
+            systemInstruction: "請精準確認座標對應的真實 Google Maps 地點名稱、地址、類型與推薦重點。",
+            tools: [{ googleMaps: {} }],
+            toolConfig: {
+              retrievalConfig: {
+                latLng: { latitude: coordLat, longitude: coordLng },
+              },
+            },
+          },
+        });
+        const chunks: any[] = mapsRes?.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+        const mapsSnippet = chunks
+          .map((c: any) => (c?.maps?.title ? `${c.maps.title} (${c.maps.uri || ""})` : ""))
+          .filter(Boolean)
+          .join("; ");
+        const combinedMapsContext = [mapsRes?.text, mapsSnippet ? `Maps Chunks: ${mapsSnippet}` : ""].filter(Boolean).join("\n");
+        if (combinedMapsContext) {
+          const jsonRes: any = await aiClient.models.generateContent({
+            model: "gemini-4-hydrogen",
+            contents: `${prompt}\n\n【Google Maps Grounding 實查參考】\n${combinedMapsContext}`,
+            config: {
+              systemInstruction,
+              responseMimeType: "application/json",
+            },
+          });
+          if (jsonRes.text) {
+            aiData = parseJsonSafe(jsonRes.text);
+          }
+        }
+      } catch (mapsErr: any) {
+        console.warn("Google Maps Grounding fallback skipped:", mapsErr?.message);
+      }
     }
 
     if (!aiData) {
@@ -2216,6 +2255,7 @@ export async function analyzePlaceWithRobustPipeline(params: {
           model: "gemini-4-hydrogen",
           contents: prompt,
           config: {
+            systemInstruction,
             responseMimeType: "application/json",
           },
         });
